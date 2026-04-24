@@ -386,11 +386,7 @@ function handleMsg(msg: any) {
 
       // Set point cloud directory when processing completes
       if (inputDir.value) {
-        let testInputDir = inputDir.value
-        if (!testInputDir.startsWith('/')) {
-          testInputDir = `/media/sda1/perception_process/perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808/${testInputDir}`
-        }
-        const basePath = testInputDir.replace(/bag_extract_left\/?$/, '')
+        const basePath = inputDir.value.replace(/bag_extract_left\/?$/, '')
         pcdDir.value = basePath + 'bag_extract_pcd'
         console.log('[SSE done] pcdDir set to:', pcdDir.value)
       }
@@ -434,18 +430,12 @@ async function loadModes() {
 async function checkExistingResult() {
   if (!inputDir.value || props.running) return
 
-  // Ensure the path is absolute
-  let testInputDir = inputDir.value
-  if (!testInputDir.startsWith('/')) {
-    testInputDir = `/media/sda1/perception_process/perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808/${testInputDir}`
-  }
-
   try {
     const checkRes = await fetch('/offline/check_result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input_dir: testInputDir,
+        input_dir: inputDir.value,
         infer_mode: inferMode.value,
         erode_pixel: erodePixel.value,
       }),
@@ -462,7 +452,7 @@ async function checkExistingResult() {
 
       // Set point cloud directory based on input directory
       // Extract the base path and append bag_extract_pcd
-      const basePath = testInputDir.replace(/bag_extract_left\/?$/, '')
+      const basePath = inputDir.value.replace(/bag_extract_left\/?$/, '')
       pcdDir.value = basePath + 'bag_extract_pcd'
       console.log('[checkExistingResult] pcdDir set to:', pcdDir.value)
 
@@ -489,14 +479,7 @@ async function startTest() {
   if (!inputDir.value) return
   logs.value = []
 
-  // Ensure the path is absolute
-  let testInputDir = inputDir.value
-  if (!testInputDir.startsWith('/')) {
-    // If relative path, prepend PROJECT_ROOT equivalent
-    testInputDir = `/media/sda1/perception_process/perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808/${testInputDir}`
-  }
-
-  logs.value.push(`[调试] 使用路径: ${testInputDir}`)
+  logs.value.push(`[调试] 使用路径: ${inputDir.value}`)
 
   // First check if result already exists
   try {
@@ -504,7 +487,7 @@ async function startTest() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input_dir: testInputDir,
+        input_dir: inputDir.value,
         infer_mode: inferMode.value,
         erode_pixel: erodePixel.value,
       }),
@@ -519,7 +502,7 @@ async function startTest() {
       selectedResultIdx.value = resultImages.value.length > 0 ? 0 : -1
 
       // Set point cloud directory
-      const basePath = testInputDir.replace(/bag_extract_left\/?$/, '')
+      const basePath = inputDir.value.replace(/bag_extract_left\/?$/, '')
       pcdDir.value = basePath + 'bag_extract_pcd'
       console.log('[startTest] pcdDir set to:', pcdDir.value)
 
@@ -539,7 +522,7 @@ async function startTest() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      input_dir: testInputDir,
+      input_dir: inputDir.value,
       infer_mode: inferMode.value,
       erode_pixel: erodePixel.value,
     }),

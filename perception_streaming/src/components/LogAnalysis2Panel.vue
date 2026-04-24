@@ -12,7 +12,36 @@
       <button class="la2-extract-btn" :disabled="extracting" @click="doExtractNav">
         {{ extracting && extractType === 'nav' ? '⏳ 提取中...' : '📦 提取圖片 + 點雲' }}
       </button>
+      <button class="la2-extract-btn" :disabled="loadingPreview" @click="loadDefaultPreview" style="background:#1a5490;border-color:#2563eb">
+        {{ loadingPreview ? '⏳ 加載中...' : '🔄 加載預覽' }}
+      </button>
     </div>
+
+    <!-- Preview Section -->
+    <div v-if="previewImages.length" class="la2-preview-section">
+      <div class="la2-preview-header">
+        <span>📷 圖片預覽 ({{ previewImages.length }} 張)</span>
+        <span v-if="previewSelectedIdx >= 0" class="la2-preview-info">{{ previewSelectedIdx + 1 }} / {{ previewImages.length }}</span>
+      </div>
+      <div class="la2-preview-body">
+        <div class="la2-preview-thumbs">
+          <div
+            v-for="(img, idx) in previewImages.slice(0, 50)"
+            :key="img"
+            class="la2-preview-thumb"
+            :class="{ active: previewSelectedIdx === idx }"
+            @click="previewSelectedIdx = idx"
+          >
+            <img :src="getPreviewImageUrl(img)" loading="lazy" />
+            <div class="la2-preview-thumb-label">{{ idx + 1 }}</div>
+          </div>
+        </div>
+        <div v-if="previewSelectedIdx >= 0" class="la2-preview-main">
+          <img :src="getPreviewImageUrl(previewImages[previewSelectedIdx])" @click="openLb(getPreviewImageUrl(previewImages[previewSelectedIdx]), previewImages[previewSelectedIdx])" />
+        </div>
+      </div>
+    </div>
+
     <div v-if="extractLogVisible" class="la2-extract-log" ref="extractLogEl">
       <div v-for="(line, i) in extractLogs" :key="i" :class="{ 'log-err': line.startsWith('ERROR') || line.startsWith('❌') }">{{ line }}</div>
     </div>
@@ -298,7 +327,7 @@ const CAMERA_BAG_DIR = 'data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_camera_
 const camBagPath = ref('data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_camera_202603220059')
 const PASSABLE_LABELS = new Set([2])  // only grass dimmed; label=3(stat/road) kept bright for visibility
 
-const navBagPath = ref('perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808/data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_navigation_202603270322')
+const navBagPath = ref('data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_navigation_202603270322')
 const extracting = ref(false)
 const extractType = ref<'camera' | 'nav' | ''>('')
 const extractLogs = ref<string[]>([])
@@ -308,12 +337,64 @@ const extractedFrames = ref<{ img: string; pcd: string; label: string }[]>([])
 const extractedIdx = ref(-1)
 const extractPcdCtx = ref<PcdCtx | null>(null)
 
+// Preview state
+const previewImages = ref<string[]>([])
+const previewSelectedIdx = ref(-1)
+const loadingPreview = ref(false)
+const previewBaseDir = ref('')
+
 async function doExtractCamera() {
   await doExtract(camBagPath.value, 'camera')
 }
 
 async function doExtractNav() {
   await doExtract(navBagPath.value, 'nav')
+}
+
+async function loadDefaultPreview() {
+  loadingPreview.value = true
+  previewImages.value = []
+  previewSelectedIdx.value = -1
+
+  try {
+    // 尝试从nav包路径加载已提取的图片
+    const navPath = navBagPath.value.trim()
+    if (!navPath) {
+      alert('請先輸入 Nav 包路徑')
+      return
+    }
+
+    // 检查 bag_extract_nav/bag_extract_left 目录
+    const imgDir = `${navPath}/bag_extract_nav/bag_extract_left`
+
+    const res = await fetch('/offline/list_images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: imgDir }),
+    })
+
+    if (!res.ok) {
+      alert(`無法讀取目錄: ${imgDir}`)
+      return
+    }
+
+    const data = await res.json()
+    if (data.ok && data.images && data.images.length > 0) {
+      previewBaseDir.value = imgDir
+      previewImages.value = data.images
+      previewSelectedIdx.value = 0
+    } else {
+      alert(`目錄中沒有找到圖片: ${imgDir}`)
+    }
+  } catch (e) {
+    alert(`加載預覽失敗: ${e}`)
+  } finally {
+    loadingPreview.value = false
+  }
+}
+
+function getPreviewImageUrl(filename: string): string {
+  return `/offline/local_file?path=${encodeURIComponent(previewBaseDir.value + '/' + filename)}`
 }
 
 async function doExtract(bagPath: string, type: 'camera' | 'nav') {
@@ -431,6 +512,8 @@ onMounted(() => {
     VIZ_DIR + '/nav_pointclouds/stop2_032303_ts1774552983698276432.bin',
     VIZ_DIR + '/nav_pointclouds/stop3_032319_ts1774552999499319606.bin',
   ]
+  // 自动加载默认预览
+  loadDefaultPreview()
 })
 onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
@@ -954,6 +1037,18 @@ onBeforeUnmount(() => {
 .la2-ext-thumb.active { border-color:#4fc3f7; }
 .la2-ext-thumb:hover { border-color:#90caf9; }
 .la2-ext-thumb img { width:100%; height:50px; object-fit:cover; display:block; }
+.la2-preview-section { background:#0a0e18; border:1px solid #1565c0; border-radius:6px; margin:8px 14px; overflow:hidden; }
+.la2-preview-header { display:flex; align-items:center; justify-content:space-between; padding:6px 14px; background:#0f1929; font-size:12px; color:#4fc3f7; border-bottom:1px solid #1e2a3a; }
+.la2-preview-info { font-size:11px; color:#90caf9; font-family:monospace; }
+.la2-preview-body { display:grid; grid-template-columns:200px 1fr; height:320px; gap:0; }
+.la2-preview-thumbs { overflow-y:auto; overflow-x:hidden; background:#080c14; border-right:1px solid #1e2a3a; padding:6px; display:flex; flex-direction:column; gap:6px; }
+.la2-preview-thumb { flex-shrink:0; width:100%; cursor:pointer; border:2px solid #333; border-radius:4px; overflow:hidden; transition:border-color .2s; }
+.la2-preview-thumb.active { border-color:#4fc3f7; box-shadow:0 0 8px rgba(79,195,247,0.5); }
+.la2-preview-thumb:hover { border-color:#90caf9; }
+.la2-preview-thumb img { width:100%; height:80px; object-fit:cover; display:block; background:#222; }
+.la2-preview-thumb-label { font-size:9px; color:#555; padding:2px 4px; text-align:center; background:#0a0e15; }
+.la2-preview-main { overflow:hidden; display:flex; align-items:center; justify-content:center; background:#050810; padding:8px; }
+.la2-preview-main img { max-width:100%; max-height:100%; object-fit:contain; cursor:zoom-in; border:1px solid #333; border-radius:4px; }
 .la2-extracted-pcd { position:relative; height:100%; overflow:hidden; }
 .la2-ext-pcd-canvas { width:100%; height:100%; display:block; background:#050810; overflow:hidden; }
 .log-err { color:#ef5350; }

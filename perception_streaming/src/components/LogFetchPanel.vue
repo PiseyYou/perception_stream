@@ -46,7 +46,7 @@
     </div>
 
     <!-- ===== Section 3: 分析结果 ===== -->
-    <div v-if="analysisResult" class="lf-section lf-report-section">
+    <div v-if="analysisResult" class="lf-section lf-report-section lf-fullscreen">
       <div class="lf-report-head">
         <div>
           <div class="lf-section-title lf-section-title-compact">📊 避障原因分析报告</div>
@@ -778,6 +778,12 @@ async function analyzeAvoiding() {
   font-size: 13px;
   padding: 8px;
 }
+.lf-report-section.lf-fullscreen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .lf-section {
   background: #16213e;
   border: 1px solid #2a2a4a;
@@ -944,6 +950,8 @@ async function analyzeAvoiding() {
   gap: 6px;
   margin-bottom: 6px;
   align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
 .lf-log-card {
   background: linear-gradient(180deg, rgba(14, 19, 31, 0.96), rgba(8, 12, 21, 0.98));
@@ -953,8 +961,7 @@ async function analyzeAvoiding() {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: min(24vh, 220px);
-  max-height: min(24vh, 220px);
+  height: 100%;
   box-shadow: 0 8px 18px rgba(3, 6, 16, 0.2);
 }
 .lf-log-card.tone-decision {
@@ -1021,8 +1028,7 @@ async function analyzeAvoiding() {
 }
 .lf-log-terminal {
   flex: 1;
-  height: calc(min(24vh, 220px) - 46px);
-  max-height: calc(min(24vh, 220px) - 46px);
+  min-height: 0;
   overflow-y: auto;
   font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 10px;
@@ -1062,7 +1068,7 @@ async function analyzeAvoiding() {
 }
 .lf-log-empty-state {
   flex: 1;
-  min-height: calc(min(24vh, 220px) - 46px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1079,10 +1085,14 @@ async function analyzeAvoiding() {
   padding: 8px;
   margin-bottom: 8px;
   box-shadow: 0 8px 18px rgba(3, 6, 16, 0.2);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .lf-timeline-terminal {
-  height: min(24vh, 220px);
-  max-height: min(24vh, 220px);
+  flex: 1;
+  min-height: 0;
 }
 .lf-timeline-row {
   display: grid;
@@ -1136,6 +1146,8 @@ async function analyzeAvoiding() {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 6px;
+  min-height: 280px;
+  max-height: 320px;
 }
 .lf-media-card,
 .lf-conclusion {
@@ -1144,12 +1156,16 @@ async function analyzeAvoiding() {
   border-radius: 10px;
   padding: 6px;
   box-shadow: 0 8px 18px rgba(3, 6, 16, 0.2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 .lf-thumb-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-height: 70px;
+  max-height: 90px;
   overflow-y: auto;
   margin-bottom: 4px;
 }
@@ -1179,10 +1195,13 @@ async function analyzeAvoiding() {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
 }
 .lf-img-full {
   max-width: 100%;
-  max-height: 150px;
+  flex: 1;
+  min-height: 0;
   border-radius: 10px;
   cursor: zoom-in;
   border: 1px solid rgba(56, 71, 104, 0.92);
@@ -1190,7 +1209,12 @@ async function analyzeAvoiding() {
   background: #05080d;
 }
 .lf-img-name { font-size: 10px; color: #8ca4cf; }
-.lf-conclusion-body { margin-top: 6px; }
+.lf-conclusion-body {
+  margin-top: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .lf-conclusion-text {
   font-size: 11px;
   line-height: 1.4;

@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  perception-streaming:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: perception_streaming
+    image: perception-streaming:latest
+
+    # 使用主机网络模式（简化端口映射和 SSH 隧道）
+    network_mode: host
+
+    # 或者使用端口映射（注释掉 network_mode: host 后启用）
+    # ports:
+    #   - "5173:5173"   # Vite 前端
+    #   - "8765:8765"   # SSH Bridge WebSocket
+    #   - "8766:8766"   # PCL Proxy WebSocket
+    #   - "8768:8768"   # PCL Tunnel (local)
+    #   - "8769:8769"   # Offline Server
+
+    volumes:
+      # 持久化数据目录
+      - ./logs:/app/logs
+      - ./bags:/app/bags
+      - ./reports:/app/reports
+
+      # SSH 密钥（只读挂载）
+      # 请根据实际路径修改
+      - ~/.ssh:/root/.ssh:ro
+
+      # 配置文件（可选，用于动态修改配置）
+      # - ./conf:/app/conf
+      # - ./config:/app/config
+
+    environment:
+      # 机器人连接配置（可通过环境变量覆盖）
+      - ROBOT_HOST=${ROBOT_HOST:-120.25.121.3}
+      - ROBOT_PORT=${ROBOT_PORT:-10015}
+      - SSH_KEY=${SSH_KEY:-/root/.ssh/bestmow_rsa_202603}
+
+      # Node.js 环境
+      - NODE_ENV=production
+
+      # 时区设置
+      - TZ=Asia/Shanghai
+
+    restart: unless-stopped
+
+    # 资源限制（可选）
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# 可选：使用自定义网络（如果不使用 host 模式）
+# networks:
+#   perception-net:
+#     driver: bridge

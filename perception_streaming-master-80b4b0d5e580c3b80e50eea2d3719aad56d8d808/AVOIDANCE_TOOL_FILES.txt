@@ -1,0 +1,79 @@
+避障日志分析工具 - 已创建文件清单
+================================================================================
+
+【核心文档】
+✓ AVOIDANCE_TOOL_README.md       - 工具主README（入口文档）
+✓ AVOIDANCE_ANALYSIS_README.md   - 完整的分析方法论文档
+✓ QUICKSTART.md                  - 快速开始指南
+✓ EXAMPLES.md                    - 使用示例集合
+✓ PROJECT_SUMMARY.md             - 项目技术总结
+✓ HOW_TO_USE.txt                 - 简单使用说明
+
+【配置文件】
+✓ config/machine_config.json     - 机器配置（含test_machine_1示例）
+✓ requirements.txt               - Python依赖列表
+
+【脚本文件】
+✓ scripts/analyze_avoidance.sh   - 主分析脚本（Bash）
+✓ scripts/analyze_avoidance.py   - 深度分析脚本（Python）
+✓ scripts/test_setup.sh          - 配置测试脚本
+
+【目录结构】
+✓ reports/                       - 分析报告输出目录
+✓ logs/                          - 临时日志缓存目录
+
+================================================================================
+
+【使用流程】
+
+1. 首次使用
+   - 阅读: AVOIDANCE_TOOL_README.md 或 HOW_TO_USE.txt
+   - 测试: ./scripts/test_setup.sh
+   - 配置: 编辑 config/machine_config.json
+
+2. 日常分析
+   - 运行: ./scripts/analyze_avoidance.sh <machine_name> [date]
+   - 查看: cat reports/avoidance_*.md
+
+3. 深入学习
+   - 完整文档: AVOIDANCE_ANALYSIS_README.md
+   - 使用示例: EXAMPLES.md
+   - 技术细节: PROJECT_SUMMARY.md
+
+================================================================================
+
+【文档层次】
+
+入门级:
+  └─ HOW_TO_USE.txt (最简单)
+  └─ AVOIDANCE_TOOL_README.md (工具概览)
+  └─ QUICKSTART.md (快速上手)
+
+进阶级:
+  └─ EXAMPLES.md (各种场景)
+  └─ AVOIDANCE_ANALYSIS_README.md (完整方法论)
+
+专家级:
+  └─ PROJECT_SUMMARY.md (技术细节)
+  └─ 源代码 (scripts/*.sh, scripts/*.py)
+
+================================================================================
+
+【配置说明】
+
+config/machine_config.json 包含:
+- machines: 机器配置列表
+  - test_machine_1: 已配置的示例机器
+  - machine_template: 配置模板
+- analysis: 分析阈值配置
+- log_files: 日志文件模式
+
+================================================================================
+
+【下一步】
+
+1. 运行测试: ./scripts/test_setup.sh
+2. 查看文档: cat AVOIDANCE_TOOL_README.md
+3. 开始使用: ./scripts/analyze_avoidance.sh test_machine_1
+
+================================================================================

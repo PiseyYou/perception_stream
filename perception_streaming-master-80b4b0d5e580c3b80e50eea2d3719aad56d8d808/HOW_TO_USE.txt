@@ -1,0 +1,68 @@
+================================================================================
+                        避障日志分析工具 - 使用说明
+================================================================================
+
+【第一次使用】
+
+1. 测试配置
+   ./scripts/test_setup.sh
+
+2. 编辑机器配置
+   vim config/machine_config.json
+   
+   添加你的机器信息:
+   {
+     "machines": {
+       "my_robot": {
+         "name": "我的机器人",
+         "host": "192.168.1.100",
+         "port": 22,
+         "ssh_key": "/path/to/ssh/key",
+         "user": "root",
+         "log_base_path": "/userdata/log_dir/ros2_log",
+         "image_base_path": "/userdata/bestmow_data/image_save_path"
+       }
+     }
+   }
+
+【日常使用】
+
+# 分析今天的避障日志
+./scripts/analyze_avoidance.sh my_robot
+
+# 分析指定日期 (格式: YYYYMMDD)
+./scripts/analyze_avoidance.sh my_robot 20260414
+
+# 分析指定时间段
+./scripts/analyze_avoidance.sh my_robot 20260414 "03:14-03:36"
+
+【查看报告】
+
+# 查看最新报告
+ls -lt reports/ | head -5
+cat reports/avoidance_*.md
+
+【文档】
+
+- AVOIDANCE_TOOL_README.md  - 工具总览
+- QUICKSTART.md             - 快速开始
+- EXAMPLES.md               - 使用示例
+- AVOIDANCE_ANALYSIS_README.md - 完整文档
+
+【常见问题】
+
+Q: SSH连接失败？
+A: chmod 600 /path/to/ssh/key
+
+Q: 未找到避障图片？
+A: 检查日期格式和路径配置
+
+Q: 如何添加多台机器？
+A: 在config/machine_config.json中添加多个机器配置
+
+【获取帮助】
+
+./scripts/analyze_avoidance.sh
+./scripts/test_setup.sh
+
+================================================================================

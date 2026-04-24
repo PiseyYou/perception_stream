@@ -35,29 +35,59 @@ int main(int argc, char** argv) {
     std::cout << "  Based on stereo_perception_multi2 with K100/bestmow support" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    // // 解析命令行参数
-    // if (argc < 3) {
-    //     printUsage(argv[0]);
-    //     return 1;
-    // }
+    // ========== 从环境变量读取配置 ==========
+    std::string input_dir;
+    std::string output_dir;
+    int infer_mode = 7;  // 默认使用 DSG 模式
+    bool use_k100_mode = true;  // 默认使用 K100 模式
 
-    // std::string input_dir = "/home/youfeng/debug/custom/8177/1226/MR1P1251US0008177_Asia_Shanghai_20251225_163731/userdata/bestmow_data/image_save_path/20251225/stereo/";
-    // std::string input_dir = "/home/youfeng/debug/boluo/0123/20260415/";
-    // std::string input_dir = "/home/youfeng/debug/boluo/0123/20260415/debug/";
-    // std::string input_dir = "/home/youfeng/debug/boluo/0113/20260415/";
-    // std::string input_dir = "/home/youfeng/debug/boluo/rosbag/rosbag_LK-MR2P1US000017_navigation_202604161823/stereo_output_rosbag_LK-MR2P1US000017_navigation_202604161823_0/images/extracted_interval/";
-    // std::string input_dir = "/home/youfeng/debug/boluo/rosbag/rosbag_LK-MR2P1US000017_navigation_202604161823/stereo_output_rosbag_LK-MR2P1US000017_navigation_202604161823_0/images/extracted_interval/debug/";
-    std::string input_dir = "/home/youfeng/debug/custom/0102/0423/stereo/";
+    // 读取输入目录（优先使用环境变量）
+    const char* env_input = std::getenv("OFFLINE_INPUT_DIR");
+    if (env_input != nullptr) {
+        input_dir = env_input;
+        std::cout << "[Config] Input dir from env: " << input_dir << std::endl;
+    } else if (argc >= 2) {
+        input_dir = argv[1];
+        std::cout << "[Config] Input dir from argv: " << input_dir << std::endl;
+    } else {
+        // 默认路径（用于本地测试）
+        input_dir = "/home/youfeng/debug/custom/0102/0423/stereo/";
+        std::cout << "[Config] Using default input dir: " << input_dir << std::endl;
+    }
 
-    // 解析硬件模式（默认 K100）
-    bool use_k100_mode = true;  // 使用 K100 模式和 dsg_multi_20260403_640x384.bin 模型
-    // if (argc >= 4) {
-    //     std::string mode_str = argv[3];
-    //     std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(), ::tolower);
-    //     if (mode_str == "bestmow") {
-    //         use_k100_mode = false;
-    //     }
-    // }
+    // 读取输出目录（可选）
+    const char* env_output = std::getenv("OFFLINE_OUTPUT_DIR");
+    if (env_output != nullptr) {
+        output_dir = env_output;
+        std::cout << "[Config] Output dir from env: " << output_dir << std::endl;
+    } else if (argc >= 3) {
+        output_dir = argv[2];
+        std::cout << "[Config] Output dir from argv: " << output_dir << std::endl;
+    }
+
+    // 读取推理模式
+    const char* env_mode = std::getenv("OFFLINE_INFER_MODE");
+    if (env_mode != nullptr) {
+        infer_mode = std::atoi(env_mode);
+        std::cout << "[Config] Infer mode from env: " << infer_mode << std::endl;
+    } else if (argc >= 4) {
+        infer_mode = std::atoi(argv[3]);
+        std::cout << "[Config] Infer mode from argv: " << infer_mode << std::endl;
+    }
+
+    // 读取硬件模式
+    const char* env_hardware = std::getenv("HARDWARE_MODE");
+    if (env_hardware != nullptr) {
+        std::string hw_str = env_hardware;
+        std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
+        use_k100_mode = (hw_str == "k100");
+        std::cout << "[Config] Hardware mode from env: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
+    } else if (argc >= 5) {
+        std::string hw_str = argv[4];
+        std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
+        use_k100_mode = (hw_str == "k100");
+        std::cout << "[Config] Hardware mode from argv: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
+    }
 
     // 设置环境变量，让 HardwareDetector 读取到正确的模式
     if (use_k100_mode) {
@@ -75,20 +105,25 @@ int main(int argc, char** argv) {
     config.use_k100_mode = use_k100_mode;
 
     // 基础配置
-    config.infer_mode = 6;              // 6: Sub模式 (sub_20260303), 7: DSG模式 (dsg_multi_20260407)
-    config.erode_pixel = 0;             // 形态学腐蚀像素
-    config.detection_threshold = 0.3f;  // 检测阈值
-    config.area_threshold = 0.5f;       // 区域阈值
+    config.infer_mode = infer_mode;         // 从环境变量或命令行读取
+    config.erode_pixel = 0;                 // 形态学腐蚀像素
+    config.detection_threshold = 0.3f;      // 检测阈值
+    config.area_threshold = 0.5f;           // 区域阈值
 
     // K100 专用配置
     config.enable_dsg_hsv_dark_filter = false;
     config.enable_dsg_detection_in_pointcloud = false;
 
     // 路径配置
-    config.model_dir = "../models/";  // 模型目录（相对于可执行文件）
+    config.model_dir = "../models/";        // 模型目录（相对于可执行文件）
     config.input_dir = input_dir;
-    // 不设置 output_dir，让 auto_configure() 自动生成带模式信息的目录名
-    // config.output_dir = "";  // 留空，使用自动生成的目录名
+
+    // 如果指定了输出目录，使用指定的；否则自动生成
+    if (!output_dir.empty()) {
+        config.output_dir = output_dir;
+        std::cout << "[Config] Using specified output dir: " << output_dir << std::endl;
+    }
+    // 否则留空，让 auto_configure() 自动生成带模式信息的目录名
 
     // 输出控制
     config.save_segmentation = true;

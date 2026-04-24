@@ -6,6 +6,9 @@
       <label>📁 双目文件夹目录:</label>
       <input v-model="folderPath" class="sa2-path-input" placeholder="含 images/ pointclouds/ 子目录的文件夹路径" @keyup.enter="doScan" />
       <button class="sa2-dbg-btn" style="background:#4c1d95;margin-right:8px" :disabled="offlineRunning || !folderPath.trim() || pairs.length === 0" @click="() => { console.log('[Button Click] Night Debug clicked'); runNightOfflineDebug(); }">{{ offlineRunning ? '⏳ 运行中...' : '🌙 夜间离线debug' }}</button>
+      <label>📁 白天双目文件夹目录:</label>
+      <input v-model="dayFolderPath" class="sa2-path-input" placeholder="data/stereo_debug/0016/20260420" @keyup.enter="doScanDay" />
+      <button class="sa2-dbg-btn" style="background:#fb923c;color:#000;margin-right:8px" :disabled="offlineRunning || !dayFolderPath.trim()" @click="runDayOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '☀️ 白天离线debug' }}</button>
       <label>标签:</label>
       <input v-model.number="filterLabel" type="number" class="sa2-label-input" />
       <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="doScan">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
@@ -102,6 +105,7 @@ import {
 } from '../composables/usePcdRenderer'
 
 const folderPath = ref('data/stereo_debug/0115/20260421')
+const dayFolderPath = ref('data/stereo_debug/0016/20260420')
 const snLast4 = ref('0115')
 const filterLabel = ref(0)
 const scanning = ref(false)
@@ -165,36 +169,262 @@ const resultPcdDir = ref('')
 const resultSelectedIdx = ref(-1)
 const resultPcdStatus = ref('')
 const resultDirLabel = ref('')
+const lastOfflineInferMode = ref(99)
+let offlineEventSource: EventSource | null = null
+let offlineReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let offlineStatusPollTimer: ReturnType<typeof setInterval> | null = null
+let offlineRunToken = 0
+
+function resetResultState() {
+  resultImages.value = []
+  resultPcds.value = []
+  resultDir.value = ''
+  resultPcdDir.value = ''
+  resultSelectedIdx.value = -1
+  resultDirLabel.value = ''
+  resultPcdStatus.value = ''
+}
+
+function baseName(path: string) {
+  return path.split('/').pop() || path
+}
+
+function stemName(path: string) {
+  return baseName(path).replace(/\.[^.]+$/, '')
+}
+
+function clearOfflineReconnectTimer() {
+  if (offlineReconnectTimer) {
+    clearTimeout(offlineReconnectTimer)
+    offlineReconnectTimer = null
+  }
+}
+
+function clearOfflineStatusPollTimer() {
+  if (offlineStatusPollTimer) {
+    clearInterval(offlineStatusPollTimer)
+    offlineStatusPollTimer = null
+  }
+}
+
+function closeOfflineEventStream() {
+  if (offlineEventSource) {
+    offlineEventSource.close()
+    offlineEventSource = null
+  }
+}
+
+function applyOfflineCompletion(payload: {
+  output_dir?: string
+  pcd_dir?: string
+  images?: string[]
+  pcds?: string[]
+  image_count?: number
+  pcd_count?: number
+}) {
+  closeOfflineEventStream()
+  clearOfflineReconnectTimer()
+  clearOfflineStatusPollTimer()
+  offlineRunning.value = false
+  progressCurrent.value = progressTotal.value || pairs.value.length
+
+  const images = payload.images || []
+  const pcds = payload.pcds || []
+  if (images.length > 0 && payload.output_dir) {
+    resultDir.value = payload.output_dir
+    resultImages.value = images
+    resultDirLabel.value = payload.output_dir.split('/').pop() || ''
+    resultPcdDir.value = payload.pcd_dir || ''
+    resultPcds.value = pcds
+    offlineStatus.value = `✓ 完成 ${payload.image_count ?? images.length}/${pairs.value.length} (点云: ${payload.pcd_count ?? pcds.length})`
+    nextTick().then(() => {
+      if (resultPcdCanvasRef.value && !resultPcdCtx)
+        resultPcdCtx = initViewer(resultPcdCanvasRef.value)
+      if (pairs.value.length > 0) {
+        selectPair(pairs.value.length - 1)
+      }
+    })
+  } else {
+    offlineStatus.value = '完成 (无输出图片)'
+  }
+}
+
+function applyOfflineFailure(message: string) {
+  closeOfflineEventStream()
+  clearOfflineReconnectTimer()
+  clearOfflineStatusPollTimer()
+  offlineRunning.value = false
+  offlineStatus.value = `✗ ${message}`
+  offlineError.value = true
+}
+
+function syncProgressFromStatus(progress?: {
+  current?: number
+  total?: number
+  status?: string
+  last_log?: string
+}) {
+  if (!progress) return
+  if (typeof progress.total === 'number' && progress.total > 0) {
+    progressTotal.value = progress.total
+  }
+  if (typeof progress.current === 'number' && progress.current >= 0) {
+    progressCurrent.value = progress.current
+  }
+  if (typeof progress.status === 'string' && progress.status) {
+    offlineStatus.value = progress.status
+  } else if (typeof progress.last_log === 'string' && progress.last_log) {
+    offlineStatus.value = progress.last_log
+  }
+}
+
+function scheduleOfflineEventReconnect(runToken: number, inputDir: string, delayMs = 1000) {
+  clearOfflineReconnectTimer()
+  if (runToken !== offlineRunToken || !offlineRunning.value) return
+  offlineReconnectTimer = setTimeout(() => {
+    if (runToken !== offlineRunToken || !offlineRunning.value) return
+    connectOfflineEventStream(runToken, inputDir)
+  }, delayMs)
+}
+
+async function reconcileOfflineRunState(runToken: number, inputDir: string) {
+  if (runToken !== offlineRunToken) return
+  try {
+    const res = await fetch('/offline/status')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    if (runToken !== offlineRunToken) return
+    syncProgressFromStatus(data.progress)
+
+    if (data.running) {
+      offlineRunning.value = true
+      offlineError.value = false
+      if (!offlineStatus.value) {
+        offlineStatus.value = progressCurrent.value > 0
+          ? `正在运行第 ${progressCurrent.value}/${progressTotal.value || pairs.value.length} 张`
+          : '连接重试中...'
+      }
+      scheduleOfflineEventReconnect(runToken, inputDir, 600)
+      return
+    }
+
+    const result = data.result || {}
+    const resultImages = Array.isArray(result.images) ? result.images : []
+    const resultPcds = Array.isArray(result.pcds) ? result.pcds : []
+    if (result.output_dir || resultImages.length > 0 || resultPcds.length > 0) {
+      applyOfflineCompletion({
+        output_dir: result.output_dir,
+        pcd_dir: result.pcd_dir,
+        images: resultImages,
+        pcds: resultPcds,
+        image_count: resultImages.length,
+        pcd_count: resultPcds.length,
+      })
+      return
+    }
+
+    offlineRunning.value = false
+    offlineStatus.value = '运行已结束'
+  } catch (error) {
+    if (runToken !== offlineRunToken) return
+    offlineRunning.value = true
+    offlineError.value = false
+    offlineStatus.value = '连接重试中...'
+    scheduleOfflineEventReconnect(runToken, inputDir, 1200)
+  }
+}
+
+function startOfflineStatusPolling(runToken: number, inputDir: string) {
+  clearOfflineStatusPollTimer()
+  offlineStatusPollTimer = setInterval(() => {
+    if (runToken !== offlineRunToken || !offlineRunning.value) {
+      clearOfflineStatusPollTimer()
+      return
+    }
+    void reconcileOfflineRunState(runToken, inputDir)
+  }, 1000)
+}
+
+function connectOfflineEventStream(runToken: number, inputDir: string) {
+  if (runToken !== offlineRunToken || !offlineRunning.value) return
+  closeOfflineEventStream()
+
+  const evtSrc = new EventSource('/offline/events')
+  offlineEventSource = evtSrc
+
+  evtSrc.onmessage = async (e) => {
+    if (runToken !== offlineRunToken || evtSrc !== offlineEventSource) return
+    const msg = JSON.parse(e.data)
+    if (msg.type === 'log') {
+      console.log('[OfflineLog]', msg.text)
+      const matchProgress = msg.text.match(/\((\d+)\/(\d+)\)/)
+      const matchSeq = msg.text.match(/sequence_num:\s*(\d+)/)
+      const matchSkip = msg.text.match(/Skip existing file:\s*(.+)/)
+      const matchSkipNight = msg.text.match(/Skip\s+(.+)\s+as it already exists/)
+      const matchProcessing = msg.text.match(/Processing\s+\d+\/\d+:\s+(.+)/)
+      const matchAnyProgress = msg.text.match(/(\d+)\s*\/\s*(\d+)/)
+
+      if (matchProgress) {
+        progressCurrent.value = parseInt(matchProgress[1])
+        progressTotal.value = parseInt(matchProgress[2])
+        offlineStatus.value = `正在运行第 ${progressCurrent.value}/${progressTotal.value} 张`
+      } else if (matchSeq) {
+        progressCurrent.value = parseInt(matchSeq[1]) + 1
+        offlineStatus.value = `正在运行第 ${progressCurrent.value}/${pairs.value.length} 张`
+      } else if (matchSkip || matchSkipNight) {
+        if (progressCurrent.value < progressTotal.value) progressCurrent.value++
+        const skippedFile = matchSkip ? matchSkip[1] : matchSkipNight[1]
+        offlineStatus.value = `跳过已存在: ${skippedFile.split('/').pop()}`
+      } else if (matchProcessing) {
+        const parts = msg.text.match(/Processing\s+(\d+)\/(\d+)/)
+        if (parts) {
+          progressCurrent.value = parseInt(parts[1])
+          progressTotal.value = parseInt(parts[2])
+        }
+        offlineStatus.value = `正在处理: ${matchProcessing[1].split('/').pop()}`
+      } else if (matchAnyProgress) {
+        progressCurrent.value = parseInt(matchAnyProgress[1])
+        progressTotal.value = parseInt(matchAnyProgress[2])
+        offlineStatus.value = `运行中 ${progressCurrent.value}/${progressTotal.value}`
+      } else {
+        offlineStatus.value = msg.text.length > 30 ? msg.text.slice(-30) : msg.text
+      }
+    } else if (msg.type === 'done') {
+      applyOfflineCompletion(msg)
+    } else if (msg.type === 'error') {
+      applyOfflineFailure(msg.text)
+    } else if (msg.type === 'hello') {
+      syncProgressFromStatus(msg.progress)
+    }
+  }
+
+  evtSrc.onerror = () => {
+    if (runToken !== offlineRunToken || evtSrc !== offlineEventSource) return
+    closeOfflineEventStream()
+    reconcileOfflineRunState(runToken, inputDir)
+  }
+}
 
 const linkedResultImg = computed(() => {
   if (selectedIdx.value < 0 || !pairs.value[selectedIdx.value] || !resultDir.value) return ''
-  const pcdName = pairs.value[selectedIdx.value].pcd
-  const stem = pcdName.replace(/\.[^.]+$/, '')
+  const stem = stemName(pairs.value[selectedIdx.value].pcd).toLowerCase()
 
-  // 尝试匹配不同可能的后缀
-  const possibleNames = [
-    stem + '_dsg_cdt.jpg',
-    stem + '_dsg_cdt.png',
-    stem + '_seg.jpg',
-    stem + '.jpg'
-  ]
-
-  const match = resultImages.value.find(img => {
-    const s = img.toLowerCase()
-    const stemLower = stem.toLowerCase()
-    return possibleNames.some(p => s.includes(p.toLowerCase())) || s === stemLower || s.startsWith(stemLower + '_')
+  const match = resultImages.value.find((img) => {
+    const candidate = stemName(img).toLowerCase()
+    return candidate === stem || candidate.startsWith(stem + '_') || candidate.includes(stem + '_')
   })
 
-  return match ? resultImgUrl(match) : resultImgUrl(stem + '_dsg_cdt.jpg')
+  return match ? resultImgUrl(match) : ''
 })
 
-async function doScan() {
+async function doScan(preferMode?: number) {
   if (!folderPath.value || scanning.value) return
   scanning.value = true
   scanStatus.value = ''
   scanError.value = false
   pairs.value = []
   selectedIdx.value = -1
+  resetResultState()
   try {
     const url = `/offline/scan_nav_folder?folder=${encodeURIComponent(folderPath.value)}&filter_label=${filterLabel.value}`
     const res = await fetch(url)
@@ -223,7 +453,9 @@ async function doScan() {
     if (pairs.value.length > 0) {
       await nextTick(); selectPair(0)
       // 检查是否已有结果输出
-      const checkRes = await fetch(`/offline/check_existing_result?folder=${encodeURIComponent(folderPath.value)}`)
+      const query = new URLSearchParams({ folder: folderPath.value })
+      if (typeof preferMode === 'number') query.set('prefer_mode', String(preferMode))
+      const checkRes = await fetch(`/offline/check_existing_result?${query.toString()}`)
       const checkData = await checkRes.json()
       console.log('[doScan] check_existing_result response:', checkData)
       if (checkData.ok && checkData.output_dir) {
@@ -264,6 +496,13 @@ async function doScan() {
   } catch (e) {
     scanStatus.value = `错误: ${e}`; scanError.value = true
   } finally { scanning.value = false }
+}
+
+async function doScanDay() {
+  // 将白天文件夹路径同步到主文件夹路径，然后执行扫描
+  folderPath.value = dayFolderPath.value
+  lastOfflineInferMode.value = 6
+  await doScan(6)
 }
 
 function imgUrl(fname: string) {
@@ -390,6 +629,7 @@ async function doUploadImages() {
 async function runNightOfflineDebug() {
   console.log('[runNightOfflineDebug] Starting DSG Night mode processing')
   console.log('[runNightOfflineDebug] folderPath:', folderPath.value)
+  lastOfflineInferMode.value = 99
 
   // Mode 7: DSG Night recognition
   // - Uses adaptive stereo matching parameters for night scenes
@@ -402,16 +642,78 @@ async function runNightOfflineDebug() {
 }
 
 async function resumeOfflineDebug() {
-  // 默认使用夜间模式继续，也可以根据逻辑调整
-  await doRunOffline(folderPath.value, 99, 205, true)
+  const resumeDir = lastOfflineInferMode.value === 6 ? dayFolderPath.value : folderPath.value
+  await doRunOffline(resumeDir, lastOfflineInferMode.value, 205, true)
+}
+
+async function runDayOfflineDebug() {
+  try {
+    console.log('[runDayOfflineDebug] Starting Day mode processing with Model 6')
+    console.log('[runDayOfflineDebug] dayFolderPath:', dayFolderPath.value)
+    lastOfflineInferMode.value = 6
+
+    if (!dayFolderPath.value || !dayFolderPath.value.trim()) {
+      console.error('[runDayOfflineDebug] dayFolderPath is empty')
+      offlineStatus.value = '✗ 请输入白天文件夹路径'
+      offlineError.value = true
+      return
+    }
+
+    // 先扫描白天文件夹，确保 pairs 有数据
+    if (pairs.value.length === 0 || folderPath.value !== dayFolderPath.value) {
+      console.log('[runDayOfflineDebug] Scanning day folder first...')
+      folderPath.value = dayFolderPath.value
+      await doScan(6)
+
+      // 等待扫描完成
+      if (pairs.value.length === 0) {
+        console.error('[runDayOfflineDebug] No image pairs found after scanning')
+        offlineStatus.value = '✗ 未找到图片或点云'
+        offlineError.value = true
+        return
+      }
+    }
+
+    console.log('[runDayOfflineDebug] Found', pairs.value.length, 'pairs')
+
+    // 检查是否有已处理的结果，如果有则继续执行
+    const hasResults = resultImages.value.length > 0
+    const resume = hasResults
+    console.log('[runDayOfflineDebug] hasResults:', hasResults, 'resume:', resume)
+
+    // Mode 6: CDT+Multi-Sub Day mode
+    // - Uses Model 6 for daytime scenes
+    // - K100 hardware mode
+    // - Processes with CDT + Multi-Sub model
+    console.log('[runDayOfflineDebug] Calling doRunOffline with mode=6')
+    await doRunOffline(dayFolderPath.value, 6, 205, resume)
+  } catch (error) {
+    console.error('[runDayOfflineDebug] Error:', error)
+    offlineStatus.value = `✗ 错误: ${error}`
+    offlineError.value = true
+    offlineRunning.value = false
+  }
+}
+
+async function resumeDayOfflineDebug() {
+  // 继续执行白天模式
+  lastOfflineInferMode.value = 6
+  await doRunOffline(dayFolderPath.value, 6, 205, true)
 }
 
 async function doRunOffline(inputDir: string, inferMode: number, erodePixel: number, resume: boolean = false) {
   console.log('[doRunOffline] inputDir:', inputDir, 'inferMode:', inferMode, 'erodePixel:', erodePixel, 'resume:', resume)
   if (!inputDir || offlineRunning.value) return
+  offlineRunToken += 1
+  const runToken = offlineRunToken
+  closeOfflineEventStream()
+  clearOfflineReconnectTimer()
+  clearOfflineStatusPollTimer()
+  lastOfflineInferMode.value = inferMode
   offlineRunning.value = true
   offlineStatus.value = '启动中...'
   offlineError.value = false
+  if (!resume) resetResultState()
   progressTotal.value = pairs.value.length
   if (resume && resultImages.value.length > 0) {
     progressCurrent.value = resultImages.value.length
@@ -433,86 +735,21 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
       offlineStatus.value = `✗ ${startData.error}`; offlineError.value = true
       offlineRunning.value = false; return
     }
-    const evtSrc = new EventSource('/offline/events')
-    evtSrc.onmessage = async (e) => {
-      const msg = JSON.parse(e.data)
-      if (msg.type === 'log') {
-        console.log('[OfflineLog]', msg.text)
-        const matchProgress = msg.text.match(/\((\d+)\/(\d+)\)/)
-        const matchSeq = msg.text.match(/sequence_num:\s*(\d+)/)
-        const matchSkip = msg.text.match(/Skip existing file:\s*(.+)/)
-        const matchSkipNight = msg.text.match(/Skip\s+(.+)\s+as it already exists/)
-        const matchProcessing = msg.text.match(/Processing\s+\d+\/\d+:\s+(.+)/)
-        const matchAnyProgress = msg.text.match(/(\d+)\s*\/\s*(\d+)/)
-
-        if (matchProgress) {
-          progressCurrent.value = parseInt(matchProgress[1])
-          progressTotal.value = parseInt(matchProgress[2])
-          offlineStatus.value = `正在运行第 ${progressCurrent.value}/${progressTotal.value} 张`
-        } else if (matchSeq) {
-          progressCurrent.value = parseInt(matchSeq[1]) + 1
-          offlineStatus.value = `正在运行第 ${progressCurrent.value}/${pairs.value.length} 张`
-        } else if (matchSkip || matchSkipNight) {
-          if (progressCurrent.value < progressTotal.value) progressCurrent.value++
-          const skippedFile = matchSkip ? matchSkip[1] : matchSkipNight[1]
-          offlineStatus.value = `跳过已存在: ${skippedFile.split('/').pop()}`
-        } else if (matchProcessing) {
-          const parts = msg.text.match(/Processing\s+(\d+)\/(\d+)/)
-          if (parts) {
-            progressCurrent.value = parseInt(parts[1])
-            progressTotal.value = parseInt(parts[2])
-          }
-          offlineStatus.value = `正在处理: ${matchProcessing[1].split('/').pop()}`
-        } else if (matchAnyProgress) {
-          progressCurrent.value = parseInt(matchAnyProgress[1])
-          progressTotal.value = parseInt(matchAnyProgress[2])
-          offlineStatus.value = `运行中 ${progressCurrent.value}/${progressTotal.value}`
-        } else {
-          offlineStatus.value = msg.text.length > 30 ? msg.text.slice(-30) : msg.text
-        }
-      } else if (msg.type === 'done') {
-        evtSrc.close()
-        offlineRunning.value = false
-        console.log('[Done Event] msg:', msg)
-        console.log('[Done Event] pcd_dir:', msg.pcd_dir)
-        console.log('[Done Event] pcd_count:', msg.pcd_count)
-        console.log('[Done Event] pcds:', msg.pcds)
-        if (msg.image_count > 0) {
-          resultDir.value = msg.output_dir
-          resultImages.value = msg.images || []
-          resultDirLabel.value = msg.output_dir.split('/').pop() || ''
-          resultPcdDir.value = msg.pcd_dir || (inputDir + '/pcd_7_205_432')
-          resultPcds.value = msg.pcds || []
-          console.log('[Done Event] resultPcdDir set to:', resultPcdDir.value)
-          console.log('[Done Event] resultPcds set to:', resultPcds.value)
-          offlineStatus.value = `✓ 完成 ${msg.image_count}/${pairs.value.length} (点云: ${msg.pcd_count})`
-          await nextTick()
-          if (resultPcdCanvasRef.value && !resultPcdCtx)
-            resultPcdCtx = initViewer(resultPcdCanvasRef.value)
-          // 自动选择最后一帧
-          if (pairs.value.length > 0) {
-            selectPair(pairs.value.length - 1)
-          }
-        } else {
-          offlineStatus.value = `完成 (无输出图片)`
-        }
-      } else if (msg.type === 'error') {
-        evtSrc.close()
-        offlineRunning.value = false
-        offlineStatus.value = `✗ ${msg.text}`; offlineError.value = true
-      }
-    }
-    evtSrc.onerror = () => { evtSrc.close(); offlineRunning.value = false }
+    startOfflineStatusPolling(runToken, inputDir)
+    connectOfflineEventStream(runToken, inputDir)
   } catch (e) {
     offlineStatus.value = `✗ 请求失败`; offlineError.value = true
     offlineRunning.value = false
+    closeOfflineEventStream()
+    clearOfflineReconnectTimer()
+    clearOfflineStatusPollTimer()
   }
 }
 
 async function loadResultPcd(i: number) {
   if (!resultPcdCtx || !resultImages.value[i]) return
   resultSelectedIdx.value = i
-  const imgStem = resultImages.value[i].replace(/\.[^.]+$/, '')
+  const imgStem = stemName(resultImages.value[i])
   const pcdPath = resultPcdDir.value + '/' + imgStem + '.pcd'
   resultPcdStatus.value = '加载中...'
   try {
@@ -656,30 +893,31 @@ async function selectPair(i: number) {
     resultPcdStatus.value = '加载中...'
     try {
       const pcdName = pairs.value[i].pcd
-      const stem = pcdName.replace(/\.[^.]+$/, '')
+      const stem = stemName(pcdName)
       console.log('[selectPair] Looking for PCD with stem:', stem)
-      // 尝试匹配结果点云后缀 (_dsg.pcd, _rgbl.pcd 或 .pcd)
-      const suffixes = ['_dsg.pcd', '_rgbl.pcd', '.pcd', '']
+      const matchedResultPcd = resultPcds.value.find((name) => {
+        const candidate = stemName(name).toLowerCase()
+        const target = stem.toLowerCase()
+        return candidate === target || candidate.startsWith(target + '_') || candidate.includes(target + '_')
+      })
+
+      const candidatePaths = matchedResultPcd
+        ? [resultPcdDir.value + '/' + matchedResultPcd]
+        : [
+            resultPcdDir.value + '/' + stem + '.pcd',
+            resultPcdDir.value + '/' + stem + '_dsg.pcd',
+            resultPcdDir.value + '/' + stem + '_rgbl.pcd',
+            resultPcdDir.value + '/' + pcdName,
+          ]
+
       let res: Response | null = null
       let pcdPath = ''
-
-      for (const suffix of suffixes) {
-        pcdPath = resultPcdDir.value + '/' + stem + suffix
+      for (const candidatePath of candidatePaths) {
+        pcdPath = candidatePath
         console.log('[selectPair] Trying path:', pcdPath)
         res = await fetch(`/offline/local_file?path=${encodeURIComponent(pcdPath)}`)
         console.log('[selectPair] Response status:', res.status)
-        if (res.ok) {
-          console.log('[selectPair] Successfully found PCD at:', pcdPath)
-          break
-        }
-      }
-
-      // 如果还是找不到，尝试原始文件名
-      if (!res || !res.ok) {
-        pcdPath = resultPcdDir.value + '/' + pcdName
-        console.log('[selectPair] Trying original name path:', pcdPath)
-        res = await fetch(`/offline/local_file?path=${encodeURIComponent(pcdPath)}`)
-        console.log('[selectPair] Original name response status:', res?.status)
+        if (res.ok) break
       }
 
       if (!res || !res.ok) {
@@ -711,6 +949,9 @@ function disposeCtx(ctx: PcdCtx) {
 }
 
 onBeforeUnmount(() => {
+  closeOfflineEventStream()
+  clearOfflineReconnectTimer()
+  clearOfflineStatusPollTimer()
   if (pcdCtx) { disposeCtx(pcdCtx); pcdCtx = null }
   if (resultPcdCtx) { disposeCtx(resultPcdCtx); resultPcdCtx = null }
 })

@@ -656,6 +656,14 @@ async function analyzeAvoiding() {
   analysisResult.value = null
   selectedImg.value = ''
   focusedCardKey.value = null
+  let resultData: any = {
+    categories: {
+      robot_decision: [],
+      nav: [],
+      stereo: [],
+    },
+    images: [],
+  }
 
   try {
     const res = await fetch('/offline/analyze_avoiding', {
@@ -679,14 +687,6 @@ async function analyzeAvoiding() {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let resultData: any = {
-      categories: {
-        robot_decision: [],
-        nav: [],
-        stereo: [],
-      },
-      images: [],
-    }
 
     const handleAnalyzePayloads = (payloadText: string) => {
       const parsed = consumeSseJsonChunk(buffer, payloadText)
@@ -749,7 +749,10 @@ async function analyzeAvoiding() {
 
     handleAnalyzePayloads(`${decoder.decode()}\n\n`)
   } catch (e: any) {
-    const message = e?.message || 'network error'
+    const rawMessage = e?.message || 'network error'
+    const message = /failed to fetch|networkerror|network error/i.test(rawMessage)
+      ? 'network error，请检查 /offline 服务和代理连接'
+      : rawMessage
     if (hasRecoverableAnalysisResult(resultData)) {
       const normalized = applyAnalysisResult(resultData, cacheKey)
       analyzeError.value = false
@@ -950,8 +953,9 @@ async function analyzeAvoiding() {
   gap: 6px;
   margin-bottom: 6px;
   align-items: stretch;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 33vh;
+  min-height: min(33vh, 240px);
+  max-height: min(33vh, 240px);
 }
 .lf-log-card {
   background: linear-gradient(180deg, rgba(14, 19, 31, 0.96), rgba(8, 12, 21, 0.98));
@@ -961,7 +965,8 @@ async function analyzeAvoiding() {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  height: min(33vh, 240px);
+  max-height: min(33vh, 240px);
   box-shadow: 0 8px 18px rgba(3, 6, 16, 0.2);
 }
 .lf-log-card.tone-decision {
@@ -1029,6 +1034,8 @@ async function analyzeAvoiding() {
 .lf-log-terminal {
   flex: 1;
   min-height: 0;
+  height: calc(min(33vh, 240px) - 48px);
+  max-height: calc(min(33vh, 240px) - 48px);
   overflow-y: auto;
   font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 10px;
@@ -1069,6 +1076,7 @@ async function analyzeAvoiding() {
 .lf-log-empty-state {
   flex: 1;
   min-height: 0;
+  max-height: calc(min(33vh, 240px) - 48px);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1093,6 +1101,8 @@ async function analyzeAvoiding() {
 .lf-timeline-terminal {
   flex: 1;
   min-height: 0;
+  height: min(33vh, 240px);
+  max-height: min(33vh, 240px);
 }
 .lf-timeline-row {
   display: grid;
@@ -1146,8 +1156,8 @@ async function analyzeAvoiding() {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 6px;
-  min-height: 280px;
-  max-height: 320px;
+  flex: 1;
+  min-height: 0;
 }
 .lf-media-card,
 .lf-conclusion {
@@ -1159,6 +1169,7 @@ async function analyzeAvoiding() {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 .lf-thumb-strip {
@@ -1303,9 +1314,13 @@ async function analyzeAvoiding() {
 @media (max-width: 1260px) {
   .lf-analysis-grid {
     grid-template-columns: 1fr;
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: none;
   }
   .lf-log-card {
     min-height: 320px;
+    max-height: none;
   }
   .lf-log-terminal,
   .lf-log-empty-state {

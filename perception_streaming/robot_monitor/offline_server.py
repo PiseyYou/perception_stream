@@ -38,7 +38,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Use relative paths from project root, convert to absolute paths
 OFFLINE_EXE = os.path.abspath(os.path.join(PROJECT_ROOT, "bin/offline_perception_debug_432"))
-NIGHT_EXE = os.path.abspath(os.path.join(PROJECT_ROOT, "night_offline_debug/build/run_cdt_dsg_fusion_dir"))
+NIGHT_EXE = os.path.abspath(os.path.join(PROJECT_ROOT, "stereo_perception_multi2_offline_test/build/offline_test_main"))
 OFFLINE_LIB = os.path.abspath(os.path.join(PROJECT_ROOT, "lib/dnn_x86"))
 MONO_EXE = os.path.abspath(os.path.join(PROJECT_ROOT, "bin/dsg_mono_perception"))
 MONO_MODEL = os.path.abspath(os.path.join(PROJECT_ROOT, "models/dsg_multi_20260407_640x384.bin"))
@@ -74,6 +74,15 @@ _current_proc: subprocess.Popen | None = None
 _sse_clients: list = []
 _last_result: dict = {}
 _running = False
+_progress_state: dict = {
+    "current": 0,
+    "total": 0,
+    "status": "",
+    "last_log": "",
+    "input_dir": "",
+    "infer_mode": None,
+    "updated_at": 0.0,
+}
 _docker_sessions: dict = {}  # holds current docker PTY session
 
 _ANSI_RE = re.compile(r'\x1b(?:\[[\d;]*[a-zA-Z]|\][^\x07]*\x07|[()][AB012]|[=>])')
@@ -99,6 +108,114 @@ def broadcast(msg: dict):
             _sse_clients.remove(d)
 
 
+def _count_input_images(folder: str) -> int:
+    img_exts = ('.jpg', '.jpeg', '.png', '.bmp')
+    if not folder or not os.path.isdir(folder):
+        return 0
+
+    images_dir = os.path.join(folder, "images")
+    target_dir = images_dir if os.path.isdir(images_dir) else folder
+    try:
+        return sum(
+            1 for name in os.listdir(target_dir)
+            if os.path.isfile(os.path.join(target_dir, name)) and name.lower().endswith(img_exts)
+        )
+    except OSError:
+        return 0
+
+
+def _reset_progress_state(input_dir: str = "", infer_mode: int | None = None, total: int = 0):
+    global _progress_state
+    _progress_state = {
+        "current": 0,
+        "total": total,
+        "status": "启动中...",
+        "last_log": "",
+        "input_dir": input_dir,
+        "infer_mode": infer_mode,
+        "updated_at": time.time(),
+    }
+
+
+def _set_progress_status(status: str, current: int | None = None, total: int | None = None):
+    global _progress_state
+    if current is not None:
+        _progress_state["current"] = current
+    if total is not None and total > 0:
+        _progress_state["total"] = total
+    _progress_state["status"] = status
+    _progress_state["updated_at"] = time.time()
+
+
+def _update_progress_from_log(text: str):
+    global _progress_state
+    clean = _strip_ansi(text)
+    if not clean:
+        return
+
+    _progress_state["last_log"] = clean
+    _progress_state["updated_at"] = time.time()
+
+    match_found = re.search(r'Found\s+(\d+)\s+image file', clean)
+    match_progress = re.search(r'\((\d+)\/(\d+)\)', clean)
+    match_bracket_progress = re.search(r'\[(\d+)\/(\d+)\]', clean)
+    match_seq = re.search(r'sequence_num:\s*(\d+)', clean)
+    match_skip = re.search(r'Skip existing file:\s*(.+)', clean)
+    match_skip_night = re.search(r'Skip\s+(.+)\s+as it already exists', clean)
+    match_processing = re.search(r'Processing\s+(\d+)\/(\d+):\s+(.+)', clean)
+    match_summary_total = re.search(r'Total images:\s*(\d+)', clean)
+    match_summary_success = re.search(r'Success:\s*(\d+)', clean)
+
+    if match_found:
+        total = int(match_found.group(1))
+        _set_progress_status(f"共 {total} 张", total=total)
+        return
+    if match_progress:
+        current = int(match_progress.group(1))
+        total = int(match_progress.group(2))
+        _set_progress_status(f"正在运行第 {current}/{total} 张", current=current, total=total)
+        return
+    if match_bracket_progress:
+        current = int(match_bracket_progress.group(1))
+        total = int(match_bracket_progress.group(2))
+        _set_progress_status(f"正在运行第 {current}/{total} 张", current=current, total=total)
+        return
+    if match_seq:
+        current = int(match_seq.group(1)) + 1
+        total = _progress_state.get("total") or 0
+        _set_progress_status(
+            f"正在运行第 {current}/{total or '?'} 张",
+            current=current,
+            total=total if total else None,
+        )
+        return
+    if match_skip or match_skip_night:
+        current = min((_progress_state.get("current") or 0) + 1, _progress_state.get("total") or 10**9)
+        skipped = match_skip.group(1) if match_skip else match_skip_night.group(1)
+        _set_progress_status(f"跳过已存在: {os.path.basename(skipped)}", current=current)
+        return
+    if match_processing:
+        current = int(match_processing.group(1))
+        total = int(match_processing.group(2))
+        _set_progress_status(
+            f"正在处理: {os.path.basename(match_processing.group(3))}",
+            current=current,
+            total=total,
+        )
+        return
+    if match_summary_total:
+        total = int(match_summary_total.group(1))
+        _set_progress_status(f"总数 {total}", total=total)
+        return
+    if match_summary_success:
+        current = int(match_summary_success.group(1))
+        total = _progress_state.get("total") or current
+        _set_progress_status(f"已完成 {current}/{total}", current=current, total=total)
+        return
+
+    _set_progress_status(clean)
+
+
 def scan_input_dirs(base: str) -> list:
     results = []
     if not os.path.isdir(base):
@@ -113,16 +230,91 @@ def scan_input_dirs(base: str) -> list:
 
 def build_output_dir(input_dir: str, infer_mode: int, erode_pixel: int = 205) -> str:
     mode_suffix = f"{infer_mode}_{erode_pixel}"
-    if infer_mode == 99: # Special mode for Night Offline Debug
-        return os.path.join(input_dir, "dsg_multi_debug")
+    if infer_mode == 99: # Special mode for Night Offline Debug (使用 stereo_perception_multi2_offline_test)
+        # 输出到与右侧预览窗口相同的路径结构
+        # 例如: data/stereo_debug/0115/20260421 -> data/stereo_debug/0115/20260421_output_k100_dsg
+        return os.path.join(input_dir, "output_k100_dsg")
+    if infer_mode == 6: # Day mode using stereo_perception_multi2_offline_test with Model 6
+        return os.path.join(input_dir, "output_k100_day")
     if infer_mode == 5:
         return os.path.join(input_dir, f"cdt_mul_{mode_suffix}_0303_update_432")
-    elif infer_mode == 6:
-        return os.path.join(input_dir, f"cdt_sub_{mode_suffix}_0319_det_0.2_pc_432")
     elif infer_mode == 7:
         return os.path.join(input_dir, f"dsg_7_205_432")
     else:
         return os.path.join(input_dir, f"output_{mode_suffix}")
+
+
+def _result_mode_candidates(prefer_mode: int | None = None) -> list[int]:
+    order: list[int] = []
+    if prefer_mode in (99, 7, 6, 5):
+        order.append(prefer_mode)
+    for mode in (99, 7, 6, 5):
+        if mode not in order:
+            order.append(mode)
+    return order
+
+
+def _collect_result_images(output_dir: str) -> list[str]:
+    if not output_dir or not os.path.isdir(output_dir):
+        return []
+
+    for rel_dir in ("combined", "detection", "segmentation", ""):
+        target_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
+        if not os.path.isdir(target_dir):
+            continue
+        files = sorted(
+            glob.glob(os.path.join(target_dir, "*.jpg")) +
+            glob.glob(os.path.join(target_dir, "*.png"))
+        )
+        if files:
+            return [os.path.relpath(path, output_dir) for path in files]
+    return []
+
+
+def _find_result_pcd_dir(folder: str, output_dir: str, infer_mode: int, erode_pixel: int = 205) -> tuple[str, list[str]]:
+    candidates = []
+
+    if output_dir:
+        candidates.append(os.path.join(output_dir, "pointcloud"))
+
+    candidates.extend([
+        os.path.join(folder, "dsg_pcd_debug"),
+        os.path.join(folder, "dsg_multi_pcd"),
+        os.path.join(folder, f"pcd_{infer_mode}_{erode_pixel}_432"),
+        os.path.join(folder, "pcd_7_205_432"),
+        os.path.join(folder, "pcd_99_205_432"),
+        os.path.join(folder, "images", "pcd_7_205_0304_432"),
+    ])
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen or not os.path.isdir(candidate):
+            continue
+        seen.add(candidate)
+        pcds = sorted(os.path.basename(path) for path in glob.glob(os.path.join(candidate, "*.pcd")))
+        if pcds or candidate.endswith("/pointcloud"):
+            return candidate, pcds
+    return "", []
+
+
+def _find_existing_result(folder: str, prefer_mode: int | None = None, erode_pixel: int = 205) -> dict:
+    for mode in _result_mode_candidates(prefer_mode):
+        output_dir = build_output_dir(folder, mode, erode_pixel)
+        images = _collect_result_images(output_dir)
+        if not images:
+            continue
+
+        pcd_dir, pcds = _find_result_pcd_dir(folder, output_dir, mode, erode_pixel)
+        return {
+            "ok": True,
+            "infer_mode": mode,
+            "output_dir": output_dir,
+            "images": images,
+            "pcd_dir": pcd_dir,
+            "pcds": pcds,
+        }
+
+    return {"ok": False, "error": "No existing results found"}
 
 
 def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_export_run: bool = False, resume: bool = False):
@@ -132,6 +324,8 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
     global _last_result, _running
     _running = True
     final_pic_dir = build_output_dir(input_dir, infer_mode, erode_pixel)
+    _last_result = {}
+    _reset_progress_state(input_dir=input_dir, infer_mode=infer_mode, total=_count_input_images(input_dir))
 
     broadcast({"type": "start", "input_dir": input_dir, "infer_mode": infer_mode,
                "output_dir": final_pic_dir, "resume": resume})
@@ -146,6 +340,7 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
 
     try:
         broadcast({"type": "log", "text": f"[Docker] 检查镜像 {DOCKER_IMAGE}..."})
+        _set_progress_status("[Docker] 检查镜像...")
 
         # 检查 Docker 镜像是否存在
         check_img = subprocess.run(
@@ -154,20 +349,36 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         )
         if not check_img.stdout.strip():
             broadcast({"type": "error", "text": f"Docker 镜像 {DOCKER_IMAGE} 不存在，请先构建镜像"})
+            _set_progress_status("Docker 镜像不存在")
             _running = False
             return
 
         broadcast({"type": "log", "text": "[Docker] 准备数据目录..."})
+        _set_progress_status("[Docker] 准备数据目录...")
 
         # 创建临时容器并复制数据进去
         broadcast({"type": "log", "text": f"[Docker] 运行程序: mode={infer_mode}, erode={erode_pixel}"})
 
         # 构建 Docker 命令
         if infer_mode == 99:
-            exe_cmd = f"/app/bin/run_cdt_dsg_fusion_dir"
+            # 夜间模式：使用 stereo_perception_multi2_offline_test with Model 7 (DSG)
+            exe_cmd = f"/app/bin/offline_test_main"
             env_vars = [
-                f"NIGHT_INPUT_DIR=/app/input",
-                f"DSG_MODEL_PATH=/app/model/dsg_multi_20260407_640x384.bin",
+                f"OFFLINE_INPUT_DIR=/app/input",
+                f"OFFLINE_OUTPUT_DIR=/app/output",
+                f"OFFLINE_INFER_MODE=7",
+                f"HARDWARE_MODE=K100",
+                f"DSG_MODEL_PATH=/app/models/dsg_multi_20260407_640x384.bin",
+            ]
+        elif infer_mode == 6:
+            # 白天模式：使用 stereo_perception_multi2_offline_test with Model 6
+            exe_cmd = f"/app/bin/offline_test_main"
+            env_vars = [
+                f"OFFLINE_INPUT_DIR=/app/input",
+                f"OFFLINE_OUTPUT_DIR=/app/output",
+                f"OFFLINE_INFER_MODE=6",
+                f"HARDWARE_MODE=K100",
+                f"DSG_MODEL_PATH=/app/models/dsg_multi_20260407_640x384.bin",
                 f"CDT_MODEL_PATH=/app/models/cdt_20251125_640x384.bin",
             ]
         else:
@@ -183,15 +394,25 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
             env_vars.append("RESUME_OFFLINE=1")
 
         # 构建 docker run 命令
+        # 对于 mode=99 和 mode=6，输出目录应该是 final_pic_dir
+        if infer_mode == 99 or infer_mode == 6:
+            output_mount_path = os.path.abspath(final_pic_dir)
+            # 确保输出目录存在
+            os.makedirs(output_mount_path, exist_ok=True)
+            broadcast({"type": "log", "text": f"[Docker] 创建输出目录: {output_mount_path}"})
+            _set_progress_status(f"创建输出目录: {os.path.basename(output_mount_path)}")
+        else:
+            output_mount_path = os.path.join(LOCAL_PROJECT_DIR, 'data', 'stereo_debug')
+
         docker_cmd = [
             "docker", "run", "--rm",
             "--name", CONTAINER_NAME,
             "-v", f"{local_data_abs}:/app/input",
-            "-v", f"{os.path.join(LOCAL_PROJECT_DIR, 'data', 'stereo_debug')}:/app/output",
+            "-v", f"{output_mount_path}:/app/output",
             "-w", "/app",
             DOCKER_IMAGE,
             "bash", "-c",
-            f"mkdir -p /app/input && ln -sf /app/models /models && " + " && ".join(env_vars) + f" {exe_cmd}"
+            f"mkdir -p /app/input /app/output && ln -sf /app/models /models && " + " && ".join([f"export {var}" for var in env_vars]) + f" && {exe_cmd}"
         ]
 
         broadcast({"type": "log", "text": f"[Docker] 启动命令: {' '.join(docker_cmd[:10])}..."})
@@ -201,29 +422,37 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
 
         # 实时获取输出
         for line in proc.stdout:
+            _update_progress_from_log(line.rstrip())
             broadcast({"type": "log", "text": line.rstrip()})
 
         proc.wait()
         exit_status = proc.returncode
 
         broadcast({"type": "log", "text": f"[Docker] 程序结束，退出码: {exit_status}"})
+        _set_progress_status(f"程序结束，退出码: {exit_status}")
 
         # 获取输出文件列表
-        # 图片输出到 dsg_* 目录，点云输出到 pcd_* 目录
-        dsg_dir = os.path.join(os.path.dirname(local_data_abs), f"dsg_{infer_mode}_{erode_pixel}_432")
-        pcd_dir = os.path.join(os.path.dirname(local_data_abs), f"pcd_{infer_mode}_{erode_pixel}_432")
+        if infer_mode == 99 or infer_mode == 6:
+            # mode=99 和 mode=6 使用 stereo_perception_multi2_offline_test，输出在 final_pic_dir
+            dsg_dir = final_pic_dir
+            pcd_dir = os.path.join(final_pic_dir, "pointcloud")
+        else:
+            # 其他模式：图片输出到 dsg_* 目录，点云输出到 pcd_* 目录
+            dsg_dir = os.path.join(os.path.dirname(local_data_abs), f"dsg_{infer_mode}_{erode_pixel}_432")
+            pcd_dir = os.path.join(os.path.dirname(local_data_abs), f"pcd_{infer_mode}_{erode_pixel}_432")
         output_images = []
         output_pcds = []
-        if os.path.isdir(dsg_dir):
-            output_images = sorted(
-                glob.glob(os.path.join(dsg_dir, "*.jpg")) +
-                glob.glob(os.path.join(dsg_dir, "*.png"))
-            )
-        if os.path.isdir(pcd_dir):
-            output_pcds = sorted(glob.glob(os.path.join(pcd_dir, "*.pcd")))
+        rel_images = _collect_result_images(dsg_dir)
+        if rel_images:
+            output_images = [os.path.join(dsg_dir, rel_path) for rel_path in rel_images]
+
+        pcd_dir, rel_pcds = _find_result_pcd_dir(input_dir, dsg_dir, infer_mode, erode_pixel)
+        if rel_pcds:
+            output_pcds = [os.path.join(pcd_dir, fname) for fname in rel_pcds]
 
         _last_result = {
             "output_dir": dsg_dir,
+            "pcd_dir": pcd_dir,
             "images": output_images,
             "pcds": output_pcds,
         }
@@ -235,17 +464,24 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
             "pcd_dir": pcd_dir,
             "image_count": len(output_images),
             "pcd_count": len(output_pcds),
-            "images": [os.path.basename(p) for p in output_images],
-            "pcds": [os.path.basename(p) for p in output_pcds],
+            "images": rel_images,
+            "pcds": rel_pcds,
             "is_export_run": is_export_run,
         })
+        _set_progress_status(
+            f"完成 {len(output_images)}/{_progress_state.get('total') or len(output_images)}",
+            current=len(output_images),
+            total=_progress_state.get("total") or len(output_images),
+        )
 
     except FileNotFoundError:
         broadcast({"type": "error", "text": "Docker 未安装或不可用"})
+        _set_progress_status("Docker 未安装或不可用")
         _running = False
         return
     except Exception as e:
         broadcast({"type": "error", "text": f"执行失败: {str(e)}"})
+        _set_progress_status(f"执行失败: {str(e)}")
         _running = False
         return
 
@@ -2064,12 +2300,22 @@ class OfflineHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
             self.send_cors()
             self.end_headers()
             _sse_clients.append(self.wfile)
             try:
+                hello = {
+                    "type": "hello",
+                    "running": _running,
+                    "progress": _progress_state,
+                    "result": _last_result,
+                }
+                self.wfile.write(("data: " + json.dumps(hello, ensure_ascii=False) + "\n\n").encode())
+                self.wfile.flush()
                 while True:
-                    time.sleep(15)
+                    time.sleep(5)
                     self.wfile.write(b": ping\n\n")
                     self.wfile.flush()
             except Exception:
@@ -2081,54 +2327,13 @@ class OfflineHandler(BaseHTTPRequestHandler):
 
         if path == "/offline/check_existing_result":
             folder = qs.get("folder", [""])[0]
+            prefer_mode_raw = qs.get("prefer_mode", [""])[0]
+            prefer_mode = int(prefer_mode_raw) if prefer_mode_raw else None
             if not folder or not os.path.isdir(folder):
                 self._json({"ok": False, "error": "Folder not found"})
                 return
 
-            # Check for existing results (matching build_output_dir logic)
-            # Priority: Mode 7 (Night/DSG) which is commonly used in StereoAnalysis2
-            candidates = [
-                (7, 205), (99, 205), (6, 205), (5, 205)
-            ]
-
-            found_dir = ""
-            for mode, erode in candidates:
-                out_dir = build_output_dir(folder, mode, erode)
-                if os.path.isdir(out_dir):
-                    found_dir = out_dir
-                    break
-
-            if found_dir:
-                images = sorted([
-                    os.path.basename(f) for f in
-                    glob.glob(os.path.join(found_dir, "*.jpg")) +
-                    glob.glob(os.path.join(found_dir, "*.png"))
-                ])
-                # Try to find PCD dir
-                pcd_dir = ""
-                pcd_candidates = [
-                    os.path.join(folder, "dsg_pcd_debug"),
-                    os.path.join(folder, "dsg_multi_pcd"),
-                    os.path.join(folder, "pcd_7_205_432"),
-                    os.path.join(folder, "pcd_99_205_432"),
-                    os.path.join(folder, "images", "pcd_7_205_0304_432")
-                ]
-                for d in pcd_candidates:
-                    if os.path.isdir(d):
-                        pcd_dir = d
-                        break
-
-                pcds = sorted([os.path.basename(f) for f in glob.glob(os.path.join(pcd_dir, "*.pcd"))]) if pcd_dir else []
-
-                self._json({
-                    "ok": True,
-                    "output_dir": found_dir,
-                    "images": images,
-                    "pcd_dir": pcd_dir,
-                    "pcds": pcds
-                })
-            else:
-                self._json({"ok": False, "error": "No existing results found"})
+            self._json(_find_existing_result(folder, prefer_mode=prefer_mode))
             return
 
         if path == "/offline/bag_timerange":
@@ -2149,48 +2354,13 @@ class OfflineHandler(BaseHTTPRequestHandler):
         if path == "/offline/check_existing_result":
             try:
                 folder = qs.get("folder", [""])[0]
+                prefer_mode_raw = qs.get("prefer_mode", [""])[0]
+                prefer_mode = int(prefer_mode_raw) if prefer_mode_raw else None
                 if not folder or not os.path.isdir(folder):
                     self._json({"ok": False, "error": "Folder not found"})
                     return
 
-                # Check common output directory candidates
-                candidates = [99, 7, 6, 5]
-                found_dir = None
-                for mode in candidates:
-                    d = build_output_dir(folder, mode)
-                    if os.path.isdir(d) and any(f.lower().endswith(('.jpg', '.png')) for f in os.listdir(d)):
-                        found_dir = d
-                        break
-
-                if not found_dir:
-                    self._json({"ok": False, "error": "No existing result found"})
-                    return
-
-                images = sorted([f for f in os.listdir(found_dir) if f.lower().endswith(('.jpg', '.png'))])
-
-                # Try to find PCD directory
-                pcd_dir = ""
-                pcds = []
-                pcd_candidates = [
-                    os.path.join(folder, "dsg_pcd_debug"),
-                    os.path.join(folder, "dsg_multi_pcd"),
-                    os.path.join(folder, "pcd_7_205_432"),
-                    os.path.join(folder, "pcd_99_205_432"),
-                    os.path.join(folder, "images", "pcd_7_205_0304_432"),
-                ]
-                for d in pcd_candidates:
-                    if os.path.isdir(d):
-                        pcd_dir = d
-                        pcds = sorted([f for f in os.listdir(d) if f.lower().endswith('.pcd')])
-                        break
-
-                self._json({
-                    "ok": True,
-                    "output_dir": found_dir,
-                    "images": images,
-                    "pcd_dir": pcd_dir,
-                    "pcds": pcds
-                })
+                self._json(_find_existing_result(folder, prefer_mode=prefer_mode))
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
             return
@@ -2368,7 +2538,21 @@ class OfflineHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/offline/status":
-            self._json({"running": _running, "result": _last_result})
+            result = dict(_last_result)
+            output_dir = result.get("output_dir", "")
+            result["images"] = [
+                os.path.relpath(path, output_dir)
+                if output_dir and isinstance(path, str) and os.path.isabs(path) and path.startswith(output_dir)
+                else path
+                for path in result.get("images", [])
+            ]
+            result["pcds"] = [
+                os.path.basename(path)
+                if isinstance(path, str) and os.path.isabs(path)
+                else path
+                for path in result.get("pcds", [])
+            ]
+            self._json({"running": _running, "result": result, "progress": _progress_state})
             return
 
         # Serve output image by filename
@@ -2681,10 +2865,8 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 return
 
             # Scan for result images
-            output_images = sorted(
-                glob.glob(os.path.join(output_dir, "*.jpg")) +
-                glob.glob(os.path.join(output_dir, "*.png"))
-            )
+            rel_images = _collect_result_images(output_dir)
+            output_images = [os.path.join(output_dir, rel_path) for rel_path in rel_images]
 
             if not output_images:
                 self._json({"ok": True, "exists": False})
@@ -2704,7 +2886,7 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 "exists": True,
                 "output_dir": output_dir,
                 "image_count": len(output_images),
-                "images": [os.path.basename(p) for p in output_images],
+                "images": rel_images,
             })
             return
 

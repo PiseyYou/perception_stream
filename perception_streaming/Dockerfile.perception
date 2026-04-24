@@ -29,6 +29,7 @@ WORKDIR /app
 COPY lib/dnn_x86 /app/lib/dnn_x86
 COPY bin/offline_perception_debug_432 /app/bin/
 COPY night_offline_debug/build/run_cdt_dsg_fusion_dir /app/bin/
+COPY stereo_perception_multi2_offline_test/build/offline_test_main /app/bin/
 COPY night_offline_debug/model /app/model/
 COPY models /app/models/
 

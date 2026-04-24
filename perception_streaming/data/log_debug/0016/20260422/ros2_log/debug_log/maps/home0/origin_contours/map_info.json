@@ -1,0 +1,36 @@
+{
+    "all_map_area": 17.616,
+    "charging_pose": {
+        "latitude": "23.25805863",
+        "longitude": "114.12766523",
+        "theta": -0.8,
+        "x": 0.14,
+        "y": 0.01
+    },
+    "machine_ratio": 1.0,
+    "map_element": [
+        {
+            "cached_learning_obstacles": [],
+            "dangerous_area": [],
+            "direction": 2.991,
+            "edge_reliable_ratio": 1.0,
+            "has_narrow_passage": false,
+            "is_cached_learning": false,
+            "learning_obstacle": false,
+            "map_area": 17.62,
+            "map_reliable_ratio": 1.0,
+            "map_type": "manual",
+            "max_slope": 0.0,
+            "name": "map1",
+            "obstacles": [],
+            "slope_statistics": {
+                "0_12_ratio": 1.0,
+                "12_24_ratio": 0.0,
+                "ge_24_ratio": 0.0,
+                "map_inside_average_slope": 3.5585
+            }
+        }
+    ],
+    "map_num": 1,
+    "no_passage": []
+}

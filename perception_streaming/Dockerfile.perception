@@ -1,0 +1,41 @@
+# Perception Runtime Docker Image
+# 完整的运行环境，包含所有必要的系统库
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
+# 复制完整的系统库
+COPY lib_from_remote_full/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
+COPY lib_from_remote_full/usr/lib /usr/lib
+
+# 安装基础依赖
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 OpenCV
+RUN pip3 install opencv-python-headless==4.5.5.64 opencv-contrib-python==4.5.5.64 || true
+
+# 复制程序和模型
+WORKDIR /app
+COPY lib/dnn_x86 /app/lib/dnn_x86
+COPY bin/offline_perception_debug_432 /app/bin/
+COPY night_offline_debug/build/run_cdt_dsg_fusion_dir /app/bin/
+COPY night_offline_debug/model /app/model/
+COPY models /app/models/
+
+# 设置库路径
+ENV LD_LIBRARY_PATH=/app/lib/dnn_x86:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib:$LD_LIBRARY_PATH
+ENV OFFLINE_INPUT_DIR=/app/input
+ENV OFFLINE_OUTPUT_DIR=/app/output
+
+# 运行命令（可被覆盖）
+CMD ["python3", "-c", "import subprocess; print(subprocess.run(['ldd', '/app/bin/offline_perception_debug_432'], capture_output=True, text=True).stdout.decode())"]

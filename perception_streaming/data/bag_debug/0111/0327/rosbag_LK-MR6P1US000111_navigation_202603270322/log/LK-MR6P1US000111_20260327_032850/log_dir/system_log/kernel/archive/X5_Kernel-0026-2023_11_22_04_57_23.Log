@@ -1,0 +1,886 @@
+
+Jan 15 17:23:27 localhost kernel: [   21.069172] dw-apb-uart 340a0000.serial: failed to request DMA
+Jan 15 17:24:15 localhost kernel: [   23.046732] dw-apb-uart 34080000.serial: failed to request DMA
+Jan 15 17:24:15 localhost kernel: [   23.071241] dw-apb-uart 34090000.serial: failed to request DMA
+Jan 15 17:24:26 localhost kernel: [   33.775528] bestmow_monitor (1297): drop_caches: 1
+Jan 15 17:24:26 localhost kernel: [   33.904690] bestmow_monitor (1297): drop_caches: 2
+Jan 15 17:24:26 localhost kernel: [   33.973334] bestmow_monitor (1297): drop_caches: 3
+Jan 15 17:25:00 localhost kernel: [   67.897285] 
+Jan 15 17:25:00 localhost kernel: [   67.897285] -------------------
+Jan 15 17:25:00 localhost kernel: [   67.897370] [60551]LMAC STATUS:
+Jan 15 17:25:00 localhost kernel: [   67.897565] 
+Jan 15 17:25:00 localhost kernel: [   67.897565] local: 1e:9e:14:96:a8:20 AID= 3
+Jan 15 17:25:00 localhost kernel: [   67.897678] freq= 918.0 bw=4 bgr=-99 
+Jan 15 17:25:00 localhost kernel: [   67.897775] chn: 
+Jan 15 17:25:00 localhost kernel: [   67.897878]  906.0 
+Jan 15 17:25:00 localhost kernel: [   67.898015]  910.0 
+Jan 15 17:25:00 localhost kernel: [   67.898121]  914.0 
+Jan 15 17:25:00 localhost kernel: [   67.898228]  918.0 
+Jan 15 17:25:00 localhost kernel: [   67.898331]  922.0 
+Jan 15 17:25:00 localhost kernel: [   67.898454] 
+Jan 15 17:25:00 localhost kernel: [   67.898597] bgr: 
+Jan 15 17:25:00 localhost kernel: [   67.898713]    -90 
+Jan 15 17:25:00 localhost kernel: [   67.898817]    -95 
+Jan 15 17:25:00 localhost kernel: [   67.898923]   -101 
+Jan 15 17:25:00 localhost kernel: [   67.899028]   -103 
+Jan 15 17:25:00 localhost kernel: [   67.899130]   -102 
+Jan 15 17:25:00 localhost kernel: [   67.899234] 
+Jan 15 17:25:00 localhost kernel: [   67.899341] buf: free=71 tq=0 sq=0 
+Jan 15 17:25:00 localhost kernel: [   67.899453] irq: ac=57 bkn=0 bo(rts:frm)=0:24:0:0:19 to(rts:frm)=0:1 rx=300
+Jan 15 17:25:00 localhost kernel: [   67.899603] tx : cnt=44 dly=4:85ms est_rate=6037kbps txp=5 fail=1 drop=0 
+Jan 15 17:25:00 localhost kernel: [   67.899713] rx : cnt=399 bus=1ms
+Jan 15 17:25:00 localhost kernel: [   67.899820] cca: mid1224= 8:8:0:4
+Jan 15 17:25:00 localhost kernel: [   67.899933] chip-temperature:45, vcc:3.26, vdd13b:1.31, vdd13c:1.32
+Jan 15 17:25:00 localhost kernel: [   67.900042] 
+Jan 15 17:25:00 localhost kernel: [   67.900042] STA0: 1e:9e:14:91:75:28
+Jan 15 17:25:00 localhost kernel: [   67.900353] tx0: mcs=*5 snr=40 data=11KB(15kbps) per= 2%
+Jan 15 17:25:00 localhost kernel: [   67.900550] rx0: mcs=5 evm(avg:std)=-30:1 rssi=-50 data=5KB(6kbps) adv_bw=0:0:100:0
+Jan 15 17:25:00 localhost kernel: [   67.900653] 
+Jan 15 17:25:01 localhost kernel: [   68.675158] [61331]rx host cmd:83
+Nov 22 04:57:22 localhost kernel: [    0.000000] Booting Linux on physical CPU 0x0000000000 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.000000] Linux version 6.1.83-DR-PL5.2_V1.1.1 (root@hfz-ubuntu) (aarch64-none-linux-gnu-gcc (Arm GNU Toolchain 11.3.Rel1) 11.3.1 20220712, GNU ld (Arm GNU Toolchain 11.3.Rel1) 2.38.20220708) #11 SMP PREEMPT Wed Dec 17 17:00:02 CST 2025
+Nov 22 04:57:22 localhost kernel: [    0.000000] Machine model: D-Robotics X5 EVB LP4 1_B board
+Nov 22 04:57:22 localhost kernel: [    0.000000] efi: UEFI not found.
+Nov 22 04:57:22 localhost kernel: [    0.000000] Reserved memory: created CMA memory pool at 0x0000000088000000, size 382 MiB
+Nov 22 04:57:22 localhost kernel: [    0.000000] OF: reserved mem: initialized node linux,cma@88000000, compatible id shared-dma-pool
+Nov 22 04:57:22 localhost kernel: [    0.000000] Zone ranges:
+Nov 22 04:57:22 localhost kernel: [    0.000000]   DMA      [mem 0x0000000084000000-0x00000000ffffffff]
+Nov 22 04:57:22 localhost kernel: [    0.000000]   DMA32    empty
+Nov 22 04:57:22 localhost kernel: [    0.000000]   Normal   [mem 0x0000000100000000-0x000000017fffffff]
+Nov 22 04:57:22 localhost kernel: [    0.000000] Movable zone start for each node
+Nov 22 04:57:22 localhost kernel: [    0.000000] Early memory node ranges
+Nov 22 04:57:22 localhost kernel: [    0.000000]   node   0: [mem 0x0000000084000000-0x000000009fe7efff]
+Nov 22 04:57:22 localhost kernel: [    0.000000]   node   0: [mem 0x000000009fe7f000-0x00000000a207ffff]
+Nov 22 04:57:22 localhost kernel: [    0.000000]   node   0: [mem 0x00000000a2080000-0x000000017fffffff]
+Nov 22 04:57:22 localhost kernel: [    0.000000] Initmem setup node 0 [mem 0x0000000084000000-0x000000017fffffff]
+Nov 22 04:57:22 localhost kernel: [    0.000000] On node 0, zone DMA: 16384 pages in unavailable ranges
+Nov 22 04:57:22 localhost kernel: [    0.000000] psci: probing for conduit method from DT.
+Nov 22 04:57:22 localhost kernel: [    0.000000] psci: PSCIv1.1 detected in firmware.
+Nov 22 04:57:22 localhost kernel: [    0.000000] psci: Using standard PSCI v0.2 function IDs
+Nov 22 04:57:22 localhost kernel: [    0.000000] psci: Trusted OS migration not required
+Nov 22 04:57:22 localhost kernel: [    0.000000] psci: SMC Calling Convention v1.2
+Nov 22 04:57:22 localhost kernel: [    0.000000] percpu: Embedded 18 pages/cpu s34280 r8192 d31256 u73728
+Nov 22 04:57:22 localhost kernel: [    0.000000] pcpu-alloc: s34280 r8192 d31256 u73728 alloc=18*4096
+Nov 22 04:57:22 localhost kernel: [    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 [0] 4 [0] 5 [0] 6 [0] 7 
+Nov 22 04:57:22 localhost kernel: [    0.000000] Detected VIPT I-cache on CPU0
+Nov 22 04:57:22 localhost kernel: [    0.000000] CPU features: detected: GIC system register CPU interface
+Nov 22 04:57:22 localhost kernel: [    0.000000] CPU features: detected: Virtualization Host Extensions
+Nov 22 04:57:22 localhost kernel: [    0.000000] CPU features: detected: Qualcomm erratum 1009, or ARM erratum 1286807, 2441009
+Nov 22 04:57:22 localhost kernel: [    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+Nov 22 04:57:22 localhost kernel: [    0.000000] alternatives: applying boot alternatives
+Nov 22 04:57:22 localhost kernel: [    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1016064
+Nov 22 04:57:22 localhost kernel: [    0.000000] Kernel command line: console=ttyS0,921600n8 root=/dev/mmcblk0p9 ro rootwait hobotboot.slot_suffix=_a hobotboot.reason=COLD_BOOT hobotboot.medium=MMC hobotboot.mode=normal hobotboot.ab_switch_reason=normal hobotboot.pmic_type=single-pmic    
+Nov 22 04:57:22 localhost kernel: [    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+Nov 22 04:57:22 localhost kernel: [    0.000000] software IO TLB: area num 8.
+Nov 22 04:57:22 localhost kernel: [    0.000000] software IO TLB: mapped [mem 0x00000000fbfff000-0x00000000fffff000] (64MB)
+Nov 22 04:57:22 localhost kernel: [    0.000000] Memory: 2943588K/4128768K available (10752K kernel code, 1152K rwdata, 4092K rodata, 2176K init, 3217K bss, 794012K reserved, 391168K cma-reserved)
+Nov 22 04:57:22 localhost kernel: [    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=8, Nodes=1
+Nov 22 04:57:22 localhost kernel: [    0.000000] rcu: Preemptible hierarchical RCU implementation.
+Nov 22 04:57:22 localhost kernel: [    0.000000] rcu: 	RCU event tracing is enabled.
+Nov 22 04:57:22 localhost kernel: [    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 10 jiffies.
+Nov 22 04:57:22 localhost kernel: [    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+Nov 22 04:57:22 localhost kernel: [    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+Nov 22 04:57:22 localhost kernel: [    0.000000] GICv3: 256 SPIs implemented
+Nov 22 04:57:22 localhost kernel: [    0.000000] GICv3: 0 Extended SPIs implemented
+Nov 22 04:57:22 localhost kernel: [    0.000000] Root IRQ handler: gic_handle_irq
+Nov 22 04:57:22 localhost kernel: [    0.000000] GICv3: GICv3 features: 16 PPIs
+Nov 22 04:57:22 localhost kernel: [    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000030140000
+Nov 22 04:57:22 localhost kernel: [    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+Nov 22 04:57:22 localhost kernel: [    0.000000] arch_timer: cp15 timer(s) running at 24.00MHz (phys).
+Nov 22 04:57:22 localhost kernel: [    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+Nov 22 04:57:22 localhost kernel: [    0.000000] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+Nov 22 04:57:22 localhost kernel: [    0.000834] Console: colour dummy device 80x25
+Nov 22 04:57:22 localhost kernel: [    0.000876] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=240000)
+Nov 22 04:57:22 localhost kernel: [    0.000886] pid_max: default: 32768 minimum: 301
+Nov 22 04:57:22 localhost kernel: [    0.000995] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.001009] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.002598] rcu: Hierarchical SRCU implementation.
+Nov 22 04:57:22 localhost kernel: [    0.002603] rcu: 	Max phase no-delay instances is 1000.
+Nov 22 04:57:22 localhost kernel: [    0.003325] EFI services will not be available.
+Nov 22 04:57:22 localhost kernel: [    0.003736] smp: Bringing up secondary CPUs ...
+Nov 22 04:57:22 localhost kernel: [    0.015160] Detected VIPT I-cache on CPU1
+Nov 22 04:57:22 localhost kernel: [    0.015251] GICv3: CPU1: found redistributor 100 region 0:0x0000000030160000
+Nov 22 04:57:22 localhost kernel: [    0.015283] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.026735] Detected VIPT I-cache on CPU2
+Nov 22 04:57:22 localhost kernel: [    0.026805] GICv3: CPU2: found redistributor 200 region 0:0x0000000030180000
+Nov 22 04:57:22 localhost kernel: [    0.026825] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.038238] Detected VIPT I-cache on CPU3
+Nov 22 04:57:22 localhost kernel: [    0.038306] GICv3: CPU3: found redistributor 300 region 0:0x00000000301a0000
+Nov 22 04:57:22 localhost kernel: [    0.038327] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.049743] Detected VIPT I-cache on CPU4
+Nov 22 04:57:22 localhost kernel: [    0.049813] GICv3: CPU4: found redistributor 400 region 0:0x00000000301c0000
+Nov 22 04:57:22 localhost kernel: [    0.049832] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.061243] Detected VIPT I-cache on CPU5
+Nov 22 04:57:22 localhost kernel: [    0.061315] GICv3: CPU5: found redistributor 500 region 0:0x00000000301e0000
+Nov 22 04:57:22 localhost kernel: [    0.061335] CPU5: Booted secondary processor 0x0000000500 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.072743] Detected VIPT I-cache on CPU6
+Nov 22 04:57:22 localhost kernel: [    0.072817] GICv3: CPU6: found redistributor 600 region 0:0x0000000030200000
+Nov 22 04:57:22 localhost kernel: [    0.072838] CPU6: Booted secondary processor 0x0000000600 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.084260] Detected VIPT I-cache on CPU7
+Nov 22 04:57:22 localhost kernel: [    0.084343] GICv3: CPU7: found redistributor 700 region 0:0x0000000030220000
+Nov 22 04:57:22 localhost kernel: [    0.084364] CPU7: Booted secondary processor 0x0000000700 [0x412fd050]
+Nov 22 04:57:22 localhost kernel: [    0.084424] smp: Brought up 1 node, 8 CPUs
+Nov 22 04:57:22 localhost kernel: [    0.084431] SMP: Total of 8 processors activated.
+Nov 22 04:57:22 localhost kernel: [    0.084435] CPU features: detected: 32-bit EL0 Support
+Nov 22 04:57:22 localhost kernel: [    0.084439] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
+Nov 22 04:57:22 localhost kernel: [    0.084443] CPU features: detected: Common not Private translations
+Nov 22 04:57:22 localhost kernel: [    0.084446] CPU features: detected: CRC32 instructions
+Nov 22 04:57:22 localhost kernel: [    0.084450] CPU features: detected: RCpc load-acquire (LDAPR)
+Nov 22 04:57:22 localhost kernel: [    0.084453] CPU features: detected: LSE atomic instructions
+Nov 22 04:57:22 localhost kernel: [    0.084456] CPU features: detected: Privileged Access Never
+Nov 22 04:57:22 localhost kernel: [    0.084458] CPU features: detected: RAS Extension Support
+Nov 22 04:57:22 localhost kernel: [    0.084462] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
+Nov 22 04:57:22 localhost kernel: [    0.084532] CPU: All CPU(s) started at EL2
+Nov 22 04:57:22 localhost kernel: [    0.084535] alternatives: applying system-wide alternatives
+Nov 22 04:57:22 localhost kernel: [    0.088178] devtmpfs: initialized
+Nov 22 04:57:22 localhost kernel: [    0.105648] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+Nov 22 04:57:22 localhost kernel: [    0.105666] futex hash table entries: 2048 (order: 5, 131072 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.114302] pinctrl core: initialized pinctrl subsystem
+Nov 22 04:57:22 localhost kernel: [    0.114839] DMI not present or invalid.
+Nov 22 04:57:22 localhost kernel: [    0.114847] hb_pl320_mbox_init...
+Nov 22 04:57:22 localhost kernel: [    0.115298] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+Nov 22 04:57:22 localhost kernel: [    0.116027] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+Nov 22 04:57:22 localhost kernel: [    0.116146] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+Nov 22 04:57:22 localhost kernel: [    0.116305] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+Nov 22 04:57:22 localhost kernel: [    0.116352] audit: initializing netlink subsys (disabled)
+Nov 22 04:57:22 localhost kernel: [    0.116496] audit: type=2000 audit(0.100:1): state=initialized audit_enabled=0 res=1
+Nov 22 04:57:22 localhost kernel: [    0.116851] thermal_sys: Registered thermal governor 'step_wise'
+Nov 22 04:57:22 localhost kernel: [    0.116858] thermal_sys: Registered thermal governor 'user_space'
+Nov 22 04:57:22 localhost kernel: [    0.116889] cpuidle: using governor menu
+Nov 22 04:57:22 localhost kernel: [    0.117052] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+Nov 22 04:57:22 localhost kernel: [    0.117181] ASID allocator initialised with 65536 entries
+Nov 22 04:57:22 localhost kernel: [    0.117373] hb_ipc_init...
+Nov 22 04:57:22 localhost kernel: [    0.118660] printk: console [ramoops-1] enabled
+Nov 22 04:57:22 localhost kernel: [    0.118665] pstore: Registered ramoops as persistent store backend
+Nov 22 04:57:22 localhost kernel: [    0.118669] ramoops: using 0x40000@0xa4080000, ecc: 0
+Nov 22 04:57:22 localhost kernel: [    0.133410] platform 3d080000.csi: Fixed dependency cycle(s) with /soc/a55_apb0/i2c@340d0000/sc230ai@30
+Nov 22 04:57:22 localhost kernel: [    0.134236] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d740000
+Nov 22 04:57:22 localhost kernel: [    0.134255] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d640000
+Nov 22 04:57:22 localhost kernel: [    0.134267] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d540000
+Nov 22 04:57:22 localhost kernel: [    0.134281] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d440000
+Nov 22 04:57:22 localhost kernel: [    0.134313] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d340000
+Nov 22 04:57:22 localhost kernel: [    0.134324] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d240000
+Nov 22 04:57:22 localhost kernel: [    0.134336] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d140000
+Nov 22 04:57:22 localhost kernel: [    0.134348] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d040000
+Nov 22 04:57:22 localhost kernel: [    0.134367] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 22 04:57:22 localhost kernel: [    0.134457] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 22 04:57:22 localhost kernel: [    0.134520] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 22 04:57:22 localhost kernel: [    0.134552] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.134683] amba 2c003000.etr: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 22 04:57:22 localhost kernel: [    0.134776] amba 2c003000.etr: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 22 04:57:22 localhost kernel: [    0.134827] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 22 04:57:22 localhost kernel: [    0.134895] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 22 04:57:22 localhost kernel: [    0.134942] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/etr@2c003000
+Nov 22 04:57:22 localhost kernel: [    0.134995] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/tpiu@2c005000
+Nov 22 04:57:22 localhost kernel: [    0.135067] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/tpiu@2c005000
+Nov 22 04:57:22 localhost kernel: [    0.135141] amba 2c005000.tpiu: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 22 04:57:22 localhost kernel: [    0.135345] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d040000
+Nov 22 04:57:22 localhost kernel: [    0.135419] amba 2d040000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.135580] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d140000
+Nov 22 04:57:22 localhost kernel: [    0.135655] amba 2d140000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.135800] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d240000
+Nov 22 04:57:22 localhost kernel: [    0.135873] amba 2d240000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.136034] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d340000
+Nov 22 04:57:22 localhost kernel: [    0.136117] amba 2d340000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.136277] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d440000
+Nov 22 04:57:22 localhost kernel: [    0.136348] amba 2d440000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.136504] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d540000
+Nov 22 04:57:22 localhost kernel: [    0.136576] amba 2d540000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.136735] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d640000
+Nov 22 04:57:22 localhost kernel: [    0.136811] amba 2d640000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.136959] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d740000
+Nov 22 04:57:22 localhost kernel: [    0.137031] amba 2d740000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 22 04:57:22 localhost kernel: [    0.147182] horizon-aon-pinctrl 31040000.aon_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 22 04:57:22 localhost kernel: [    0.148979] (NULL device *): no horizon,gpio-banks in node /soc/disp_apb/disp_iomuxc@3e0a0054
+Nov 22 04:57:22 localhost kernel: [    0.149209] horizon-disp-pinctrl 3e0a0054.disp_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 22 04:57:22 localhost kernel: [    0.149483] platform 3e000000.disp_apb:bt1120-wb-syscon-bridge: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 22 04:57:22 localhost kernel: [    0.149622] platform 3e080000.vs-sif: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 22 04:57:22 localhost kernel: [    0.149947] platform 3e080000.vs-sif: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 22 04:57:22 localhost kernel: [    0.149988] platform 3e000000.disp_apb:bt1120-wb-syscon-bridge: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 22 04:57:22 localhost kernel: [    0.150033] platform 3e000000.disp_apb:bt1120_bridge_wb: Fixed dependency cycle(s) with /soc/disp_apb/bt1120-wb-syscon-bridge
+Nov 22 04:57:22 localhost kernel: [    0.150076] platform 3e000000.disp_apb:bt1120_bridge_wb: Fixed dependency cycle(s) with /soc/disp_apb/vs-sif@3e080000
+Nov 22 04:57:22 localhost kernel: [    0.154093] horizon-hsio-pinctrl 35050000.hsio_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 22 04:57:22 localhost kernel: [    0.156790] horizon-dsp-pinctrl 31040014.dsp_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 22 04:57:22 localhost kernel: [    0.157267] hobot-pl320 33000000.mailbox0: get_mbox_dev_resource, mbox->base = (____ptrval____)
+Nov 22 04:57:22 localhost kernel: [    0.157878] hobot-pl320 33000000.mailbox0: PL320 Mailbox registered
+Nov 22 04:57:22 localhost kernel: [    0.163476] horizon-lsio-pinctrl 34180000.lsio_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 22 04:57:22 localhost kernel: [    0.166626] KASLR disabled due to lack of seed
+Nov 22 04:57:22 localhost kernel: [    0.166714] sysfs: cannot create duplicate filename '/module/hobot_pps/version'
+Nov 22 04:57:22 localhost kernel: [    0.166721] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 6.1.83-DR-PL5.2_V1.1.1 #11
+Nov 22 04:57:22 localhost kernel: [    0.166727] Hardware name: D-Robotics X5 EVB LP4 1_B board (DT)
+Nov 22 04:57:22 localhost kernel: [    0.166731] Call trace:
+Nov 22 04:57:22 localhost kernel: [    0.166735]  dump_backtrace+0xd8/0x130
+Nov 22 04:57:22 localhost kernel: [    0.166749]  show_stack+0x18/0x30
+Nov 22 04:57:22 localhost kernel: [    0.166756]  dump_stack_lvl+0x68/0x84
+Nov 22 04:57:22 localhost kernel: [    0.166766]  dump_stack+0x18/0x34
+Nov 22 04:57:22 localhost kernel: [    0.166772]  sysfs_warn_dup+0x64/0x80
+Nov 22 04:57:22 localhost kernel: [    0.166781]  sysfs_add_file_mode_ns+0x124/0x130
+Nov 22 04:57:22 localhost kernel: [    0.166786]  sysfs_create_file_ns+0x7c/0xb4
+Nov 22 04:57:22 localhost kernel: [    0.166793]  param_sysfs_init+0xa8/0x1e0
+Nov 22 04:57:22 localhost kernel: [    0.166803]  do_one_initcall+0x50/0x1d0
+Nov 22 04:57:22 localhost kernel: [    0.166808]  kernel_init_freeable+0x218/0x280
+Nov 22 04:57:22 localhost kernel: [    0.166816]  kernel_init+0x24/0x130
+Nov 22 04:57:22 localhost kernel: [    0.166824]  ret_from_fork+0x10/0x20
+Nov 22 04:57:22 localhost kernel: [    0.166839] ------------[ cut here ]------------
+Nov 22 04:57:22 localhost kernel: [    0.166842] WARNING: CPU: 0 PID: 1 at kernel/params.c:877 param_sysfs_init+0xac/0x1e0
+Nov 22 04:57:22 localhost kernel: [    0.166851] Modules linked in:
+Nov 22 04:57:22 localhost kernel: [    0.166857] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 6.1.83-DR-PL5.2_V1.1.1 #11
+Nov 22 04:57:22 localhost kernel: [    0.166864] Hardware name: D-Robotics X5 EVB LP4 1_B board (DT)
+Nov 22 04:57:22 localhost kernel: [    0.166868] pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+Nov 22 04:57:22 localhost kernel: [    0.166874] pc : param_sysfs_init+0xac/0x1e0
+Nov 22 04:57:22 localhost kernel: [    0.166880] lr : param_sysfs_init+0xa8/0x1e0
+Nov 22 04:57:22 localhost kernel: [    0.166889] sp : ffff80000956bd30
+Nov 22 04:57:22 localhost kernel: [    0.166891] x29: ffff80000956bd30 x28: 0000000000000000 x27: ffff800008ea00c8
+Nov 22 04:57:22 localhost kernel: [    0.166901] x26: ffff800008f26050 x25: ffff800008f26078 x24: ffff800008e88fe0
+Nov 22 04:57:22 localhost kernel: [    0.166912] x23: ffff8000091e5000 x22: 0000000000000000 x21: ffff800008e8c070
+Nov 22 04:57:22 localhost kernel: [    0.166925] x20: ffff000080d84e00 x19: ffff800008e8be30 x18: ffffffffffffffff
+Nov 22 04:57:22 localhost kernel: [    0.166934] x17: 312e312e31565f32 x16: 2e354c502d52442d x15: ffff80008956b4ca
+Nov 22 04:57:22 localhost kernel: [    0.166943] x14: 0000000000000000 x13: ffff8000090d9eb0 x12: 000000000000022e
+Nov 22 04:57:22 localhost kernel: [    0.166952] x11: 00000000000000ba x10: ffff800009131eb0 x9 : ffff8000090d9eb0
+Nov 22 04:57:22 localhost kernel: [    0.166961] x8 : 00000000ffffefff x7 : ffff800009131eb0 x6 : 0000000000002210
+Nov 22 04:57:22 localhost kernel: [    0.166969] x5 : ffff000080044000 x4 : ffff0000ff6ca6d0 x3 : 0000000000000000
+Nov 22 04:57:22 localhost kernel: [    0.166979] x2 : 0000000000000000 x1 : ffff000080080000 x0 : 00000000ffffffef
+Nov 22 04:57:22 localhost kernel: [    0.166988] Call trace:
+Nov 22 04:57:22 localhost kernel: [    0.166990]  param_sysfs_init+0xac/0x1e0
+Nov 22 04:57:22 localhost kernel: [    0.166996]  do_one_initcall+0x50/0x1d0
+Nov 22 04:57:22 localhost kernel: [    0.167001]  kernel_init_freeable+0x218/0x280
+Nov 22 04:57:22 localhost kernel: [    0.167007]  kernel_init+0x24/0x130
+Nov 22 04:57:22 localhost kernel: [    0.167013]  ret_from_fork+0x10/0x20
+Nov 22 04:57:22 localhost kernel: [    0.167020] ---[ end trace 0000000000000000 ]---
+Nov 22 04:57:22 localhost kernel: [    0.171657] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+Nov 22 04:57:22 localhost kernel: [    0.171662] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+Nov 22 04:57:22 localhost kernel: [    0.171667] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+Nov 22 04:57:22 localhost kernel: [    0.171670] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+Nov 22 04:57:22 localhost kernel: [    0.171676] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+Nov 22 04:57:22 localhost kernel: [    0.171680] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+Nov 22 04:57:22 localhost kernel: [    0.171684] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+Nov 22 04:57:22 localhost kernel: [    0.171687] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+Nov 22 04:57:22 localhost kernel: [    0.172580] noc_qos 20500000.cpu_ace_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.172608] noc_qos 20500000.cpu_ace_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.172662] noc_qos 20500100.cpu_perif_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.172685] noc_qos 20500100.cpu_perif_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.172741] noc_qos 20510000.bt1120_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.172772] noc_qos 20510000.bt1120_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.172825] noc_qos 20510080.dc8000_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.172850] noc_qos 20510080.dc8000_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.172906] noc_qos 20510100.dw230_gdc_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.172930] noc_qos 20510100.dw230_gdc_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.172982] noc_qos 20510180.dw230_scalar2_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173008] noc_qos 20510180.dw230_scalar2_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173061] noc_qos 20510200.dw230_scalar3_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173088] noc_qos 20510200.dw230_scalar3_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173146] noc_qos 20510500.sif0_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173172] noc_qos 20510500.sif0_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173227] noc_qos 20510580.sif1_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173252] noc_qos 20510580.sif1_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173307] noc_qos 20510600.sif2_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173333] noc_qos 20510600.sif2_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173389] noc_qos 20510680.sif3_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173418] noc_qos 20510680.sif3_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173473] noc_qos 20510700.sif_disp_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173496] noc_qos 20510700.sif_disp_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173551] noc_qos 20550000.dma0_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173575] noc_qos 20550000.dma0_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173628] noc_qos 20550080.emmc_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173658] noc_qos 20550080.emmc_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173706] noc_qos 20550100.gmac_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173730] noc_qos 20550100.gmac_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173785] noc_qos 20550180.sd_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173811] noc_qos 20550180.sd_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173868] noc_qos 20550200.sdio_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173898] noc_qos 20550200.sdio_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.173947] noc_qos 20550280.security_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.173969] noc_qos 20550280.security_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.174022] noc_qos 20550300.usb2_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.174046] noc_qos 20550300.usb2_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.174095] noc_qos 20550380.usb3_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.174123] noc_qos 20550380.usb3_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.174172] noc_qos 20550400.etr_qos: qos doesn't have consumer device
+Nov 22 04:57:22 localhost kernel: [    0.174192] noc_qos 20550400.etr_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    0.175043] iommu: Default domain type: Translated 
+Nov 22 04:57:22 localhost kernel: [    0.175049] iommu: DMA domain TLB invalidation policy: strict mode 
+Nov 22 04:57:22 localhost kernel: [    0.176683] SCSI subsystem initialized
+Nov 22 04:57:22 localhost kernel: [    0.176794] usbcore: registered new interface driver usbfs
+Nov 22 04:57:22 localhost kernel: [    0.176819] usbcore: registered new interface driver hub
+Nov 22 04:57:22 localhost kernel: [    0.176846] usbcore: registered new device driver usb
+Nov 22 04:57:22 localhost kernel: [    0.177120] mc: Linux media interface: v0.10
+Nov 22 04:57:22 localhost kernel: [    0.177148] videodev: Linux video capture interface: v2.00
+Nov 22 04:57:22 localhost kernel: [    0.177171] pps_core: LinuxPPS API ver. 1 registered
+Nov 22 04:57:22 localhost kernel: [    0.177175] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+Nov 22 04:57:22 localhost kernel: [    0.177188] PTP clock support registered
+Nov 22 04:57:22 localhost kernel: [    0.177427] hobot_ion: Reserved ion-pool MEM start 0xa4100000, size 0xc000000
+Nov 22 04:57:22 localhost kernel: [    0.177473] hobot_ion: Reserved ion-carveout MEM start 0xb0100000, size 0xc000000
+Nov 22 04:57:22 localhost kernel: [    0.177563] hobot_ion: Reserved ion-cma MEM start 0xbc100000, size 0xc000000
+Nov 22 04:57:22 localhost kernel: [    0.199098] Advanced Linux Sound Architecture Driver Initialized.
+Nov 22 04:57:22 localhost kernel: [    0.199625] clocksource: Switched to clocksource arch_sys_counter
+Nov 22 04:57:22 localhost kernel: [    0.204339] NET: Registered PF_INET protocol family
+Nov 22 04:57:22 localhost kernel: [    0.204494] IP idents hash table entries: 65536 (order: 7, 524288 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.206720] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.206748] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.206758] TCP established hash table entries: 32768 (order: 6, 262144 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.206951] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.207568] TCP: Hash tables configured (established 32768 bind 32768)
+Nov 22 04:57:22 localhost kernel: [    0.207641] UDP hash table entries: 2048 (order: 4, 65536 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.207687] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, linear)
+Nov 22 04:57:22 localhost kernel: [    0.207835] NET: Registered PF_UNIX/PF_LOCAL protocol family
+Nov 22 04:57:22 localhost kernel: [    0.208081] RPC: Registered named UNIX socket transport module.
+Nov 22 04:57:22 localhost kernel: [    0.208086] RPC: Registered udp transport module.
+Nov 22 04:57:22 localhost kernel: [    0.208089] RPC: Registered tcp transport module.
+Nov 22 04:57:22 localhost kernel: [    0.208092] RPC: Registered tcp NFSv4.1 backchannel transport module.
+Nov 22 04:57:22 localhost kernel: [    0.209151] hw perfevents: enabled with armv8_pmuv3 PMU driver, 7 counters available
+Nov 22 04:57:22 localhost kernel: [    0.210730] Initialise system trusted keyrings
+Nov 22 04:57:22 localhost kernel: [    0.210845] workingset: timestamp_bits=46 max_order=20 bucket_order=0
+Nov 22 04:57:22 localhost kernel: [    0.214329] pstore: success mode=2
+Nov 22 04:57:22 localhost kernel: [    0.242509] NET: Registered PF_ALG protocol family
+Nov 22 04:57:22 localhost kernel: [    0.242522] Key type asymmetric registered
+Nov 22 04:57:22 localhost kernel: [    0.242525] Asymmetric key parser 'x509' registered
+Nov 22 04:57:22 localhost kernel: [    0.242562] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+Nov 22 04:57:22 localhost kernel: [    0.242568] io scheduler mq-deadline registered
+Nov 22 04:57:22 localhost kernel: [    0.242573] io scheduler kyber registered
+Nov 22 04:57:22 localhost kernel: [    0.249287] dw_axi_dmac_platform 32080000.dma-controller: DesignWare AXI DMA Controller, 8 channels
+Nov 22 04:57:22 localhost kernel: [    0.249835] dw_axi_dmac_platform 34200000.dma-controller: DesignWare AXI DMA Controller, 12 channels
+Nov 22 04:57:22 localhost kernel: [    0.249886] Start socinfo driver init
+Nov 22 04:57:22 localhost kernel: [    0.249929] socinfo 31021008.socinfo: Start socinfo probe.
+Nov 22 04:57:22 localhost kernel: [    0.249977] socinfo 31021008.socinfo: Socinfo probe end with retval: 0
+Nov 22 04:57:22 localhost kernel: [    0.250510] axi_monitor 38100000.axi-mon: AXI-Clk: 800000000Hz
+Nov 22 04:57:22 localhost kernel: [    0.250524] axi_monitor 38100000.axi-mon: APB-Clk: 200000000Hz
+Nov 22 04:57:22 localhost kernel: [    0.250531] axi_monitor 38100000.axi-mon: Maximum session time 343000 millisecs
+Nov 22 04:57:22 localhost kernel: [    0.250547] axi_monitor 38100000.axi-mon: Got axi-port num:5
+Nov 22 04:57:22 localhost kernel: [    0.250554] axi_monitor 38100000.axi-mon: Got new axi-port:cpu, idx:0
+Nov 22 04:57:22 localhost kernel: [    0.250561] axi_monitor 38100000.axi-mon: Got new axi-port:bpu, idx:1
+Nov 22 04:57:22 localhost kernel: [    0.250567] axi_monitor 38100000.axi-mon: Got new axi-port:vin, idx:2
+Nov 22 04:57:22 localhost kernel: [    0.250574] axi_monitor 38100000.axi-mon: Got new axi-port:codec, idx:3
+Nov 22 04:57:22 localhost kernel: [    0.250581] axi_monitor 38100000.axi-mon: Got new axi-port:gpu, idx:4
+Nov 22 04:57:22 localhost kernel: [    0.250730] axi_monitor 38100000.axi-mon: DDR Perf Monitor probed successfully.
+Nov 22 04:57:22 localhost kernel: [    0.251435] hobot_dsp_init start
+Nov 22 04:57:22 localhost kernel: [    0.251558] hobot-dsp dsp0: hobot_dsp_probe start
+Nov 22 04:57:22 localhost kernel: [    0.251565] hobot-dsp dsp0: dsp_smmu_init: dsp0 DMA mask 32bit.
+Nov 22 04:57:22 localhost kernel: [    0.251762] hobot-dsp dsp0: hobot_dsp_probe dsp0 Registered successfully
+Nov 22 04:57:22 localhost kernel: [    0.251799] hobot_dsp_init end
+Nov 22 04:57:22 localhost kernel: [    0.253780] Serial: 8250/16550 driver, 8 ports, IRQ sharing disabled
+Nov 22 04:57:22 localhost kernel: [    0.255425] printk: console [ttyS0] disabled
+Nov 22 04:57:22 localhost kernel: [    0.255472] 32120000.serial: ttyS0 at MMIO 0x32120000 (irq = 29, base_baud = 12656250) is a 16550A
+Nov 22 04:57:22 localhost kernel: [    0.256715] printk: console [ttyS0] enabled
+Nov 22 04:57:22 localhost kernel: [    0.257185] 34080000.serial: ttyS2 at MMIO 0x34080000 (irq = 30, base_baud = 12500000) is a 16550A
+Nov 22 04:57:22 localhost kernel: [    0.257629] 34090000.serial: ttyS3 at MMIO 0x34090000 (irq = 31, base_baud = 12500000) is a 16550A
+Nov 22 04:57:22 localhost kernel: [    0.258071] 340a0000.serial: ttyS4 at MMIO 0x340a0000 (irq = 32, base_baud = 12500000) is a 16550A
+Nov 22 04:57:22 localhost kernel: [    0.258525] 341a0000.serial: ttyS5 at MMIO 0x341a0000 (irq = 33, base_baud = 12500000) is a 16550A
+Nov 22 04:57:22 localhost kernel: [    0.264968] brd: module loaded
+Nov 22 04:57:22 localhost kernel: [    0.268453] loop: module loaded
+Nov 22 04:57:22 localhost kernel: [    0.270068] dw_spi_mmio 35000000.spi: bit_offset = 0
+Nov 22 04:57:22 localhost kernel: [    0.270128] dw_spi_mmio 35000000.spi: DMA init failed
+Nov 22 04:57:22 localhost kernel: [    0.459649] random: crng init done
+Nov 22 04:57:22 localhost kernel: [    0.670639] spi-nand: probe of spi7.0 failed with error -110
+Nov 22 04:57:22 localhost kernel: [    0.671088] dw_spi_mmio 34020000.spi: bit_offset = 0
+Nov 22 04:57:22 localhost kernel: [    0.672467] CAN device driver interface
+Nov 22 04:57:22 localhost kernel: [    1.683644] mcp251x spi2.0: MCP251x didn't enter in conf mode after reset
+Nov 22 04:57:22 localhost kernel: [    1.684583] mcp251x spi2.0: Probe failed, err=110
+Nov 22 04:57:22 localhost kernel: [    1.685207] mcp251x: probe of spi2.0 failed with error -110
+Nov 22 04:57:22 localhost kernel: [    1.685763] dwc-eth-dwmac 35010000.gmac-tsn: phy is in rmii mode
+Nov 22 04:57:22 localhost kernel: [    1.685777] dwc-eth-dwmac 35010000.gmac-tsn: set enet rmii and clk turn on
+Nov 22 04:57:22 localhost kernel: [    1.685789] dwc-eth-dwmac 35010000.gmac-tsn: x5_eqos: clk_prepare_enable axi_clk rate=400000000 Hz
+Nov 22 04:57:22 localhost kernel: [    1.685801] dwc-eth-dwmac 35010000.gmac-tsn: x5_eqos: clk_prepare_enable rgmii_clk rate=125000000 Hz
+Nov 22 04:57:22 localhost kernel: [    1.685858] dwc-eth-dwmac 35010000.gmac-tsn: test phy is in rmii mode phyreset 1
+Nov 22 04:57:22 localhost kernel: [    1.799635] dwc-eth-dwmac 35010000.gmac-tsn: test phy is in rmii mode phyreset 0 
+Nov 22 04:57:22 localhost kernel: [    1.919631] dwc-eth-dwmac 35010000.gmac-tsn: test phy is in rmii mode phyreset 1
+Nov 22 04:57:22 localhost kernel: [    1.919751] dwc-eth-dwmac 35010000.gmac-tsn: User ID: 0x10, Synopsys ID: 0x53
+Nov 22 04:57:22 localhost kernel: [    1.919761] dwc-eth-dwmac 35010000.gmac-tsn: 	DWMAC4/5
+Nov 22 04:57:22 localhost kernel: [    1.919767] dwc-eth-dwmac 35010000.gmac-tsn: DMA HW capability register supported
+Nov 22 04:57:22 localhost kernel: [    1.919772] dwc-eth-dwmac 35010000.gmac-tsn: RX Checksum Offload Engine supported
+Nov 22 04:57:22 localhost kernel: [    1.919776] dwc-eth-dwmac 35010000.gmac-tsn: TX Checksum insertion supported
+Nov 22 04:57:22 localhost kernel: [    1.919781] dwc-eth-dwmac 35010000.gmac-tsn: Wake-Up On Lan supported
+Nov 22 04:57:22 localhost kernel: [    1.919818] dwc-eth-dwmac 35010000.gmac-tsn: TSO supported
+Nov 22 04:57:22 localhost kernel: [    1.919823] dwc-eth-dwmac 35010000.gmac-tsn: Enable RX Mitigation via HW Watchdog Timer
+Nov 22 04:57:22 localhost kernel: [    1.919840] dwc-eth-dwmac 35010000.gmac-tsn: device MAC address 32:6b:33:55:f8:1e
+Nov 22 04:57:22 localhost kernel: [    1.919846] dwc-eth-dwmac 35010000.gmac-tsn: Enabled L3L4 Flow TC (entries=8)
+Nov 22 04:57:22 localhost kernel: [    1.919854] dwc-eth-dwmac 35010000.gmac-tsn: Enabled RFS Flow TC (entries=10)
+Nov 22 04:57:22 localhost kernel: [    1.919862] dwc-eth-dwmac 35010000.gmac-tsn: Enabling HW TC (entries=128, max_off=256)
+Nov 22 04:57:22 localhost kernel: [    1.919868] dwc-eth-dwmac 35010000.gmac-tsn: TSO feature enabled
+Nov 22 04:57:22 localhost kernel: [    1.919874] dwc-eth-dwmac 35010000.gmac-tsn: Using 40/40 bits DMA host/device width
+Nov 22 04:57:22 localhost kernel: [    1.928259] usbcore: registered new interface driver cdc_ether
+Nov 22 04:57:22 localhost kernel: [    1.928286] usbcore: registered new interface driver r8153_ecm
+Nov 22 04:57:22 localhost kernel: [    1.930093] usbcore: registered new interface driver cdc_acm
+Nov 22 04:57:22 localhost kernel: [    1.930099] cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+Nov 22 04:57:22 localhost kernel: [    1.930193] usbcore: registered new interface driver uas
+Nov 22 04:57:22 localhost kernel: [    1.930225] usbcore: registered new interface driver usb-storage
+Nov 22 04:57:22 localhost kernel: [    1.930275] usbcore: registered new interface driver ch341
+Nov 22 04:57:22 localhost kernel: [    1.930293] usbserial: USB Serial support registered for ch341-uart
+Nov 22 04:57:22 localhost kernel: [    1.930310] usbcore: registered new interface driver cp210x
+Nov 22 04:57:22 localhost kernel: [    1.930322] usbserial: USB Serial support registered for cp210x
+Nov 22 04:57:22 localhost kernel: [    1.930340] usbcore: registered new interface driver ftdi_sio
+Nov 22 04:57:22 localhost kernel: [    1.930353] usbserial: USB Serial support registered for FTDI USB Serial Device
+Nov 22 04:57:22 localhost kernel: [    1.930370] usbcore: registered new interface driver option
+Nov 22 04:57:22 localhost kernel: [    1.930381] usbserial: USB Serial support registered for GSM modem (1-port)
+Nov 22 04:57:22 localhost kernel: [    1.930398] usbcore: registered new interface driver pl2303
+Nov 22 04:57:22 localhost kernel: [    1.930412] usbserial: USB Serial support registered for pl2303
+Nov 22 04:57:22 localhost kernel: [    1.930435] usbcore: registered new interface driver wishbone_serial
+Nov 22 04:57:22 localhost kernel: [    1.930448] usbserial: USB Serial support registered for wishbone_serial
+Nov 22 04:57:22 localhost kernel: [    1.931554] dw-rtc 31010000.rtc: registered as rtc0
+Nov 22 04:57:22 localhost kernel: [    1.931572] dw-rtc 31010000.rtc: setting system clock to 1970-01-01T00:00:00 UTC (0)
+Nov 22 04:57:22 localhost kernel: [    1.931687] i2c_dev: i2c /dev entries driver
+Nov 22 04:57:22 localhost kernel: [    1.931993] pps pps0: new PPS source hobot_pps.-1
+Nov 22 04:57:22 localhost kernel: [    1.932001] hobot-pps hobot_pps: register PPS source name:hobot_pps.-1
+Nov 22 04:57:22 localhost kernel: [    1.932031] pps pps0: Registered IRQ 39 as PPS source
+Nov 22 04:57:22 localhost kernel: [    1.932080] Error: Driver 'hobot-pps' is already registered, aborting...
+Nov 22 04:57:22 localhost kernel: [    1.935082] hwmon hwmon0: temp2_input not attached to any thermal zone
+Nov 22 04:57:22 localhost kernel: [    1.935434] dw_wdt 34250000.watchdog: No valid TOPs array specified
+Nov 22 04:57:22 localhost kernel: [    1.935691] device-mapper: uevent: version 1.0.3
+Nov 22 04:57:22 localhost kernel: [    1.935821] device-mapper: ioctl: 4.47.0-ioctl (2022-07-28) initialised: dm-devel@redhat.com
+Nov 22 04:57:22 localhost kernel: [    1.936413] sdhci: Secure Digital Host Controller Interface driver
+Nov 22 04:57:22 localhost kernel: [    1.936418] sdhci: Copyright(c) Pierre Ossman
+Nov 22 04:57:22 localhost kernel: [    1.936421] sdhci-pltfm: SDHCI platform and OF driver helper
+Nov 22 04:57:22 localhost kernel: [    1.936930] usbcore: registered new interface driver usbhid
+Nov 22 04:57:22 localhost kernel: [    1.936936] usbhid: USB HID core driver
+Nov 22 04:57:22 localhost kernel: [    1.936976] sdhci-dwcmshc 35030000.sdhci: mmc set to fixed voltage 1800
+Nov 22 04:57:22 localhost kernel: [    1.937014] sdhci-dwcmshc 35040000.sdhci: MSHC_CTRL:0x40
+Nov 22 04:57:22 localhost kernel: [    1.937042] logger: created 2048K log 'log_main'
+Nov 22 04:57:22 localhost kernel: [    1.937102] logger: created 256K log 'log_events'
+Nov 22 04:57:22 localhost kernel: [    1.937160] logger: created 256K log 'log_radio'
+Nov 22 04:57:22 localhost kernel: [    1.937217] logger: created 256K log 'log_system'
+Nov 22 04:57:22 localhost kernel: [    1.937267] bootloader-log soc:membuff: log stored in 0x87ffc000, size 0x2000
+Nov 22 04:57:22 localhost kernel: [    1.937474] module version 0.1 init
+Nov 22 04:57:22 localhost kernel: [    1.937719] ipc-shm-hal: ipc_hal_probe(): IPCF device can't register major number.
+Nov 22 04:57:22 localhost kernel: [    1.938685] hobot-ipc-hal: probe of ipc_hal failed with error -16
+Nov 22 04:57:22 localhost kernel: [    1.939144] x5-ddrc-devfreq soc:ddrc-freq: userspace_gov: 1
+Nov 22 04:57:22 localhost kernel: [    1.939757] x5-dfi 38200000.dfi-monitor: apb clk rate: 200000000, interval: 1
+Nov 22 04:57:22 localhost kernel: [    1.941547]  cs_system_cfg: CoreSight Configuration manager initialised
+Nov 22 04:57:22 localhost kernel: [    1.942023] coresight-tmc 2c003000.etr: Detected dma mask 40bits
+Nov 22 04:57:22 localhost kernel: [    1.944169] CSCFG registered etm0
+Nov 22 04:57:22 localhost kernel: [    1.944175] coresight etm0: CPU0: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.944513] CSCFG registered etm1
+Nov 22 04:57:22 localhost kernel: [    1.944519] coresight etm1: CPU1: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.944860] CSCFG registered etm2
+Nov 22 04:57:22 localhost kernel: [    1.944865] coresight etm2: CPU2: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.945216] CSCFG registered etm3
+Nov 22 04:57:22 localhost kernel: [    1.945221] coresight etm3: CPU3: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.945560] CSCFG registered etm4
+Nov 22 04:57:22 localhost kernel: [    1.945565] coresight etm4: CPU4: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.945901] CSCFG registered etm5
+Nov 22 04:57:22 localhost kernel: [    1.945906] coresight etm5: CPU5: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.946238] CSCFG registered etm6
+Nov 22 04:57:22 localhost kernel: [    1.946243] coresight etm6: CPU6: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.946586] CSCFG registered etm7
+Nov 22 04:57:22 localhost kernel: [    1.946591] coresight etm7: CPU7: etm v4.2 initialized
+Nov 22 04:57:22 localhost kernel: [    1.947057] coresight cti_sys0: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.947293] coresight cti_cpu0: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.947528] coresight cti_cpu1: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.947762] coresight cti_cpu2: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.947989] coresight cti_cpu3: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.948234] coresight cti_cpu4: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.948464] coresight cti_cpu5: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.948709] coresight cti_cpu6: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.948939] coresight cti_cpu7: CTI initialized
+Nov 22 04:57:22 localhost kernel: [    1.949344] optee: probing for conduit method.
+Nov 22 04:57:22 localhost kernel: [    1.949367] optee: revision 3.20 (05a6c9de)
+Nov 22 04:57:22 localhost kernel: [    1.949524] optee: dynamic shared memory is enabled
+Nov 22 04:57:22 localhost kernel: [    1.950339] optee: initialized driver
+Nov 22 04:57:22 localhost kernel: [    1.951092] ipc-wrapper ipc-wrapper: AUDIO : audio wrapper probe
+Nov 22 04:57:22 localhost kernel: [    1.951554] cpu_dai_driver cpu-dai: AUDIO : ALSA cpu-dai driver probe succ
+Nov 22 04:57:22 localhost kernel: [    1.951633] cpu_dai_driver cpu-dai: AUDIO : ALSA platform driver probe succ
+Nov 22 04:57:22 localhost kernel: [    1.956646] machine-driver sound-machine: AUDIO : ALSA machine driver probe succ
+Nov 22 04:57:22 localhost kernel: [    1.957611] GACT probability NOT on
+Nov 22 04:57:22 localhost kernel: [    1.957645] u32 classifier
+Nov 22 04:57:22 localhost kernel: [    1.957648]     input device check on
+Nov 22 04:57:22 localhost kernel: [    1.957650]     Actions configured
+Nov 22 04:57:22 localhost kernel: [    1.957772] NET: Registered PF_PACKET protocol family
+Nov 22 04:57:22 localhost kernel: [    1.957784] NET: Registered PF_KEY protocol family
+Nov 22 04:57:22 localhost kernel: [    1.957788] can: controller area network core
+Nov 22 04:57:22 localhost kernel: [    1.957833] NET: Registered PF_CAN protocol family
+Nov 22 04:57:22 localhost kernel: [    1.957839] can: raw protocol
+Nov 22 04:57:22 localhost kernel: [    1.957845] can: broadcast manager protocol
+Nov 22 04:57:22 localhost kernel: [    1.957854] can: netlink gateway - max_hops=1
+Nov 22 04:57:22 localhost kernel: [    1.957947] 8021q: 802.1Q VLAN Support v1.8
+Nov 22 04:57:22 localhost kernel: [    1.957963] Found lo, alias (efault) on irq 0
+Nov 22 04:57:22 localhost kernel: [    1.957968] MAC: 00:00:00:00:00:00
+Nov 22 04:57:22 localhost kernel: [    1.957972] Tx queue length: 1000
+Nov 22 04:57:22 localhost kernel: [    1.957978] Invalid capabilities for NIC (lo), dropping from TSN list
+Nov 22 04:57:22 localhost kernel: [    1.957982] Found eth0, alias (efault) on irq 37
+Nov 22 04:57:22 localhost kernel: [    1.957985] MAC: 32:6b:33:55:f8:1e
+Nov 22 04:57:22 localhost kernel: [    1.957988] Tx queue length: 1000
+Nov 22 04:57:22 localhost kernel: [    1.957992] Invalid capabilities for NIC (eth0), dropping from TSN list
+Nov 22 04:57:22 localhost kernel: [    1.957995] tsn_init_module: No capable NIC found. Perhaps load with in_debug=1 ?
+Nov 22 04:57:22 localhost kernel: [    1.959185] registered taskstats version 1
+Nov 22 04:57:22 localhost kernel: [    1.959191] Loading compiled-in X.509 certificates
+Nov 22 04:57:22 localhost kernel: [    1.962127] Loaded X.509 cert 'Build time autogenerated kernel key: 7f38c1279589266c0f81acc4333e85d1784f4822'
+Nov 22 04:57:22 localhost kernel: [    1.962217] Key type .fscrypt registered
+Nov 22 04:57:22 localhost kernel: [    1.962221] Key type fscrypt-provisioning registered
+Nov 22 04:57:22 localhost kernel: [    1.962973] pstore: Using crash dump compression: deflate
+Nov 22 04:57:22 localhost kernel: [    1.965386] 
+Nov 22 04:57:22 localhost kernel: [    1.965391] ********************************************************************
+Nov 22 04:57:22 localhost kernel: [    1.965394] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE           **
+Nov 22 04:57:22 localhost kernel: [    1.965398] **                                                                **
+Nov 22 04:57:22 localhost kernel: [    1.965400] **  WRITEABLE clk DebugFS SUPPORT HAS BEEN ENABLED IN THIS KERNEL **
+Nov 22 04:57:22 localhost kernel: [    1.965403] **                                                                **
+Nov 22 04:57:22 localhost kernel: [    1.965406] ** This means that this kernel is built to expose clk operations  **
+Nov 22 04:57:22 localhost kernel: [    1.965408] ** such as parent or rate setting, enabling, disabling, etc.      **
+Nov 22 04:57:22 localhost kernel: [    1.965411] ** to userspace, which may compromise security on your system.    **
+Nov 22 04:57:22 localhost kernel: [    1.965413] **                                                                **
+Nov 22 04:57:22 localhost kernel: [    1.965416] ** If you see this message and you are not debugging the          **
+Nov 22 04:57:22 localhost kernel: [    1.965418] ** kernel, report this immediately to your vendor!                **
+Nov 22 04:57:22 localhost kernel: [    1.965422] **                                                                **
+Nov 22 04:57:22 localhost kernel: [    1.965426] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE           **
+Nov 22 04:57:22 localhost kernel: [    1.965428] ********************************************************************
+Nov 22 04:57:22 localhost kernel: [    1.968121] mmc0: SDHCI controller on 35040000.sdhci [35040000.sdhci] using ADMA 64-bit
+Nov 22 04:57:22 localhost kernel: [    1.975112] i2c_designware 320a0000.i2c: running with gpio recovery mode! scl,sda
+Nov 22 04:57:22 localhost kernel: [    1.975290] i2c i2c-7: using pinctrl states for GPIO recovery
+Nov 22 04:57:22 localhost kernel: [    1.975723] i2c_designware 340b0000.i2c: running with gpio recovery mode! scl,sda
+Nov 22 04:57:22 localhost kernel: [    1.975848] i2c i2c-0: using pinctrl states for GPIO recovery
+Nov 22 04:57:22 localhost kernel: [    1.976280] i2c_designware 340d0000.i2c: running with gpio recovery mode! scl,sda
+Nov 22 04:57:22 localhost kernel: [    1.976406] i2c i2c-2: using pinctrl states for GPIO recovery
+Nov 22 04:57:22 localhost kernel: [    1.976539] hpu3501 2-001c: Found hpu3501-regulator node, register regulator
+Nov 22 04:57:22 localhost kernel: [    1.976659] hpu3501-regulator hpu3501-regulator.1.auto: fault_cfgr will be default value
+Nov 22 04:57:22 localhost kernel: [    1.976666] hpu3501-regulator hpu3501-regulator.1.auto: ocp_cfg1r will be default value
+Nov 22 04:57:22 localhost kernel: [    1.976671] hpu3501-regulator hpu3501-regulator.1.auto: ocp_cfg2r will be default value
+Nov 22 04:57:22 localhost kernel: [    1.976675] hpu3501-regulator hpu3501-regulator.1.auto: reg 0x53 will be default value 0x4
+Nov 22 04:57:22 localhost kernel: [    1.983674] hpu3501 set reg 0x53 to 0x4
+Nov 22 04:57:22 localhost kernel: [    1.983980] hpu3501 2-001c: Found hpu3501-rtc node, register rtc
+Nov 22 04:57:22 localhost kernel: [    1.984238] platform 3d080000.csi: Fixed dependency cycle(s) with /soc/a55_apb0/i2c@340d0000/sc230ai@30
+Nov 22 04:57:22 localhost kernel: [    1.984350] i2c 2-0030: Fixed dependency cycle(s) with /soc/cam/csi@3d080000
+Nov 22 04:57:22 localhost kernel: [    1.984941] i2c_designware 340e0000.i2c: running with gpio recovery mode! scl,sda
+Nov 22 04:57:22 localhost kernel: [    1.985076] i2c i2c-3: using pinctrl states for GPIO recovery
+Nov 22 04:57:22 localhost kernel: [    1.985494] i2c_designware 340f0000.i2c: running with gpio recovery mode! scl,sda
+Nov 22 04:57:22 localhost kernel: [    1.985619] i2c i2c-4: using pinctrl states for GPIO recovery
+Nov 22 04:57:22 localhost kernel: [    1.986101] xhci-hcd xhci-hcd.3.auto: xHCI Host Controller
+Nov 22 04:57:22 localhost kernel: [    1.986118] xhci-hcd xhci-hcd.3.auto: new USB bus registered, assigned bus number 1
+Nov 22 04:57:22 localhost kernel: [    1.986468] xhci-hcd xhci-hcd.3.auto: hcc params 0x0220fe6d hci version 0x110 quirks 0x0000008000010090
+Nov 22 04:57:22 localhost kernel: [    1.986496] xhci-hcd xhci-hcd.3.auto: irq 52, io mem 0x35100000
+Nov 22 04:57:22 localhost kernel: [    1.986591] xhci-hcd xhci-hcd.3.auto: xHCI Host Controller
+Nov 22 04:57:22 localhost kernel: [    1.986601] xhci-hcd xhci-hcd.3.auto: new USB bus registered, assigned bus number 2
+Nov 22 04:57:22 localhost kernel: [    1.986613] xhci-hcd xhci-hcd.3.auto: Host supports USB 3.0 SuperSpeed
+Nov 22 04:57:22 localhost kernel: [    1.987004] hub 1-0:1.0: USB hub found
+Nov 22 04:57:22 localhost kernel: [    1.987032] hub 1-0:1.0: 1 port detected
+Nov 22 04:57:22 localhost kernel: [    1.987269] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+Nov 22 04:57:22 localhost kernel: [    1.987596] hub 2-0:1.0: USB hub found
+Nov 22 04:57:22 localhost kernel: [    1.987622] hub 2-0:1.0: 1 port detected
+Nov 22 04:57:22 localhost kernel: [    1.991098] x5-ddrc-devfreq soc:ddrc-freq: userspace_gov: 1
+Nov 22 04:57:22 localhost kernel: [    1.991600] guc 34190000.adc: ADC calibration: 17
+Nov 22 04:57:22 localhost kernel: [    1.991612] guc 34190000.adc: ADC trimming: 8
+Nov 22 04:57:22 localhost kernel: [    1.992153] guc 34190000.adc: GUC Initialize Finish
+Nov 22 04:57:22 localhost kernel: [    1.993977] noc_qos 20530000.video_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    1.995145] noc_qos 20530080.jpeg_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    1.996311] noc_qos 20510280.isp_axi5_hdr_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    1.997477] noc_qos 20510300.isp_axi4_mcm_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    1.998637] noc_qos 20510380.isp_axi3_sp2_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    1.999796] noc_qos 20510480.isp_axi1_mp_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    2.004126] noc_qos 20540080.gpu3d_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    2.008641] noc_qos 20540000.gpu2d_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    2.011034] mmc0: new HS200 MMC card at address 0001
+Nov 22 04:57:22 localhost kernel: [    2.011406] mmcblk0: mmc0:0001 TB2916 14.6 GiB 
+Nov 22 04:57:22 localhost kernel: [    2.011617] noc_qos 20520000.bpu_qos: noc qos init finished.
+Nov 22 04:57:22 localhost kernel: [    2.013577] noc_qos 20560000.hifi5_qos: consumer device is disabled, so qos isn't supported
+Nov 22 04:57:22 localhost kernel: [    2.013591] noc_qos: probe of 20560000.hifi5_qos failed with error -1
+Nov 22 04:57:22 localhost kernel: [    2.013814]  mmcblk0: p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11 p12 p13
+Nov 22 04:57:22 localhost kernel: [    2.015025] mmcblk0boot0: mmc0:0001 TB2916 4.00 MiB 
+Nov 22 04:57:22 localhost kernel: [    2.015769] mmcblk0boot1: mmc0:0001 TB2916 4.00 MiB 
+Nov 22 04:57:22 localhost kernel: [    2.016460] mmcblk0rpmb: mmc0:0001 TB2916 4.00 MiB, chardev (243:0)
+Nov 22 04:57:22 localhost kernel: [    2.030793] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+Nov 22 04:57:22 localhost kernel: [    2.031131] hobot_remoteproc_init start
+Nov 22 04:57:22 localhost kernel: [    2.031386] hobot_remoteproc_init end
+Nov 22 04:57:22 localhost kernel: [    2.031596] ALSA device list:
+Nov 22 04:57:22 localhost kernel: [    2.031601]   #0: gua-audio
+Nov 22 04:57:22 localhost kernel: [    2.031741] dw-apb-uart 32120000.serial: forbid DMA for kernel console
+Nov 22 04:57:22 localhost kernel: [    2.037066] sdhci-dwcmshc 35030000.sdhci: MSHC_CTRL:0x0
+Nov 22 04:57:22 localhost kernel: [    2.062500] mmc2: SDHCI controller on 35030000.sdhci [35030000.sdhci] using ADMA 64-bit
+Nov 22 04:57:22 localhost kernel: [    2.066622] EXT4-fs (mmcblk0p9): INFO: recovery required on readonly filesystem
+Nov 22 04:57:22 localhost kernel: [    2.066629] EXT4-fs (mmcblk0p9): write access will be enabled during recovery
+Nov 22 04:57:22 localhost kernel: [    2.077179] mmc2: new high speed SDIO card at address 0001
+Nov 22 04:57:22 localhost kernel: [    2.109984] xhci-hcd xhci-hcd.4.auto: xHCI Host Controller
+Nov 22 04:57:22 localhost kernel: [    2.110012] xhci-hcd xhci-hcd.4.auto: new USB bus registered, assigned bus number 3
+Nov 22 04:57:22 localhost kernel: [    2.110112] xhci-hcd xhci-hcd.4.auto: USB3 root hub has no ports
+Nov 22 04:57:22 localhost kernel: [    2.110121] xhci-hcd xhci-hcd.4.auto: hcc params 0x0220fe6d hci version 0x110 quirks 0x0000008000010090
+Nov 22 04:57:22 localhost kernel: [    2.110168] xhci-hcd xhci-hcd.4.auto: irq 53, io mem 0x35300000
+Nov 22 04:57:22 localhost kernel: [    2.110832] hub 3-0:1.0: USB hub found
+Nov 22 04:57:22 localhost kernel: [    2.110862] hub 3-0:1.0: 1 port detected
+Nov 22 04:57:22 localhost kernel: [    2.163772] EXT4-fs (mmcblk0p9): orphan cleanup on readonly fs
+Nov 22 04:57:22 localhost kernel: [    2.164267] EXT4-fs (mmcblk0p9): 1 orphan inode deleted
+Nov 22 04:57:22 localhost kernel: [    2.164276] EXT4-fs (mmcblk0p9): recovery complete
+Nov 22 04:57:22 localhost kernel: [    2.167805] EXT4-fs (mmcblk0p9): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 22 04:57:22 localhost kernel: [    2.167856] VFS: Mounted root (ext4 filesystem) readonly on device 259:1.
+Nov 22 04:57:22 localhost kernel: [    2.168297] devtmpfs: mounted
+Nov 22 04:57:22 localhost kernel: [    2.168805] Freeing unused kernel memory: 2176K
+Nov 22 04:57:22 localhost kernel: [    2.168919] Run /sbin/init as init process
+Nov 22 04:57:22 localhost kernel: [    2.168925]   with arguments:
+Nov 22 04:57:22 localhost kernel: [    2.168930]     /sbin/init
+Nov 22 04:57:22 localhost kernel: [    2.168935]   with environment:
+Nov 22 04:57:22 localhost kernel: [    2.168941]     HOME=/
+Nov 22 04:57:22 localhost kernel: [    2.168946]     TERM=linux
+Nov 22 04:57:22 localhost kernel: [    4.475758] EXT4-fs (mmcblk0p9): re-mounted. Quota mode: disabled.
+Nov 22 04:57:22 localhost kernel: [    5.422686] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 0 done
+Nov 22 04:57:22 localhost kernel: [    5.422707] VIN_NODE soc:cam:vin_node@0: [FRT:D] hobot_vin_node_probe(0)
+Nov 22 04:57:22 localhost kernel: [    5.443464] hb_jpu 3b010000.jpu: Adding to iommu group 7
+Nov 22 04:57:22 localhost kernel: [    5.444524] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 1 done
+Nov 22 04:57:22 localhost kernel: [    5.444544] VIN_NODE soc:cam:vin_node@1: [FRT:D] hobot_vin_node_probe(0)
+Nov 22 04:57:22 localhost kernel: [    5.445104] hb_vpu 3b000000.vpu: Adding to iommu group 6
+Nov 22 04:57:22 localhost kernel: [    5.445522] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 2 done
+Nov 22 04:57:22 localhost kernel: [    5.445539] VIN_NODE soc:cam:vin_node@2: [FRT:D] hobot_vin_node_probe(0)
+Nov 22 04:57:22 localhost kernel: [    5.445727] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 3 done
+Nov 22 04:57:22 localhost kernel: [    5.445736] VIN_NODE soc:cam:vin_node@3: [FRT:D] hobot_vin_node_probe(0)
+Nov 22 04:57:22 localhost kernel: [    5.450932] nano2d 3c010000.gc820: Adding to iommu group 9
+Nov 22 04:57:22 localhost kernel: [    5.451041] nano2d 3c010000.gc820: clk name: pclk, freq = 200000000.
+Nov 22 04:57:22 localhost kernel: [    5.451057] nano2d 3c010000.gc820: clk name: aclk, freq = 750000000.
+Nov 22 04:57:22 localhost kernel: [    5.451067] nano2d 3c010000.gc820: clk name: clk1x, freq = 750000000.
+Nov 22 04:57:22 localhost kernel: [    5.453696] gpu_parse_dt: register base(3c010000), irq(60).
+Nov 22 04:57:22 localhost kernel: [    5.453928] aicbsp_init
+Nov 22 04:57:22 localhost kernel: [    5.453940] RELEASE_DATE:2025_0410_b99ca8b6
+Nov 22 04:57:22 localhost kernel: [    5.453943] aicbsp_resv_mem_init 
+Nov 22 04:57:22 localhost kernel: [    5.455667] start to add opp table.
+Nov 22 04:57:22 localhost kernel: [    5.455695] finish to add opp table 4.
+Nov 22 04:57:22 localhost kernel: [    5.455774] Galcore version 6.4.14.9.674707
+Nov 22 04:57:22 localhost kernel: [    5.460774] create /dev/nano2d device.
+Nov 22 04:57:22 localhost kernel: [    5.460875] Insmod parameters:
+Nov 22 04:57:22 localhost kernel: [    5.460879] device[0] core[0]
+Nov 22 04:57:22 localhost kernel: [    5.460883]   irq line:60
+Nov 22 04:57:22 localhost kernel: [    5.460886]   register base:0x3c010000
+Nov 22 04:57:22 localhost kernel: [    5.460889]   register size:0x10000
+Nov 22 04:57:22 localhost kernel: [    5.460892] 
+Nov 22 04:57:22 localhost kernel: [    5.460894]   iommu enabled
+Nov 22 04:57:22 localhost kernel: [    5.460897]   contiguous base:0x0
+Nov 22 04:57:22 localhost kernel: [    5.460899]   contiguous size:0x0
+Nov 22 04:57:22 localhost kernel: [    5.460902]   command contiguous base:0x0
+Nov 22 04:57:22 localhost kernel: [    5.460905]   command contiguous size:0x0
+Nov 22 04:57:22 localhost kernel: [    5.460907] 
+Nov 22 04:57:22 localhost kernel: [    5.461849] hobot_vpu_dev: [VPUDRV]vpu_init_system_mem:7158: vpu IO memory resource: physical base addr = 0x3b000000,virtual base addr = ffff80000a450000
+Nov 22 04:57:22 localhost kernel: [    5.462456] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit1 is used
+Nov 22 04:57:22 localhost kernel: [    5.465129] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit2 is used
+Nov 22 04:57:22 localhost kernel: [    5.466370] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit3 is used
+Nov 22 04:57:22 localhost kernel: [    5.466718] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit4 is used
+Nov 22 04:57:22 localhost kernel: [    5.469053] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit5 is used
+Nov 22 04:57:22 localhost kernel: [    5.470653] nano2D: after probe, allocate_count = 28
+Nov 22 04:57:22 localhost kernel: [    5.476734] [HOBOT_LPWM-0] (lpwm_platform_init): ctrl_reg = 0
+Nov 22 04:57:22 localhost kernel: [    5.483996] [VIN_NODE]:[L610]type 3 vin_register_device_node done
+Nov 22 04:57:22 localhost kernel: [    5.484013] [HOBOT_LPWM-0] (hobot_lpwm_probe): Probe success
+Nov 22 04:57:22 localhost kernel: [    5.525811] [CODEC_NODE]:[L647]hobot_codec_node_probe start
+Nov 22 04:57:22 localhost kernel: [    5.525851] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit6 is used
+Nov 22 04:57:22 localhost kernel: [    5.527953] [INFO][HOBOT_OSD](osd_probe) done
+Nov 22 04:57:22 localhost kernel: [    5.528178] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit7 is used
+Nov 22 04:57:22 localhost kernel: [    5.552372] [CODEC_NODE]:[L670][FRT:D] hobot_codec_node_probe(0)
+Nov 22 04:57:22 localhost kernel: [    5.727986] dwc-eth-dwmac 35010000.gmac-tsn eth0: Register MEM_TYPE_PAGE_POOL RxQ-0
+Nov 22 04:57:22 localhost kernel: [    5.728467] dwc-eth-dwmac 35010000.gmac-tsn eth0: Register MEM_TYPE_PAGE_POOL RxQ-1
+Nov 22 04:57:22 localhost kernel: [    5.728904] dwc-eth-dwmac 35010000.gmac-tsn eth0: Register MEM_TYPE_PAGE_POOL RxQ-2
+Nov 22 04:57:22 localhost kernel: [    5.729343] dwc-eth-dwmac 35010000.gmac-tsn eth0: Register MEM_TYPE_PAGE_POOL RxQ-3
+Nov 22 04:57:22 localhost kernel: [    5.730449] dwc-eth-dwmac 35010000.gmac-tsn eth0: validation of  with support 00000000,00000000,00006000 and advertisement 00000000,00000000,00000000 failed: -EINVAL
+Nov 22 04:57:22 localhost kernel: [    5.731387] dwc-eth-dwmac 35010000.gmac-tsn eth0: __stmmac_open: Cannot attach to PHY (error: -22)
+Nov 22 04:57:22 localhost kernel: [    6.826488] vs-cam-pulse 3d0b008c.cam_pulse: cam_pulse_probe successfully done!
+Nov 22 04:57:22 localhost kernel: [    6.859294] vin vcon0: self rx0 attr 0x521 bus 7 probe
+Nov 22 04:57:22 localhost kernel: [    6.859470] vin vcon1: self rx1 attr 0x521 bus 4 probe
+Nov 22 04:57:22 localhost kernel: [    6.859561] vin vcon2: self rx2 attr 0x5a1 bus 7 probe
+Nov 22 04:57:22 localhost kernel: [    6.860018] vin vcon3: self rx3 attr 0x521 bus 7 probe
+Nov 22 04:57:22 localhost kernel: [    6.860388] [VIN_NODE]:[L610]type 2 vin_register_device_node done
+Nov 22 04:57:22 localhost kernel: [    6.860396] vin vcon: init 4 vcon done
+Nov 22 04:57:22 localhost kernel: [    6.877702] hobot-sif 3d020000.sif: Adding to iommu group 1
+Nov 22 04:57:22 localhost kernel: [    6.878035] [VIN_NODE]:[L845]hw_id 0 vin_device_node_init done
+Nov 22 04:57:22 localhost kernel: [    6.878063] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit8 is used
+Nov 22 04:57:22 localhost kernel: [    6.878193] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit9 is used
+Nov 22 04:57:22 localhost kernel: [    6.878269] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit10 is used
+Nov 22 04:57:22 localhost kernel: [    6.878365] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit11 is used
+Nov 22 04:57:22 localhost kernel: [    6.878433] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 0 done
+Nov 22 04:57:22 localhost kernel: [    6.878484] hobot-sif 3d020000.sif: [FRT:D] cim_probe(0)
+Nov 22 04:57:22 localhost kernel: [    6.878492] [CIM]:[L1014]cim_probe hw_id 0 done, time used: 742us
+Nov 22 04:57:22 localhost kernel: [    6.878686] hobot-sif 3d030000.sif: Adding to iommu group 1
+Nov 22 04:57:22 localhost kernel: [    6.878980] [VIN_NODE]:[L845]hw_id 1 vin_device_node_init done
+Nov 22 04:57:22 localhost kernel: [    6.879004] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit12 is used
+Nov 22 04:57:22 localhost kernel: [    6.881075] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit13 is used
+Nov 22 04:57:22 localhost kernel: [    6.881200] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit14 is used
+Nov 22 04:57:22 localhost kernel: [    6.881272] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit15 is used
+Nov 22 04:57:22 localhost kernel: [    6.881447] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 1 done
+Nov 22 04:57:22 localhost kernel: [    6.881545] hobot-sif 3d030000.sif: [FRT:D] cim_probe(0)
+Nov 22 04:57:22 localhost kernel: [    6.881553] [CIM]:[L1014]cim_probe hw_id 1 done, time used: 2843us
+Nov 22 04:57:22 localhost kernel: [    6.882179] hobot-sif 3d040000.sif: Adding to iommu group 1
+Nov 22 04:57:22 localhost kernel: [    6.886507] [VIN_NODE]:[L845]hw_id 2 vin_device_node_init done
+Nov 22 04:57:22 localhost kernel: [    6.886543] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit16 is used
+Nov 22 04:57:22 localhost kernel: [    6.886709] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit17 is used
+Nov 22 04:57:22 localhost kernel: [    6.886795] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit18 is used
+Nov 22 04:57:22 localhost kernel: [    6.886896] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit19 is used
+Nov 22 04:57:22 localhost kernel: [    6.886990] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 2 done
+Nov 22 04:57:22 localhost kernel: [    6.887042] hobot-sif 3d040000.sif: [FRT:D] cim_probe(0)
+Nov 22 04:57:22 localhost kernel: [    6.887050] [CIM]:[L1014]cim_probe hw_id 2 done, time used: 786us
+Nov 22 04:57:22 localhost kernel: [    6.887273] hobot-sif 3d050000.sif: Adding to iommu group 1
+Nov 22 04:57:22 localhost kernel: [    6.887545] [VIN_NODE]:[L845]hw_id 3 vin_device_node_init done
+Nov 22 04:57:22 localhost kernel: [    6.887571] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit20 is used
+Nov 22 04:57:22 localhost kernel: [    6.887751] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit21 is used
+Nov 22 04:57:22 localhost kernel: [    6.888204] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit22 is used
+Nov 22 04:57:22 localhost kernel: [    6.891941] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit23 is used
+Nov 22 04:57:22 localhost kernel: [    6.892230] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 3 done
+Nov 22 04:57:22 localhost kernel: [    6.892319] hobot-sif 3d050000.sif: [FRT:D] cim_probe(0)
+Nov 22 04:57:22 localhost kernel: [    6.892327] [CIM]:[L1014]cim_probe hw_id 3 done, time used: 5027us
+Nov 22 04:57:22 localhost kernel: [    6.892739] [VIN_NODE]:[L610]type 0 vin_register_device_node done
+Nov 22 04:57:22 localhost kernel: [    6.928069] vin sensor: init 24 sensor v1.0 done
+Nov 22 04:57:22 localhost kernel: [    6.941426] vin mipi0: probe with x5sys done
+Nov 22 04:57:22 localhost kernel: [    6.951862] CAM_SUBSYS soc:cam:cam_sys@0: [FRT:D] camsys_probe(0)
+Nov 22 04:57:22 localhost kernel: [    6.963288] vin mipi0: snrclk set disable
+Nov 22 04:57:22 localhost kernel: [    6.963322] vin mipi0: ver 0154 port0(0:0)
+Nov 22 04:57:22 localhost kernel: [    6.963815] vin mipi1: snrclk set disable
+Nov 22 04:57:22 localhost kernel: [    6.963843] vin mipi1: ver 0154 port1(0:1)
+Nov 22 04:57:22 localhost kernel: [    6.964165] vin mipi2: snrclk set disable
+Nov 22 04:57:22 localhost kernel: [    6.964189] vin mipi2: ver 0154 port2(1:0)
+Nov 22 04:57:22 localhost kernel: [    6.964570] vin mipi3: snrclk set disable
+Nov 22 04:57:22 localhost kernel: [    6.964620] vin mipi3: ver 0154 port3(1:1)
+Nov 22 04:57:22 localhost kernel: [    6.965030] [VIN_NODE]:[L610]type 1 vin_register_device_node done
+Nov 22 04:57:22 localhost kernel: [    6.965040] vin mipi-tx: dev0 dummy setcb
+Nov 22 04:57:22 localhost kernel: [    6.965047] vin mipi-tx: dev1 dummy setcb
+Nov 22 04:57:22 localhost kernel: [    6.965050] vin mipi: init 4 rx 2 tx done
+Nov 22 04:57:22 localhost kernel: [    6.975122] vin mipi: phy debug probed
+Nov 22 04:57:22 localhost kernel: [    6.975301] vin mipi0: debug probed
+Nov 22 04:57:22 localhost kernel: [    6.975452] vin mipi1: debug probed
+Nov 22 04:57:22 localhost kernel: [    6.975611] vin mipi2: debug probed
+Nov 22 04:57:22 localhost kernel: [    6.975861] vin mipi3: debug probed
+Nov 22 04:57:22 localhost kernel: [    6.989220] vs-isp 3d000000.isp: Adding to iommu group 8
+Nov 22 04:57:22 localhost kernel: [    6.990276] vs-isp 3d000000.isp: assigned reserved memory node linux,cma@88000000
+Nov 22 04:57:22 localhost kernel: [    6.990315] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit24 is used
+Nov 22 04:57:22 localhost kernel: [    6.990533] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit25 is used
+Nov 22 04:57:22 localhost kernel: [    6.991558] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit26 is used
+Nov 22 04:57:22 localhost kernel: [    6.991735] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit27 is used
+Nov 22 04:57:22 localhost kernel: [    6.991859] vs-isp 3d000000.isp: VS ISP driver (native) probed done, time used: 2573us
+Nov 22 04:57:22 localhost kernel: [    7.003958] vs-vse 3d010000.vse: Adding to iommu group 0
+Nov 22 04:57:22 localhost kernel: [    7.004256] vs-vse 3d010000.vse: cannot get reset control (err=-6)
+Nov 22 04:57:22 localhost kernel: [    7.004479] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit28 is used
+Nov 22 04:57:22 localhost kernel: [    7.004624] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit29 is used
+Nov 22 04:57:22 localhost kernel: [    7.004729] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit30 is used
+Nov 22 04:57:22 localhost kernel: [    7.004810] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit31 is used
+Nov 22 04:57:22 localhost kernel: [    7.006063] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit0 is used
+Nov 22 04:57:22 localhost kernel: [    7.006207] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit1 is used
+Nov 22 04:57:22 localhost kernel: [    7.006303] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit2 is used
+Nov 22 04:57:22 localhost kernel: [    7.006429] vs-vse 3d010000.vse: VS VSE driver (native) probed done, time used: 2422us
+Nov 22 04:57:22 localhost kernel: [    7.018082] vin deserial: init 6 deserial v1.0 done
+Nov 22 04:57:22 localhost kernel: [    7.028170] HOBOT GDC 3d0c0000.gdc: Adding to iommu group 2
+Nov 22 04:57:22 localhost kernel: [    7.028364] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit3 is used
+Nov 22 04:57:22 localhost kernel: [    7.028497] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit4 is used
+Nov 22 04:57:22 localhost kernel: [    7.028625] HOBOT GDC 3d0c0000.gdc: [FRT:D] hobot_gdc_probe(0)
+Nov 22 04:57:22 localhost kernel: [    7.038190] [ISI_Sensor]:isi_sensor_init end
+Nov 22 04:57:22 localhost kernel: [    7.068312] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+Nov 22 04:57:22 localhost kernel: [    7.077901] cfg80211: Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+Nov 22 04:57:22 localhost kernel: [    7.078534] cfg80211: Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+Nov 22 04:57:22 localhost kernel: [    7.079606] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+Nov 22 04:57:22 localhost kernel: [    7.079653] platform regulatory.0: Falling back to sysfs fallback for: regulatory.db
+Nov 22 04:57:22 localhost kernel: [    7.081224] cfg80211: failed to load regulatory.db
+Nov 22 04:57:22 localhost kernel: [    7.217165] 8852bs: module is from the staging directory, the quality is unknown, you have been warned.
+Nov 22 04:57:22 localhost kernel: [    7.293758] Bluetooth: Core ver 2.22
+Nov 22 04:57:22 localhost kernel: [    7.293866] NET: Registered PF_BLUETOOTH protocol family
+Nov 22 04:57:22 localhost kernel: [    7.293871] Bluetooth: HCI device and connection manager initialized
+Nov 22 04:57:22 localhost kernel: [    7.293886] Bluetooth: HCI socket layer initialized
+Nov 22 04:57:22 localhost kernel: [    7.293893] Bluetooth: L2CAP socket layer initialized
+Nov 22 04:57:22 localhost kernel: [    7.293919] Bluetooth: SCO socket layer initialized
+Nov 22 04:57:22 localhost kernel: [    7.303962] Bluetooth: HCI UART driver ver 2.3
+Nov 22 04:57:22 localhost kernel: [    7.303978] Bluetooth: HCI UART protocol H4 registered
+Nov 22 04:57:22 localhost kernel: [    7.304037] Bluetooth: HCI UART protocol Three-wire (H5) registered
+Nov 22 04:57:22 localhost kernel: [    7.327571] bpu-core 3a000000.bpu: Adding to iommu group 10
+Nov 22 04:57:22 localhost kernel: [    7.327798] bpu-core 3a000000.bpu: Can't get bpu power delay, use default
+Nov 22 04:57:22 localhost kernel: [    7.333498] bpu_hw_io_x5: loading out-of-tree module taints kernel.
+Nov 22 04:57:22 localhost kernel: [    7.333516] bpu_hw_io_x5: module license 'Proprietary' taints kernel.
+Nov 22 04:57:22 localhost kernel: [    7.333520] Disabling lock debugging due to kernel taint
+Nov 22 04:57:22 localhost kernel: [    7.333954] bpu-core: hw-io: git commit: 42566cb
+Nov 22 04:57:22 localhost kernel: [    7.349580] ** HUGE-IC WLAN Card Driver(fmac) v2.2.1-35256
+Nov 22 04:57:22 localhost kernel: [    7.349595] hgic_usb_init:430::Enter, max_pkt_len = 2560
+Nov 22 04:57:22 localhost kernel: [    7.349725] usbcore: registered new interface driver hgicf
+Nov 22 04:57:22 localhost kernel: [    7.349732] hgic_usb_init:439::Leave
+Nov 22 04:57:22 localhost kernel: [    7.349736] hgic_sdio_init:1031::Enter, max_pkt_len = 8192
+Nov 22 04:57:22 localhost kernel: [    7.349957] hgic_sdio_probe:874::Enter, func->num:1, devid:4002
+Nov 22 04:57:22 localhost kernel: [    7.349974] hgic_sdio_probe:890::new sdio card: vendor:a012, id:4002
+Nov 22 04:57:22 localhost kernel: [    7.349980] hgicf_core_probe:1063::qc_mode=0, no_bootdl=0, if_agg=0, txq_size=1024
+Nov 22 04:57:22 localhost kernel: [    7.349999] hgic_ota_init:78::Enter ...
+Nov 22 04:57:22 localhost kernel: [    7.350004] hgic_ota_init:85::Leave ...
+Nov 22 04:57:22 localhost kernel: [    7.350007] hgic_bootdl_init:47::Enter ...
+Nov 22 04:57:22 localhost kernel: [    7.350011] hgic_bootdl_init:53::Leave ...each packet len:32704
+Nov 22 04:57:22 localhost kernel: [    7.350018] hgicf_core_probe:1108::ok
+Nov 22 04:57:22 localhost kernel: [    7.350021] hgic_sdio_enable:843::Enter
+Nov 22 04:57:22 localhost kernel: [    7.350131] hgic_sdio_enable:862::ok
+Nov 22 04:57:22 localhost kernel: [    7.350150] hgicf_download_fw:783::Enter
+Nov 22 04:57:22 localhost kernel: [    7.350168] hgic_sdio_probe:934::ok
+Nov 22 04:57:22 localhost kernel: [    7.350259] hgic_sdio_init:1037::Leave
+Nov 22 04:57:22 localhost kernel: [    7.350264] leave hgicf_init
+Nov 22 04:57:22 localhost kernel: [    7.351012] enter hgic_bootdl_download
+Nov 22 04:57:22 localhost kernel: [    7.353944] hgic_get_fw_dl_addr:150::hgic_get_fw_dl_addr:Check Para:download addr:20001000
+Nov 22 04:57:22 localhost kernel: [    7.353967] hgic_get_fw_aes_en:114::hgic_get_fw_aes_en:Check Para:aes_en:0
+Nov 22 04:57:22 localhost kernel: [    7.353973] hgic_get_fw_crc_en:132::hgic_get_fw_crc_en:Check Para:crc_en:1
+Nov 22 04:57:22 localhost kernel: [    7.353977] hgic_get_fw_local_crc32:204::hgic_get_fw_local_crc32:Check Para:local crc:0
+Nov 22 04:57:22 localhost kernel: [    7.353983] hgic_get_fw_code_offset:186::hgic_get_fw_code_offset:Check Para:code offset:8192
+Nov 22 04:57:22 localhost kernel: [    7.353988] hgic_bootdl_parse_fw:190::firmware hdr len  : 8192
+Nov 22 04:57:22 localhost kernel: [    7.353992] hgic_bootdl_parse_fw:191::firmware run addr : 20001000
+Nov 22 04:57:22 localhost kernel: [    7.353996] hgic_bootdl_parse_fw:192::firmware size     : 351248
+Nov 22 04:57:22 localhost kernel: [    7.354000] hgic_bootdl_parse_fw:193::firmware aes_en:0,crc_en:1
+Nov 22 04:57:22 localhost kernel: [    7.356186] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.358274] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.360360] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.362488] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.364643] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.366726] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.368796] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.370869] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.372971] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.375063] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.376798] hgic_bootdl_send_fw:216::Send fw data success!
+Nov 22 04:57:22 localhost kernel: [    7.377770] asoc-duplex-host-card snd0: asoc_simple_probe test es8311 end
+Nov 22 04:57:22 localhost kernel: [    7.385985] hgic_bootdl_download:425::Cmd run success!
+Nov 22 04:57:22 localhost kernel: [    7.386004] hgic_bootdl_download:429::Release boot download firmware...
+Nov 22 04:57:22 localhost kernel: [    7.386059] leave hgic_bootdl_download
+Nov 22 04:57:22 localhost kernel: [    7.429874] enter hgic_sdio_reinit_card
+Nov 22 04:57:22 localhost kernel: [    7.472585] leave hgic_sdio_reinit_card
+Nov 22 04:57:22 localhost kernel: [    7.494952] hgic fw info:1.6.4.5, svn version:36364, 1e:9e:14:96:a8:20, smt_dat:124111319
+Nov 22 04:57:22 localhost kernel: [    7.494978] hgicf_create_iface:584::Enter
+Nov 22 04:57:22 localhost kernel: [    7.495385] hgicf_create_procfs:267::enter
+Nov 22 04:57:22 localhost kernel: [    7.495412] hgicf_create_procfs:294::leave
+Nov 22 04:57:22 localhost kernel: [    7.496274] hgicf_load_config:117::load conf file: /etc/hgicf.conf
+Nov 22 04:57:22 localhost kernel: [    7.498234] hgicf_load_config:132::param: [bss_bw=4]
+Nov 22 04:57:22 localhost kernel: [    7.502608] hgicf_load_config:132::param: [chan_list=9060,9100,9140,9180,9220]
+Nov 22 04:57:22 localhost kernel: [    7.514712] hgicf_load_config:132::param: [country_code=]
+Nov 22 04:57:22 localhost kernel: [    7.514739] hgicf_load_config:136::invalid param:[country_code=]
+Nov 22 04:57:22 localhost kernel: [    7.514744] hgicf_load_config:132::param: [freq_range=]
+Nov 22 04:57:22 localhost kernel: [    7.514748] hgicf_load_config:136::invalid param:[freq_range=]
+Nov 22 04:57:22 localhost kernel: [    7.514752] hgicf_load_config:132::param: [key_mgmt=WPA-PSK]
+Nov 22 04:57:22 localhost kernel: [    7.518238] hgicf_load_config:132::param: [mode=sta]
+Nov 22 04:57:22 localhost kernel: [    7.521382] hgicf_load_config:132::param: [ssid=CS1P1251US0006200]
+Nov 22 04:57:22 localhost kernel: [    7.523937] hg0: Current addr:  1e 9e 14 96 a8 20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Nov 22 04:57:22 localhost kernel: [    7.523960] hg0: Expected addr: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Nov 22 04:57:22 localhost kernel: [    7.523965] ------------[ cut here ]------------
+Nov 22 04:57:22 localhost kernel: [    7.523968] netdevice: hg0: Incorrect netdev->dev_addr
+Nov 22 04:57:22 localhost kernel: [    7.523996] WARNING: CPU: 3 PID: 275 at net/core/dev_addr_lists.c:519 dev_addr_check+0x94/0x140
+Nov 22 04:57:22 localhost kernel: [    7.524016] Modules linked in: snd_soc_hobot_sound_duplex_host snd_soc_simple_card_utils designware_i2s hgicf bpu_hw_io_x5(PO) bpu_cores bpu_framework hci_uart btrtl bluetooth 8852bs(C) cfg80211 rfkill hobot_isi_sensor hobot_gdc hobot_deserial vs_vse_nat vs_isp_nat hobot_mipidbg hobot_mipicsi hobot_camsys hobot_mipiphy hobot_sensor vs_sif_nat vs_ops_nat hobot_vin_vcon vs_csi_wrapper vs_cam_pulse vs_cam_ctrl vs_isc hobot_codec_vnode hobot_osd vs_dw_crc hobot_lpwm galcore aic8800_bsp vio_n2d hobot_jpu hobot_vpu hobot_vin_vnode hobot_vio_common
+Nov 22 04:57:22 localhost kernel: [    7.524133] CPU: 3 PID: 275 Comm: systemd-network Tainted: P        WC O       6.1.83-DR-PL5.2_V1.1.1 #11
+Nov 22 04:57:22 localhost kernel: [    7.524141] Hardware name: D-Robotics X5 EVB LP4 1_B board (DT)
+Nov 22 04:57:22 localhost kernel: [    7.524145] pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+Nov 22 04:57:22 localhost kernel: [    7.524152] pc : dev_addr_check+0x94/0x140
+Nov 22 04:57:22 localhost kernel: [    7.524159] lr : dev_addr_check+0x94/0x140
+Nov 22 04:57:22 localhost kernel: [    7.524165] sp : ffff80001120b560
+Nov 22 04:57:22 localhost kernel: [    7.524168] x29: ffff80001120b560 x28: ffff000080ec0dc0 x27: ffff8000094fe500
+Nov 22 04:57:22 localhost kernel: [    7.524180] x26: ffff80001120b818 x25: 0000000000000001 x24: 0000000000000000
+Nov 22 04:57:22 localhost kernel: [    7.524190] x23: ffff000081a28238 x22: 0000000000001002 x21: ffff8000011ec168
+Nov 22 04:57:22 localhost kernel: [    7.524201] x20: ffff000081a28000 x19: ffff000081a28000 x18: 0000000000000038
+Nov 22 04:57:22 localhost kernel: [    7.524211] x17: 3030203030203030 x16: 2030302030302030 x15: fffffffffffee990
+Nov 22 04:57:22 localhost kernel: [    7.524222] x14: 3030203030203030 x13: ffff8000090d9eb0 x12: 0000000000000a32
+Nov 22 04:57:22 localhost kernel: [    7.524232] x11: 0000000000000366 x10: ffff800009131eb0 x9 : ffff8000090d9eb0
+Nov 22 04:57:22 localhost kernel: [    7.524242] x8 : 00000000ffffefff x7 : ffff800009131eb0 x6 : 0000000000000000
+Nov 22 04:57:22 localhost kernel: [    7.524252] x5 : ffff0000ff6f7aa0 x4 : 0000000000000000 x3 : ffff8000f67be000
+Nov 22 04:57:22 localhost kernel: [    7.524262] x2 : 0000000000000000 x1 : 0000000000000000 x0 : ffff000080ec0dc0
+Nov 22 04:57:22 localhost kernel: [    7.524273] Call trace:
+Nov 22 04:57:22 localhost kernel: [    7.524277]  dev_addr_check+0x94/0x140
+Nov 22 04:57:22 localhost kernel: [    7.524285]  __dev_open+0x40/0x1dc
+Nov 22 04:57:22 localhost kernel: [    7.524290]  __dev_change_flags+0x190/0x20c
+Nov 22 04:57:22 localhost kernel: [    7.524297]  dev_change_flags+0x24/0x64
+Nov 22 04:57:22 localhost kernel: [    7.524302]  do_setlink+0x210/0xe50
+Nov 22 04:57:22 localhost kernel: [    7.524309]  rtnl_setlink+0xe4/0x180
+Nov 22 04:57:22 localhost kernel: [    7.524314]  rtnetlink_rcv_msg+0x12c/0x390
+Nov 22 04:57:22 localhost kernel: [    7.524319]  netlink_rcv_skb+0x5c/0x130
+Nov 22 04:57:22 localhost kernel: [    7.524325]  rtnetlink_rcv+0x18/0x24
+Nov 22 04:57:22 localhost kernel: [    7.524332]  netlink_unicast+0x2e4/0x350
+Nov 22 04:57:22 localhost kernel: [    7.524337]  netlink_sendmsg+0x198/0x3f0
+Nov 22 04:57:22 localhost kernel: [    7.524342]  __sys_sendto+0x12c/0x170
+Nov 22 04:57:22 localhost kernel: [    7.524350]  __arm64_sys_sendto+0x28/0x40
+Nov 22 04:57:22 localhost kernel: [    7.524356]  invoke_syscall+0x48/0x114
+Nov 22 04:57:22 localhost kernel: [    7.524366]  el0_svc_common.constprop.0+0xd4/0xfc
+Nov 22 04:57:22 localhost kernel: [    7.524373]  do_el0_svc+0x30/0xd0
+Nov 22 04:57:22 localhost kernel: [    7.524379]  el0_svc+0x2c/0x84
+Nov 22 04:57:22 localhost kernel: [    7.524388]  el0t_64_sync_handler+0xbc/0x140
+Nov 22 04:57:22 localhost kernel: [    7.524394]  el0t_64_sync+0x18c/0x190
+Nov 22 04:57:22 localhost kernel: [    7.524400] ---[ end trace 0000000000000000 ]---
+Nov 22 04:57:22 localhost kernel: [    7.527975] hgicf_load_config:132::param: [tx_mcs=255]
+Nov 22 04:57:22 localhost kernel: [    7.540539] hgicf_load_config:132::param: [wpa_psk=baa58569a9edd7c3a55e446bc658ef76a7173d023d256786832474d737756a11]
+Nov 22 04:57:22 localhost kernel: [    7.551886] hgicf_delay_init:877::Leave, ret=28, soft_fc=1
+Nov 22 04:57:23 localhost kernel: [    8.845220] EXT4-fs (mmcblk0p10): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 22 04:57:23 localhost kernel: [    8.853900] EXT4-fs (mmcblk0p11): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 22 04:57:23 localhost kernel: [    8.855385] file system registered
+Nov 22 04:57:23 localhost kernel: [    8.857265] EXT4-fs (mmcblk0p13): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 22 04:57:23 localhost kernel: [    8.908916] read descriptors
+Nov 22 04:57:23 localhost kernel: [    8.908938] read strings
+Nov 22 04:57:23 localhost kernel: [    8.999580] UDC core: g_comp: couldn't find an available UDC or it's busy

@@ -1,0 +1,614 @@
+# 声网 Agora RTC 推流 — 独立 Vue 3 项目完整方案
+
+本文档包含在一个全新 Vue 3 项目中实现「通过 MQTT 触发机器端推流 → Web 端用 Agora 接收视频」的所有代码，可直接复制使用。
+
+---
+
+## 1. 初始化项目 & 安装依赖
+
+```bash
+npm create vite@latest agora-viewer -- --template vue-ts
+cd agora-viewer
+npm install
+npm install agora-rtc-sdk-ng mqtt
+```
+
+---
+
+## 2. 整体时序流程
+
+```mermaid
+sequenceDiagram
+    participant Web as Web 前端
+    participant MQTT as MQTT Broker
+    participant Robot as 机器人端
+    participant Agora as Agora RTC 服务
+
+    Note over Web: 用户填写表单 → 点击"连接MQTT"
+    Web->>MQTT: mqtt.connect(brokerUrl, {username, password})
+    MQTT-->>Web: 连接成功，订阅 respond/status_report
+
+    Note over Web: 用户点击"开启视频"
+    Web->>MQTT: 发布 mow_enable_remote_rtsp
+    MQTT->>Robot: 转发指令
+    Robot->>Agora: 以 SN 为频道名加入并推流
+    Robot->>MQTT: 返回 respond (success=true)
+    MQTT->>Web: 收到 respond
+
+    Web->>Agora: createClient → join(appid, SN频道)
+    Agora-->>Web: user-published 事件
+    Web->>Agora: subscribe → videoTrack.play(容器ID)
+    Note over Web: 视频显示在页面容器中
+```
+
+---
+
+## 3. 文件结构
+
+```
+src/
+├── utils/
+│   └── mqttClient.ts          ← MQTT 工具类
+├── composables/
+│   └── useAgoraRTC.ts         ← Agora RTC 逻辑封装
+├── App.vue                    ← 主页面（表单 + 视频容器）
+└── main.ts
+```
+
+---
+
+## 4. MQTT 工具类 — [src/utils/mqttClient.ts](file:///home/bestmow/web/yj-next-code/yj-ui-admin/src/utils/mqttClient.ts)
+
+```typescript
+import mqtt, {
+  type IClientOptions,
+  type IClientPublishOptions,
+  type MqttClient as IMqttClient
+} from 'mqtt'
+
+export type MessageCallback = (topic: string, message: string) => void
+
+export interface MqttConnectParams {
+  brokerUrl: string       // 例如 wss://mqtt-test.yjserver.com:8084/mqtt
+  clientId: string
+  username: string
+  password: string
+  keepalive?: number
+  clean?: boolean
+  reconnectPeriod?: number
+}
+
+class MqttClient {
+  private client: IMqttClient | null = null
+  private brokerURL: string = ''
+  private options: IClientOptions = {}
+
+  /**
+   * 使用外部传入的参数初始化
+   */
+  init(params: MqttConnectParams) {
+    this.brokerURL = params.brokerUrl
+    this.options = {
+      clientId: params.clientId,
+      username: params.username,
+      password: params.password,
+      keepalive: params.keepalive ?? 60,
+      reconnectPeriod: params.reconnectPeriod ?? 4000,
+      clean: params.clean ?? true,
+    }
+  }
+
+  connect(): string {
+    if (!this.client) {
+      this.client = mqtt.connect(this.brokerURL, this.options)
+
+      this.client.on('connect', () => console.log('MQTT Connected'))
+      this.client.on('reconnect', () => console.log('MQTT Reconnecting...'))
+      this.client.on('close', () => console.log('MQTT Connection Closed'))
+      this.client.on('error', (error) => console.error('MQTT Error:', error))
+
+      return 'connect'
+    }
+    return 'connected'
+  }
+
+  isConnect(): boolean {
+    return !!(this.client && this.client.connected)
+  }
+
+  disconnect(): string {
+    if (this.client && this.client.connected) {
+      this.client.end(() => {
+        this.client = null
+        console.log('MQTT Disconnected')
+      })
+      return 'MQTT Disconnected'
+    }
+    return 'MQTT Not Connected'
+  }
+
+  subscribe(topics: string | string[], callback: MessageCallback): void {
+    if (!this.client) return
+    const topicList = Array.isArray(topics) ? topics : [topics]
+
+    this.client.subscribe(topicList, (err) => {
+      if (!err) console.log(`Subscribed: ${topicList.join(', ')}`)
+      else console.error(`Subscribe failed:`, err)
+    })
+
+    this.client.on('message', (receivedTopic, message) => {
+      if (topicList.includes(receivedTopic) && typeof callback === 'function') {
+        callback(receivedTopic, message.toString())
+      }
+    })
+  }
+
+  publish(topic: string, message: string): string {
+    if (!this.client) return 'MQTT Not Connected'
+    const options: IClientPublishOptions = { qos: 1, retain: false }
+    this.client.publish(topic, message, options, (err) => {
+      if (err) console.error(`Publish failed:`, err)
+    })
+    return 'success'
+  }
+
+  destroy(): void {
+    if (this.client) {
+      this.client.removeAllListeners()
+      if (this.client.connected) this.client.end(true)
+      this.client = null
+    }
+  }
+}
+
+export default MqttClient
+```
+
+---
+
+## 5. Agora RTC 封装 — `src/composables/useAgoraRTC.ts`
+
+```typescript
+import AgoraRTC, { type IAgoraRTCClient } from 'agora-rtc-sdk-ng'
+
+const VIDEO_CONTAINER_ID = 'video-container'  // DOM 容器 id
+
+let agoraClient: IAgoraRTCClient | null = null
+let joined = false
+const remoteMap = new Map<number | string, any>()
+
+// ==================== 事件回调 ====================
+
+async function handleUserPublished(user: any, mediaType: string) {
+  if (!joined) return
+  await doSubscribe(user, mediaType)
+}
+
+function handleUserUnpublished(user: any) {
+  console.log('Remote user unpublished:', user.uid)
+  cleanupRemote(user.uid)
+}
+
+async function doSubscribe(user: any, mediaType: string) {
+  if (!agoraClient) return
+  const uid = user.uid
+  await agoraClient.subscribe(user, mediaType)
+
+  const rec = remoteMap.get(uid) || { user, containerId: VIDEO_CONTAINER_ID }
+
+  if (mediaType === 'video') {
+    user.videoTrack.play(rec.containerId)
+    rec.videoTrack = user.videoTrack
+  }
+  if (mediaType === 'audio') {
+    user.audioTrack.play()
+    rec.audioTrack = user.audioTrack
+  }
+  remoteMap.set(uid, rec)
+}
+
+function cleanupRemote(uid: number | string) {
+  const rec = remoteMap.get(uid)
+  if (!rec) return
+  try { rec.videoTrack?.stop() } catch {}
+  try { rec.audioTrack?.stop() } catch {}
+  remoteMap.delete(uid)
+}
+
+// ==================== 公开方法 ====================
+
+/**
+ * 创建 Agora 客户端并加入频道
+ * @param appid  - Agora App ID
+ * @param channel - 频道名 (使用设备 SN)
+ */
+export async function joinChannel(appid: string, channel: string) {
+  if (agoraClient) {
+    console.warn('Agora already connected')
+    return
+  }
+
+  agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' })
+  agoraClient.on('user-published', handleUserPublished)
+  agoraClient.on('user-unpublished', handleUserUnpublished)
+  agoraClient.on('connection-state-change', (cur, prev) => {
+    console.log(`[Agora] ${prev} => ${cur}`)
+  })
+
+  // token=null, uid=null (自动分配)
+  await agoraClient.join(appid, channel, null, null)
+  joined = true
+  console.log(`Joined Agora channel: ${channel}`)
+}
+
+/**
+ * 离开频道并清理所有资源
+ */
+export async function leaveChannel() {
+  if (!agoraClient) return
+  try {
+    joined = false
+
+    for (const [uid, rec] of remoteMap) {
+      try {
+        if (rec.videoTrack) {
+          rec.videoTrack.stop()
+          await agoraClient.unsubscribe(rec.user, 'video').catch(() => {})
+        }
+        if (rec.audioTrack) {
+          rec.audioTrack.stop()
+          await agoraClient.unsubscribe(rec.user, 'audio').catch(() => {})
+        }
+      } catch (e) {
+        console.warn('cleanup error:', uid, e)
+      }
+    }
+    remoteMap.clear()
+
+    agoraClient.off('user-published', handleUserPublished)
+    agoraClient.off('user-unpublished', handleUserUnpublished)
+    agoraClient.off('connection-state-change')
+
+    await agoraClient.leave()
+    agoraClient = null
+    console.log('Left Agora channel')
+  } catch (e) {
+    console.error('leaveChannel error:', e)
+  }
+}
+
+/**
+ * 是否已连接
+ */
+export function isAgoraConnected(): boolean {
+  return agoraClient !== null && joined
+}
+```
+
+---
+
+## 6. 主页面 — `src/App.vue`
+
+```vue
+<template>
+  <div style="max-width: 900px; margin: 0 auto; padding: 20px; font-family: sans-serif;">
+    <h2>Agora RTC 推流测试</h2>
+
+    <!-- ============ MQTT 连接表单 ============ -->
+    <fieldset style="margin-bottom: 16px;">
+      <legend>MQTT 连接配置</legend>
+      <div class="form-grid">
+        <label>协议</label>
+        <select v-model="form.protocol">
+          <option value="wss">wss://</option>
+          <option value="ws">ws://</option>
+        </select>
+
+        <label>Broker 地址</label>
+        <input v-model="form.broker" placeholder="mqtt-test.yjserver.com" />
+
+        <label>端口</label>
+        <input v-model.number="form.port" type="number" placeholder="8084" />
+
+        <label>Client ID</label>
+        <input v-model="form.clientId" />
+
+        <label>用户名</label>
+        <input v-model="form.username" placeholder="请输入用户名" />
+
+        <label>密码</label>
+        <input v-model="form.password" type="password" placeholder="请输入密码" />
+
+        <label>Keep Alive(秒)</label>
+        <input v-model.number="form.keepalive" type="number" />
+
+        <label>重连间隔(ms)</label>
+        <input v-model.number="form.reconnectPeriod" type="number" />
+      </div>
+    </fieldset>
+
+    <!-- ============ 设备 & Agora 配置 ============ -->
+    <fieldset style="margin-bottom: 16px;">
+      <legend>设备 & Agora</legend>
+      <div class="form-grid">
+        <label>设备 SN</label>
+        <input v-model="form.sn" placeholder="BM2411K2000001" />
+
+        <label>Agora App ID</label>
+        <input v-model="form.agoraAppId" placeholder="输入声网 App ID" />
+
+        <label>相机类型</label>
+        <select v-model.number="form.camera">
+          <option :value="0">单目 (K100)</option>
+          <option :value="100">三目拼接 (K200+)</option>
+        </select>
+
+        <label>分辨率等级</label>
+        <select v-model.number="form.resolution">
+          <option :value="0">640×480</option>
+          <option :value="1">480×320</option>
+          <option :value="2">320×240 (默认)</option>
+          <option :value="3">240×180</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <!-- ============ 操作按钮 ============ -->
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+      <button @click="handleConnectMqtt" :disabled="mqttConnected" style="background:#67c23a;color:#fff;">
+        {{ mqttConnected ? 'MQTT 已连接' : '连接 MQTT' }}
+      </button>
+      <button @click="handleDisconnectMqtt" :disabled="!mqttConnected" style="background:#f56c6c;color:#fff;">
+        断开 MQTT
+      </button>
+      <button @click="handleStartVideo" :disabled="!mqttConnected || videoStarted"
+              style="background:#409eff;color:#fff;">
+        开启视频
+      </button>
+      <button @click="handleStopVideo" :disabled="!videoStarted" style="background:#e6a23c;color:#fff;">
+        关闭视频
+      </button>
+    </div>
+
+    <!-- ============ 视频容器 ============ -->
+    <div id="video-container"
+         :style="{ width: form.camera === 0 ? '468px' : '1400px',
+                    height: '350px', background: '#000', position: 'relative' }">
+    </div>
+
+    <!-- ============ 日志 ============ -->
+    <fieldset style="margin-top: 16px;">
+      <legend>日志</legend>
+      <div style="height: 200px; overflow-y: auto; font-size: 12px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 8px;">
+        <div v-for="(log, i) in logs" :key="i">{{ log }}</div>
+      </div>
+    </fieldset>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onBeforeUnmount } from 'vue'
+import MqttClient from './utils/mqttClient'
+import { joinChannel, leaveChannel } from './composables/useAgoraRTC'
+
+// ==================== 表单数据 ====================
+const form = ref({
+  protocol: 'wss',
+  broker: 'mqtt-test.yjserver.com',
+  port: 8084,
+  clientId: 'mqttx_' + Math.random().toString(16).substring(2, 10),
+  username: '',
+  password: '',
+  keepalive: 60,
+  reconnectPeriod: 4000,
+  sn: '',
+  agoraAppId: '',
+  camera: 100,      // 0=单目, 100=三目拼接
+  resolution: 2,    // 分辨率等级
+})
+
+// ==================== 状态 ====================
+const mqttConnected = ref(false)
+const videoStarted = ref(false)
+const logs = ref<string[]>([])
+
+const mqttClient = new MqttClient()
+
+function addLog(msg: string) {
+  logs.value.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`)
+}
+
+// ==================== MQTT 连接 ====================
+function handleConnectMqtt() {
+  const f = form.value
+  if (!f.broker || !f.username || !f.password || !f.sn) {
+    alert('请填写 Broker 地址、用户名、密码、SN')
+    return
+  }
+
+  const brokerUrl = `${f.protocol}://${f.broker}:${f.port}/mqtt`
+
+  mqttClient.init({
+    brokerUrl,
+    clientId: f.clientId,
+    username: f.username,
+    password: f.password,
+    keepalive: f.keepalive,
+    clean: true,
+    reconnectPeriod: f.reconnectPeriod,
+  })
+
+  const result = mqttClient.connect()
+  if (result === 'connect') {
+    mqttConnected.value = true
+    addLog(`MQTT 连接中... ${brokerUrl}`)
+
+    // 订阅主题
+    const sn = f.sn
+    const subTopics = [
+      `bestmow/respond/${sn}`,
+      `bestmow/status_report/${sn}`,
+    ]
+    mqttClient.subscribe(subTopics, (topic, message) => {
+      try {
+        const json = JSON.parse(message)
+        addLog(`[${topic}] ${json.operation || 'unknown'}`)
+
+        // 机器确认开启视频 → 加入 Agora 频道
+        if (json.operation === 'mow_enable_remote_rtsp' && json.success === true) {
+          addLog('机器确认推流, 加入 Agora 频道...')
+          joinChannel(f.agoraAppId, sn)
+          videoStarted.value = true
+        }
+      } catch {
+        addLog(`[${topic}] ${message}`)
+      }
+    })
+  } else {
+    addLog('MQTT 已连接')
+  }
+}
+
+function handleDisconnectMqtt() {
+  if (videoStarted.value) handleStopVideo()
+  const result = mqttClient.disconnect()
+  mqttConnected.value = false
+  addLog(result)
+}
+
+// ==================== 视频控制 ====================
+function handleStartVideo() {
+  const f = form.value
+  if (!f.agoraAppId) {
+    alert('请填写 Agora App ID')
+    return
+  }
+
+  // 通过 MQTT 通知机器端开始推流
+  const message = {
+    msg_id: f.username,
+    operation: 'mow_enable_remote_rtsp',
+    timestamp: Date.now(),
+    payload: {
+      appid: f.agoraAppId,
+      license: '',
+      token: 'web1',
+      resolution_level: f.resolution,
+      camera: f.camera,
+    },
+  }
+
+  const topic = `bestmow/request/${f.sn}`
+  const result = mqttClient.publish(topic, JSON.stringify(message))
+  if (result === 'success') {
+    addLog(`已发送开启视频指令 → ${topic}`)
+  } else {
+    addLog(`发送失败: ${result}`)
+  }
+}
+
+async function handleStopVideo() {
+  // 1. 离开 Agora 频道
+  await leaveChannel()
+  videoStarted.value = false
+
+  // 2. 通知机器端停止推流
+  const f = form.value
+  const message = {
+    msg_id: f.username,
+    operation: 'mow_disable_remote_rtsp',
+    timestamp: Date.now(),
+    payload: { appid: '', license: '', token: 'web1' },
+  }
+  mqttClient.publish(`bestmow/request/${f.sn}`, JSON.stringify(message))
+  addLog('已关闭视频')
+}
+
+// ==================== 清理 ====================
+onBeforeUnmount(() => {
+  if (videoStarted.value) handleStopVideo()
+  mqttClient.destroy()
+})
+</script>
+
+<style>
+button {
+  padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+fieldset { border: 1px solid #ddd; border-radius: 6px; padding: 12px; }
+legend { font-weight: bold; }
+.form-grid {
+  display: grid; grid-template-columns: 120px 1fr; gap: 8px; align-items: center;
+}
+.form-grid label { text-align: right; font-size: 13px; }
+.form-grid input, .form-grid select {
+  padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;
+}
+</style>
+```
+
+---
+
+## 7. MQTT 消息协议参考
+
+### 7.1 开启视频 — 发送到 `bestmow/request/{sn}`
+
+```json
+{
+  "msg_id": "操作人标识",
+  "operation": "mow_enable_remote_rtsp",
+  "timestamp": 1710000000000,
+  "payload": {
+    "appid": "声网AppID",
+    "license": "",
+    "token": "web1",
+    "resolution_level": 2,
+    "camera": 100
+  }
+}
+```
+
+### 7.2 机器确认 — 接收自 `bestmow/respond/{sn}`
+
+```json
+{
+  "operation": "mow_enable_remote_rtsp",
+  "success": true
+}
+```
+
+> 收到 `success: true` 后才调用 `joinChannel()` 加入 Agora 频道。
+
+### 7.3 关闭视频 — 发送到 `bestmow/request/{sn}`
+
+```json
+{
+  "msg_id": "操作人标识",
+  "operation": "mow_disable_remote_rtsp",
+  "timestamp": 1710000000000,
+  "payload": { "appid": "", "license": "", "token": "web1" }
+}
+```
+
+### 7.4 Topic 汇总
+
+| Topic | 方向 | 用途 |
+|---|---|---|
+| `bestmow/request/{sn}` | Web → 机器 | 发送控制指令 |
+| `bestmow/respond/{sn}` | 机器 → Web | 机器回复结果 |
+| `bestmow/status_report/{sn}` | 机器 → Web | 实时状态上报 |
+
+---
+
+## 8. 关键设计要点
+
+| 要点 | 说明 |
+|---|---|
+| **先 MQTT 后 Agora** | 必须先通过 MQTT 通知机器推流，机器确认后再加入 Agora |
+| **SN = 频道名** | 设备 SN 同时用作 MQTT topic 后缀和 Agora 频道名 |
+| **防重复** | `agoraClient` 为 null 时才创建，`joined` 标记屏蔽离开后的残余回调 |
+| **清理顺序** | 离开时: stop tracks → unsubscribe → off events → leave → 置 null |
+| **浏览器限制** | 浏览器只能用 `ws://` 或 `wss://`，不能用 `mqtt://` 原生 TCP |
+| **分辨率** | 0=640×480, 1=480×320, 2=320×240(默认), 3=240×180 |
+| **相机类型** | 0=单目前置(K100), 100=三目拼接(K200+) |

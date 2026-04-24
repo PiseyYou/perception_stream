@@ -1,0 +1,76 @@
+{
+   "blade_working_time" : 0.0,
+   "boundary_areas" : {
+      "1000" : {
+         "area_id" : 0,
+         "final_index" : 18,
+         "finished" : false,
+         "prev_id" : -1,
+         "target_index" : 0
+      },
+      "1001" : {
+         "area_id" : 1,
+         "final_index" : 16,
+         "finished" : false,
+         "prev_id" : 0,
+         "target_index" : 0
+      },
+      "1002" : {
+         "area_id" : 2,
+         "final_index" : 15,
+         "finished" : false,
+         "prev_id" : 1,
+         "target_index" : 0
+      }
+   },
+   "cov_areas" : {
+      "0" : {
+         "area_id" : 0,
+         "final_index" : 2,
+         "finished" : false,
+         "prev_id" : 0,
+         "target_index" : 1
+      },
+      "1" : {
+         "area_id" : 1,
+         "final_index" : 14,
+         "finished" : false,
+         "prev_id" : 0,
+         "target_index" : 0
+      },
+      "2" : {
+         "area_id" : 2,
+         "final_index" : 2,
+         "finished" : false,
+         "prev_id" : 1,
+         "target_index" : 0
+      }
+   },
+   "current_status" : 2,
+   "max_covered_ratio" : 0.0,
+   "missed" : "",
+   "prev_status" : 8,
+   "start_nav_time" : 1776827122.3356271,
+   "target_area_id" : 0,
+   "target_index" : 1,
+   "target_repeat_times" : 1,
+   "task_planned_area" : 7.0399999618530273,
+   "timestamp" : "1776827267",
+   "total_covered_area" : 0.0,
+   "total_no_boundary_area" : 4.1618750000000011,
+   "ts_boundary" : 0.0,
+   "ts_follow_count" : 0,
+   "ts_follow_total_len" : 0.0,
+   "ts_follow_total_sec" : 0.0,
+   "ts_max_pitch" : 0.0,
+   "ts_max_roll" : 0.0,
+   "ts_max_single_obstacle_sec" : 58.043463486,
+   "ts_mowing" : 0.0,
+   "ts_obstacle" : 58.043463486,
+   "ts_other" : 55.358269360000001,
+   "ts_partition" : 0.0,
+   "ts_pause" : 31.551702639999998,
+   "ts_pause_count" : 2,
+   "ts_recovery" : 0.0,
+   "version" : "1.0"
+}

@@ -10,7 +10,7 @@
 
 ```
 perception_process/
-├── perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808/  # 主项目
+├── perception_streaming/       # 主项目
 │   ├── src/                    # 前端源码（Vue 3 + TypeScript）
 │   ├── robot_monitor/          # 后端服务（Python）
 │   ├── start.sh                # 一键启动脚本
@@ -24,7 +24,7 @@ perception_process/
 进入主项目目录：
 
 ```bash
-cd perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808
+cd perception_streaming
 ```
 
 查看详细的安装和使用说明：

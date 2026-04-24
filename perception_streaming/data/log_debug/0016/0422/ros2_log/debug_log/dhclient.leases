@@ -1,0 +1,143 @@
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option dhcp-lease-time 3600;
+  option routers 11.73.152.1;
+  option dhcp-message-type 5;
+  option dhcp-server-identifier 11.73.152.1;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  renew 2 2026/04/21 06:21:39;
+  rebind 2 2026/04/21 06:44:19;
+  expire 2 2026/04/21 06:51:49;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 06:19:00;
+  rebind 2 2026/04/21 06:47:32;
+  expire 2 2026/04/21 06:55:02;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 06:47:19;
+  rebind 2 2026/04/21 07:11:30;
+  expire 2 2026/04/21 07:19:00;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 07:14:45;
+  rebind 2 2026/04/21 07:39:49;
+  expire 2 2026/04/21 07:47:19;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 07:38:48;
+  rebind 2 2026/04/21 08:07:15;
+  expire 2 2026/04/21 08:14:45;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 08:07:04;
+  rebind 2 2026/04/21 08:31:18;
+  expire 2 2026/04/21 08:38:48;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 08:33:27;
+  rebind 2 2026/04/21 08:59:34;
+  expire 2 2026/04/21 09:07:04;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 09:03:11;
+  rebind 2 2026/04/21 09:25:57;
+  expire 2 2026/04/21 09:33:27;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 09:30:58;
+  rebind 2 2026/04/21 09:55:41;
+  expire 2 2026/04/21 10:03:11;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 09:58:44;
+  rebind 2 2026/04/21 10:23:28;
+  expire 2 2026/04/21 10:30:58;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.8;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 2 2026/04/21 10:25:39;
+  rebind 2 2026/04/21 10:51:14;
+  expire 2 2026/04/21 10:58:44;
+}

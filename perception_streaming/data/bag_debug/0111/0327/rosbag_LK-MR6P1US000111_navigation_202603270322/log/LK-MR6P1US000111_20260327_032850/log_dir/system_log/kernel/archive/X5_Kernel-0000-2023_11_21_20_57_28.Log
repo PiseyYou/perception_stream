@@ -1,0 +1,724 @@
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Linux version 6.1.83-DR-PL5.2_V1.0.20 (root@hfz-ubuntu) (aarch64-none-linux-gnu-gcc (Arm GNU Toolchain 11.3.Rel1) 11.3.1 20220712, GNU ld (Arm GNU Toolchain 11.3.Rel1) 2.38.20220708) #1 SMP PREEMPT Wed Apr  9 13:45:07 CST 2025
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Machine model: D-Robotics X5 EVB LP4 1_B board
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] efi: UEFI not found.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Reserved memory: created CMA memory pool at 0x0000000088000000, size 382 MiB
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] OF: reserved mem: initialized node linux,cma@88000000, compatible id shared-dma-pool
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Zone ranges:
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   DMA      [mem 0x0000000084000000-0x00000000ffffffff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   DMA32    empty
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   Normal   [mem 0x0000000100000000-0x000000017fffffff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Movable zone start for each node
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Early memory node ranges
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   node   0: [mem 0x0000000084000000-0x000000009fe7efff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   node   0: [mem 0x000000009fe7f000-0x00000000a207ffff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000]   node   0: [mem 0x00000000a2080000-0x000000017fffffff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Initmem setup node 0 [mem 0x0000000084000000-0x000000017fffffff]
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] On node 0, zone DMA: 16384 pages in unavailable ranges
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] psci: probing for conduit method from DT.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] psci: PSCIv1.1 detected in firmware.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] psci: Using standard PSCI v0.2 function IDs
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] psci: Trusted OS migration not required
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] psci: SMC Calling Convention v1.2
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] percpu: Embedded 18 pages/cpu s34280 r8192 d31256 u73728
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] pcpu-alloc: s34280 r8192 d31256 u73728 alloc=18*4096
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 [0] 4 [0] 5 [0] 6 [0] 7 
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Detected VIPT I-cache on CPU0
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] CPU features: detected: GIC system register CPU interface
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] CPU features: detected: Virtualization Host Extensions
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] CPU features: detected: Qualcomm erratum 1009, or ARM erratum 1286807, 2441009
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] alternatives: applying boot alternatives
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1016064
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Kernel command line: console=ttyS0,921600n8 root=/dev/mmcblk0p9 ro rootwait hobotboot.slot_suffix=_a hobotboot.reason=COLD_BOOT hobotboot.medium=MMC hobotboot.mode=normal hobotboot.ab_switch_reason=misc-broken hobotboot.pmic_type=single-pmic    
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] software IO TLB: area num 8.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] software IO TLB: mapped [mem 0x00000000fbfff000-0x00000000fffff000] (64MB)
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Memory: 2944064K/4128768K available (10496K kernel code, 1130K rwdata, 3940K rodata, 2112K init, 3214K bss, 793536K reserved, 391168K cma-reserved)
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=8, Nodes=1
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] rcu: Preemptible hierarchical RCU implementation.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] rcu: 	RCU event tracing is enabled.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 10 jiffies.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] GICv3: 256 SPIs implemented
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] GICv3: 0 Extended SPIs implemented
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] Root IRQ handler: gic_handle_irq
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] GICv3: GICv3 features: 16 PPIs
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000030140000
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] arch_timer: cp15 timer(s) running at 24.00MHz (phys).
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+Nov 21 20:57:21 ubuntu kernel: [    0.000000] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+Nov 21 20:57:21 ubuntu kernel: [    0.000818] Console: colour dummy device 80x25
+Nov 21 20:57:21 ubuntu kernel: [    0.000859] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=240000)
+Nov 21 20:57:21 ubuntu kernel: [    0.000868] pid_max: default: 32768 minimum: 301
+Nov 21 20:57:21 ubuntu kernel: [    0.000974] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.000989] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.002597] rcu: Hierarchical SRCU implementation.
+Nov 21 20:57:21 ubuntu kernel: [    0.002601] rcu: 	Max phase no-delay instances is 1000.
+Nov 21 20:57:21 ubuntu kernel: [    0.003311] EFI services will not be available.
+Nov 21 20:57:21 ubuntu kernel: [    0.003718] smp: Bringing up secondary CPUs ...
+Nov 21 20:57:21 ubuntu kernel: [    0.015135] Detected VIPT I-cache on CPU1
+Nov 21 20:57:21 ubuntu kernel: [    0.015227] GICv3: CPU1: found redistributor 100 region 0:0x0000000030160000
+Nov 21 20:57:21 ubuntu kernel: [    0.015260] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.026726] Detected VIPT I-cache on CPU2
+Nov 21 20:57:21 ubuntu kernel: [    0.026811] GICv3: CPU2: found redistributor 200 region 0:0x0000000030180000
+Nov 21 20:57:21 ubuntu kernel: [    0.026836] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.038264] Detected VIPT I-cache on CPU3
+Nov 21 20:57:21 ubuntu kernel: [    0.038334] GICv3: CPU3: found redistributor 300 region 0:0x00000000301a0000
+Nov 21 20:57:21 ubuntu kernel: [    0.038358] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.049776] Detected VIPT I-cache on CPU4
+Nov 21 20:57:21 ubuntu kernel: [    0.049849] GICv3: CPU4: found redistributor 400 region 0:0x00000000301c0000
+Nov 21 20:57:21 ubuntu kernel: [    0.049871] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.061286] Detected VIPT I-cache on CPU5
+Nov 21 20:57:21 ubuntu kernel: [    0.061364] GICv3: CPU5: found redistributor 500 region 0:0x00000000301e0000
+Nov 21 20:57:21 ubuntu kernel: [    0.061384] CPU5: Booted secondary processor 0x0000000500 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.072791] Detected VIPT I-cache on CPU6
+Nov 21 20:57:21 ubuntu kernel: [    0.072868] GICv3: CPU6: found redistributor 600 region 0:0x0000000030200000
+Nov 21 20:57:21 ubuntu kernel: [    0.072887] CPU6: Booted secondary processor 0x0000000600 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.084313] Detected VIPT I-cache on CPU7
+Nov 21 20:57:21 ubuntu kernel: [    0.084394] GICv3: CPU7: found redistributor 700 region 0:0x0000000030220000
+Nov 21 20:57:21 ubuntu kernel: [    0.084416] CPU7: Booted secondary processor 0x0000000700 [0x412fd050]
+Nov 21 20:57:21 ubuntu kernel: [    0.084475] smp: Brought up 1 node, 8 CPUs
+Nov 21 20:57:21 ubuntu kernel: [    0.084482] SMP: Total of 8 processors activated.
+Nov 21 20:57:21 ubuntu kernel: [    0.084486] CPU features: detected: 32-bit EL0 Support
+Nov 21 20:57:21 ubuntu kernel: [    0.084490] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
+Nov 21 20:57:21 ubuntu kernel: [    0.084494] CPU features: detected: Common not Private translations
+Nov 21 20:57:21 ubuntu kernel: [    0.084497] CPU features: detected: CRC32 instructions
+Nov 21 20:57:21 ubuntu kernel: [    0.084501] CPU features: detected: RCpc load-acquire (LDAPR)
+Nov 21 20:57:21 ubuntu kernel: [    0.084504] CPU features: detected: LSE atomic instructions
+Nov 21 20:57:21 ubuntu kernel: [    0.084508] CPU features: detected: Privileged Access Never
+Nov 21 20:57:21 ubuntu kernel: [    0.084511] CPU features: detected: RAS Extension Support
+Nov 21 20:57:21 ubuntu kernel: [    0.084516] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
+Nov 21 20:57:21 ubuntu kernel: [    0.084589] CPU: All CPU(s) started at EL2
+Nov 21 20:57:21 ubuntu kernel: [    0.084591] alternatives: applying system-wide alternatives
+Nov 21 20:57:21 ubuntu kernel: [    0.088196] devtmpfs: initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.104938] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+Nov 21 20:57:21 ubuntu kernel: [    0.104954] futex hash table entries: 2048 (order: 5, 131072 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.113551] pinctrl core: initialized pinctrl subsystem
+Nov 21 20:57:21 ubuntu kernel: [    0.114088] DMI not present or invalid.
+Nov 21 20:57:21 ubuntu kernel: [    0.114096] hb_pl320_mbox_init...
+Nov 21 20:57:21 ubuntu kernel: [    0.114577] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.115290] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+Nov 21 20:57:21 ubuntu kernel: [    0.115412] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+Nov 21 20:57:21 ubuntu kernel: [    0.115573] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+Nov 21 20:57:21 ubuntu kernel: [    0.115623] audit: initializing netlink subsys (disabled)
+Nov 21 20:57:21 ubuntu kernel: [    0.115765] audit: type=2000 audit(0.100:1): state=initialized audit_enabled=0 res=1
+Nov 21 20:57:21 ubuntu kernel: [    0.116124] thermal_sys: Registered thermal governor 'step_wise'
+Nov 21 20:57:21 ubuntu kernel: [    0.116130] thermal_sys: Registered thermal governor 'user_space'
+Nov 21 20:57:21 ubuntu kernel: [    0.116162] cpuidle: using governor menu
+Nov 21 20:57:21 ubuntu kernel: [    0.116322] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+Nov 21 20:57:21 ubuntu kernel: [    0.116449] ASID allocator initialised with 65536 entries
+Nov 21 20:57:21 ubuntu kernel: [    0.116636] hb_ipc_init...
+Nov 21 20:57:21 ubuntu kernel: [    0.117918] printk: console [ramoops-1] enabled
+Nov 21 20:57:21 ubuntu kernel: [    0.117924] pstore: Registered ramoops as persistent store backend
+Nov 21 20:57:21 ubuntu kernel: [    0.117927] ramoops: using 0x40000@0xa4080000, ecc: 0
+Nov 21 20:57:21 ubuntu kernel: [    0.132136] platform 3d080000.csi: Fixed dependency cycle(s) with /soc/a55_apb0/i2c@340d0000/sc230ai@30
+Nov 21 20:57:21 ubuntu kernel: [    0.132943] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d740000
+Nov 21 20:57:21 ubuntu kernel: [    0.132957] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d640000
+Nov 21 20:57:21 ubuntu kernel: [    0.132969] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d540000
+Nov 21 20:57:21 ubuntu kernel: [    0.132981] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d440000
+Nov 21 20:57:21 ubuntu kernel: [    0.132993] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d340000
+Nov 21 20:57:21 ubuntu kernel: [    0.133005] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d240000
+Nov 21 20:57:21 ubuntu kernel: [    0.133017] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d140000
+Nov 21 20:57:21 ubuntu kernel: [    0.133031] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d040000
+Nov 21 20:57:21 ubuntu kernel: [    0.133049] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 21 20:57:21 ubuntu kernel: [    0.133136] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 21 20:57:21 ubuntu kernel: [    0.133194] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 21 20:57:21 ubuntu kernel: [    0.133224] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.133354] amba 2c003000.etr: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 21 20:57:21 ubuntu kernel: [    0.133451] amba 2c003000.etr: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 21 20:57:21 ubuntu kernel: [    0.133509] amba 2c002000.etf: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 21 20:57:21 ubuntu kernel: [    0.133572] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/etf@2c002000
+Nov 21 20:57:21 ubuntu kernel: [    0.133622] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/etr@2c003000
+Nov 21 20:57:21 ubuntu kernel: [    0.133671] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/tpiu@2c005000
+Nov 21 20:57:21 ubuntu kernel: [    0.133744] amba 2c004000.replicator: Fixed dependency cycle(s) with /soc/tpiu@2c005000
+Nov 21 20:57:21 ubuntu kernel: [    0.133815] amba 2c005000.tpiu: Fixed dependency cycle(s) with /soc/replicator@2c004000
+Nov 21 20:57:21 ubuntu kernel: [    0.134027] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d040000
+Nov 21 20:57:21 ubuntu kernel: [    0.134102] amba 2d040000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.134258] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d140000
+Nov 21 20:57:21 ubuntu kernel: [    0.134337] amba 2d140000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.134511] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d240000
+Nov 21 20:57:21 ubuntu kernel: [    0.134587] amba 2d240000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.134746] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d340000
+Nov 21 20:57:21 ubuntu kernel: [    0.134819] amba 2d340000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.134977] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d440000
+Nov 21 20:57:21 ubuntu kernel: [    0.135057] amba 2d440000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.135213] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d540000
+Nov 21 20:57:21 ubuntu kernel: [    0.135288] amba 2d540000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.135437] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d640000
+Nov 21 20:57:21 ubuntu kernel: [    0.135516] amba 2d640000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.135680] amba 2c001000.funnel: Fixed dependency cycle(s) with /soc/etm@2d740000
+Nov 21 20:57:21 ubuntu kernel: [    0.135756] amba 2d740000.etm: Fixed dependency cycle(s) with /soc/funnel@2c001000
+Nov 21 20:57:21 ubuntu kernel: [    0.145671] horizon-aon-pinctrl 31040000.aon_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 21 20:57:21 ubuntu kernel: [    0.147471] (NULL device *): no horizon,gpio-banks in node /soc/disp_apb/disp_iomuxc@3e0a0054
+Nov 21 20:57:21 ubuntu kernel: [    0.147705] horizon-disp-pinctrl 3e0a0054.disp_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 21 20:57:21 ubuntu kernel: [    0.147973] platform 3e000000.disp_apb:bt1120-wb-syscon-bridge: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 21 20:57:21 ubuntu kernel: [    0.148115] platform 3e080000.vs-sif: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 21 20:57:21 ubuntu kernel: [    0.148440] platform 3e080000.vs-sif: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 21 20:57:21 ubuntu kernel: [    0.148488] platform 3e000000.disp_apb:bt1120-wb-syscon-bridge: Fixed dependency cycle(s) with /soc/disp_apb/bt1120_bridge_wb
+Nov 21 20:57:21 ubuntu kernel: [    0.148531] platform 3e000000.disp_apb:bt1120_bridge_wb: Fixed dependency cycle(s) with /soc/disp_apb/bt1120-wb-syscon-bridge
+Nov 21 20:57:21 ubuntu kernel: [    0.148575] platform 3e000000.disp_apb:bt1120_bridge_wb: Fixed dependency cycle(s) with /soc/disp_apb/vs-sif@3e080000
+Nov 21 20:57:21 ubuntu kernel: [    0.152385] horizon-hsio-pinctrl 35050000.hsio_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 21 20:57:21 ubuntu kernel: [    0.154927] horizon-dsp-pinctrl 31040014.dsp_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 21 20:57:21 ubuntu kernel: [    0.155368] hobot-pl320 33000000.mailbox0: get_mbox_dev_resource, mbox->base = (____ptrval____)
+Nov 21 20:57:21 ubuntu kernel: [    0.155938] hobot-pl320 33000000.mailbox0: PL320 Mailbox registered
+Nov 21 20:57:21 ubuntu kernel: [    0.161511] horizon-lsio-pinctrl 34180000.lsio_iomuxc: Initialized D-Robotics pinctrl driver
+Nov 21 20:57:21 ubuntu kernel: [    0.164613] KASLR disabled due to lack of seed
+Nov 21 20:57:21 ubuntu kernel: [    0.164698] sysfs: cannot create duplicate filename '/module/hobot_pps/version'
+Nov 21 20:57:21 ubuntu kernel: [    0.164704] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 6.1.83-DR-PL5.2_V1.0.20 #1
+Nov 21 20:57:21 ubuntu kernel: [    0.164711] Hardware name: D-Robotics X5 EVB LP4 1_B board (DT)
+Nov 21 20:57:21 ubuntu kernel: [    0.164715] Call trace:
+Nov 21 20:57:21 ubuntu kernel: [    0.164718]  dump_backtrace+0xd8/0x130
+Nov 21 20:57:21 ubuntu kernel: [    0.164733]  show_stack+0x18/0x30
+Nov 21 20:57:21 ubuntu kernel: [    0.164740]  dump_stack_lvl+0x68/0x84
+Nov 21 20:57:21 ubuntu kernel: [    0.164748]  dump_stack+0x18/0x34
+Nov 21 20:57:21 ubuntu kernel: [    0.164753]  sysfs_warn_dup+0x64/0x80
+Nov 21 20:57:21 ubuntu kernel: [    0.164764]  sysfs_add_file_mode_ns+0x124/0x130
+Nov 21 20:57:21 ubuntu kernel: [    0.164773]  sysfs_create_file_ns+0x7c/0xb4
+Nov 21 20:57:21 ubuntu kernel: [    0.164782]  param_sysfs_init+0xa8/0x1e0
+Nov 21 20:57:21 ubuntu kernel: [    0.164790]  do_one_initcall+0x50/0x1d0
+Nov 21 20:57:21 ubuntu kernel: [    0.164795]  kernel_init_freeable+0x218/0x280
+Nov 21 20:57:21 ubuntu kernel: [    0.164801]  kernel_init+0x24/0x130
+Nov 21 20:57:21 ubuntu kernel: [    0.164808]  ret_from_fork+0x10/0x20
+Nov 21 20:57:21 ubuntu kernel: [    0.164822] ------------[ cut here ]------------
+Nov 21 20:57:21 ubuntu kernel: [    0.164825] WARNING: CPU: 0 PID: 1 at kernel/params.c:877 param_sysfs_init+0xac/0x1e0
+Nov 21 20:57:21 ubuntu kernel: [    0.164832] Modules linked in:
+Nov 21 20:57:21 ubuntu kernel: [    0.164838] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 6.1.83-DR-PL5.2_V1.0.20 #1
+Nov 21 20:57:21 ubuntu kernel: [    0.164845] Hardware name: D-Robotics X5 EVB LP4 1_B board (DT)
+Nov 21 20:57:21 ubuntu kernel: [    0.164849] pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+Nov 21 20:57:21 ubuntu kernel: [    0.164857] pc : param_sysfs_init+0xac/0x1e0
+Nov 21 20:57:21 ubuntu kernel: [    0.164862] lr : param_sysfs_init+0xa8/0x1e0
+Nov 21 20:57:21 ubuntu kernel: [    0.164869] sp : ffff8000094fbd30
+Nov 21 20:57:21 ubuntu kernel: [    0.164872] x29: ffff8000094fbd30 x28: 0000000000000000 x27: ffff800008e400c8
+Nov 21 20:57:21 ubuntu kernel: [    0.164882] x26: ffff800008ec6050 x25: ffff800008ec6078 x24: ffff800008e23410
+Nov 21 20:57:21 ubuntu kernel: [    0.164891] x23: ffff80000916f000 x22: 0000000000000000 x21: ffff800008e26340
+Nov 21 20:57:21 ubuntu kernel: [    0.164902] x20: ffff000080da6300 x19: ffff800008e26100 x18: ffffffffffffffff
+Nov 21 20:57:21 ubuntu kernel: [    0.164911] x17: 322e302e31565f32 x16: 2e354c502d52442d x15: ffff8000894fb4ca
+Nov 21 20:57:21 ubuntu kernel: [    0.164920] x14: 0000000000000000 x13: ffff800009069870 x12: 000000000000022e
+Nov 21 20:57:21 ubuntu kernel: [    0.164930] x11: 00000000000000ba x10: ffff8000090c1870 x9 : ffff800009069870
+Nov 21 20:57:21 ubuntu kernel: [    0.164939] x8 : 00000000ffffefff x7 : ffff8000090c1870 x6 : 0000000000002170
+Nov 21 20:57:21 ubuntu kernel: [    0.164948] x5 : ffff000080044000 x4 : ffff0000ff6d06d0 x3 : 0000000000000000
+Nov 21 20:57:21 ubuntu kernel: [    0.164957] x2 : 0000000000000000 x1 : ffff000080080000 x0 : 00000000ffffffef
+Nov 21 20:57:21 ubuntu kernel: [    0.164968] Call trace:
+Nov 21 20:57:21 ubuntu kernel: [    0.164970]  param_sysfs_init+0xac/0x1e0
+Nov 21 20:57:21 ubuntu kernel: [    0.164975]  do_one_initcall+0x50/0x1d0
+Nov 21 20:57:21 ubuntu kernel: [    0.164982]  kernel_init_freeable+0x218/0x280
+Nov 21 20:57:21 ubuntu kernel: [    0.164988]  kernel_init+0x24/0x130
+Nov 21 20:57:21 ubuntu kernel: [    0.164994]  ret_from_fork+0x10/0x20
+Nov 21 20:57:21 ubuntu kernel: [    0.164999] ---[ end trace 0000000000000000 ]---
+Nov 21 20:57:21 ubuntu kernel: [    0.169368] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+Nov 21 20:57:21 ubuntu kernel: [    0.169374] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+Nov 21 20:57:21 ubuntu kernel: [    0.169379] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+Nov 21 20:57:21 ubuntu kernel: [    0.169382] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+Nov 21 20:57:21 ubuntu kernel: [    0.169387] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+Nov 21 20:57:21 ubuntu kernel: [    0.169391] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+Nov 21 20:57:21 ubuntu kernel: [    0.169395] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+Nov 21 20:57:21 ubuntu kernel: [    0.169398] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+Nov 21 20:57:21 ubuntu kernel: [    0.170302] noc_qos 20500000.cpu_ace_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170329] noc_qos 20500000.cpu_ace_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170384] noc_qos 20500100.cpu_perif_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170407] noc_qos 20500100.cpu_perif_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170465] noc_qos 20510000.bt1120_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170493] noc_qos 20510000.bt1120_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170546] noc_qos 20510080.dc8000_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170572] noc_qos 20510080.dc8000_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170623] noc_qos 20510100.dw230_gdc_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170650] noc_qos 20510100.dw230_gdc_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170701] noc_qos 20510180.dw230_scalar2_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170725] noc_qos 20510180.dw230_scalar2_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170779] noc_qos 20510200.dw230_scalar3_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170807] noc_qos 20510200.dw230_scalar3_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170862] noc_qos 20510500.sif0_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170887] noc_qos 20510500.sif0_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.170941] noc_qos 20510580.sif1_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.170965] noc_qos 20510580.sif1_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171016] noc_qos 20510600.sif2_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171046] noc_qos 20510600.sif2_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171104] noc_qos 20510680.sif3_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171130] noc_qos 20510680.sif3_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171184] noc_qos 20510700.sif_disp_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171208] noc_qos 20510700.sif_disp_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171261] noc_qos 20550000.dma0_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171291] noc_qos 20550000.dma0_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171349] noc_qos 20550080.emmc_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171378] noc_qos 20550080.emmc_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171429] noc_qos 20550100.gmac_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171453] noc_qos 20550100.gmac_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171507] noc_qos 20550180.sd_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171539] noc_qos 20550180.sd_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171596] noc_qos 20550200.sdio_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171624] noc_qos 20550200.sdio_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171674] noc_qos 20550280.security_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171698] noc_qos 20550280.security_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171755] noc_qos 20550300.usb2_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171783] noc_qos 20550300.usb2_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171836] noc_qos 20550380.usb3_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171860] noc_qos 20550380.usb3_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.171909] noc_qos 20550400.etr_qos: qos doesn't have consumer device
+Nov 21 20:57:21 ubuntu kernel: [    0.171931] noc_qos 20550400.etr_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.172626] iommu: Default domain type: Translated 
+Nov 21 20:57:21 ubuntu kernel: [    0.172631] iommu: DMA domain TLB invalidation policy: strict mode 
+Nov 21 20:57:21 ubuntu kernel: [    0.174201] SCSI subsystem initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.174305] usbcore: registered new interface driver usbfs
+Nov 21 20:57:21 ubuntu kernel: [    0.174331] usbcore: registered new interface driver hub
+Nov 21 20:57:21 ubuntu kernel: [    0.174354] usbcore: registered new device driver usb
+Nov 21 20:57:21 ubuntu kernel: [    0.174627] mc: Linux media interface: v0.10
+Nov 21 20:57:21 ubuntu kernel: [    0.174655] videodev: Linux video capture interface: v2.00
+Nov 21 20:57:21 ubuntu kernel: [    0.174680] pps_core: LinuxPPS API ver. 1 registered
+Nov 21 20:57:21 ubuntu kernel: [    0.174684] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+Nov 21 20:57:21 ubuntu kernel: [    0.174697] PTP clock support registered
+Nov 21 20:57:21 ubuntu kernel: [    0.174934] hobot_ion: Reserved ion-pool MEM start 0xa4100000, size 0xc000000
+Nov 21 20:57:21 ubuntu kernel: [    0.174976] hobot_ion: Reserved ion-carveout MEM start 0xb0100000, size 0xc000000
+Nov 21 20:57:21 ubuntu kernel: [    0.175057] hobot_ion: Reserved ion-cma MEM start 0xbc100000, size 0xc000000
+Nov 21 20:57:21 ubuntu kernel: [    0.196502] Advanced Linux Sound Architecture Driver Initialized.
+Nov 21 20:57:21 ubuntu kernel: [    0.197024] clocksource: Switched to clocksource arch_sys_counter
+Nov 21 20:57:21 ubuntu kernel: [    0.201796] NET: Registered PF_INET protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.201934] IP idents hash table entries: 65536 (order: 7, 524288 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.204090] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.204118] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.204128] TCP established hash table entries: 32768 (order: 6, 262144 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.204274] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.204980] TCP: Hash tables configured (established 32768 bind 32768)
+Nov 21 20:57:21 ubuntu kernel: [    0.205054] UDP hash table entries: 2048 (order: 4, 65536 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.205100] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, linear)
+Nov 21 20:57:21 ubuntu kernel: [    0.205248] NET: Registered PF_UNIX/PF_LOCAL protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.205501] RPC: Registered named UNIX socket transport module.
+Nov 21 20:57:21 ubuntu kernel: [    0.205506] RPC: Registered udp transport module.
+Nov 21 20:57:21 ubuntu kernel: [    0.205508] RPC: Registered tcp transport module.
+Nov 21 20:57:21 ubuntu kernel: [    0.205511] RPC: Registered tcp NFSv4.1 backchannel transport module.
+Nov 21 20:57:21 ubuntu kernel: [    0.206567] hw perfevents: enabled with armv8_pmuv3 PMU driver, 7 counters available
+Nov 21 20:57:21 ubuntu kernel: [    0.208114] Initialise system trusted keyrings
+Nov 21 20:57:21 ubuntu kernel: [    0.208218] workingset: timestamp_bits=46 max_order=20 bucket_order=0
+Nov 21 20:57:21 ubuntu kernel: [    0.211730] pstore: success mode=2
+Nov 21 20:57:21 ubuntu kernel: [    0.240583] NET: Registered PF_ALG protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.240595] Key type asymmetric registered
+Nov 21 20:57:21 ubuntu kernel: [    0.240599] Asymmetric key parser 'x509' registered
+Nov 21 20:57:21 ubuntu kernel: [    0.240632] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+Nov 21 20:57:21 ubuntu kernel: [    0.240638] io scheduler mq-deadline registered
+Nov 21 20:57:21 ubuntu kernel: [    0.240644] io scheduler kyber registered
+Nov 21 20:57:21 ubuntu kernel: [    0.246149] drobot-pwm 34160000.pwm: D-Robotics PWM register done!
+Nov 21 20:57:21 ubuntu kernel: [    0.247326] dw_axi_dmac_platform 32080000.dma-controller: DesignWare AXI DMA Controller, 8 channels
+Nov 21 20:57:21 ubuntu kernel: [    0.247850] dw_axi_dmac_platform 34200000.dma-controller: DesignWare AXI DMA Controller, 12 channels
+Nov 21 20:57:21 ubuntu kernel: [    0.247902] Start socinfo driver init
+Nov 21 20:57:21 ubuntu kernel: [    0.247939] socinfo 31021008.socinfo: Start socinfo probe.
+Nov 21 20:57:21 ubuntu kernel: [    0.247991] socinfo 31021008.socinfo: Socinfo probe end with retval: 0
+Nov 21 20:57:21 ubuntu kernel: [    0.248521] axi_monitor 38100000.axi-mon: AXI-Clk: 800000000Hz
+Nov 21 20:57:21 ubuntu kernel: [    0.248533] axi_monitor 38100000.axi-mon: APB-Clk: 200000000Hz
+Nov 21 20:57:21 ubuntu kernel: [    0.248538] axi_monitor 38100000.axi-mon: Maximum session time 343000 millisecs
+Nov 21 20:57:21 ubuntu kernel: [    0.248556] axi_monitor 38100000.axi-mon: Got axi-port num:5
+Nov 21 20:57:21 ubuntu kernel: [    0.248563] axi_monitor 38100000.axi-mon: Got new axi-port:cpu, idx:0
+Nov 21 20:57:21 ubuntu kernel: [    0.248569] axi_monitor 38100000.axi-mon: Got new axi-port:bpu, idx:1
+Nov 21 20:57:21 ubuntu kernel: [    0.248575] axi_monitor 38100000.axi-mon: Got new axi-port:vin, idx:2
+Nov 21 20:57:21 ubuntu kernel: [    0.248582] axi_monitor 38100000.axi-mon: Got new axi-port:codec, idx:3
+Nov 21 20:57:21 ubuntu kernel: [    0.248590] axi_monitor 38100000.axi-mon: Got new axi-port:gpu, idx:4
+Nov 21 20:57:21 ubuntu kernel: [    0.248742] axi_monitor 38100000.axi-mon: DDR Perf Monitor probed successfully.
+Nov 21 20:57:21 ubuntu kernel: [    0.249445] hobot_dsp_init start
+Nov 21 20:57:21 ubuntu kernel: [    0.249564] hobot-dsp dsp0: hobot_dsp_probe start
+Nov 21 20:57:21 ubuntu kernel: [    0.249571] hobot-dsp dsp0: dsp_smmu_init: dsp0 DMA mask 32bit.
+Nov 21 20:57:21 ubuntu kernel: [    0.249752] hobot-dsp dsp0: hobot_dsp_probe dsp0 Registered successfully
+Nov 21 20:57:21 ubuntu kernel: [    0.249789] hobot_dsp_init end
+Nov 21 20:57:21 ubuntu kernel: [    0.251768] Serial: 8250/16550 driver, 8 ports, IRQ sharing disabled
+Nov 21 20:57:21 ubuntu kernel: [    0.253409] printk: console [ttyS0] disabled
+Nov 21 20:57:21 ubuntu kernel: [    0.253455] 32120000.serial: ttyS0 at MMIO 0x32120000 (irq = 29, base_baud = 12656250) is a 16550A
+Nov 21 20:57:21 ubuntu kernel: [    0.254708] printk: console [ttyS0] enabled
+Nov 21 20:57:21 ubuntu kernel: [    0.255192] 34080000.serial: ttyS2 at MMIO 0x34080000 (irq = 30, base_baud = 12500000) is a 16550A
+Nov 21 20:57:21 ubuntu kernel: [    0.255665] 34090000.serial: ttyS3 at MMIO 0x34090000 (irq = 31, base_baud = 12500000) is a 16550A
+Nov 21 20:57:21 ubuntu kernel: [    0.256135] 340a0000.serial: ttyS4 at MMIO 0x340a0000 (irq = 32, base_baud = 12500000) is a 16550A
+Nov 21 20:57:21 ubuntu kernel: [    0.256585] 341a0000.serial: ttyS5 at MMIO 0x341a0000 (irq = 33, base_baud = 12500000) is a 16550A
+Nov 21 20:57:21 ubuntu kernel: [    0.263161] brd: module loaded
+Nov 21 20:57:21 ubuntu kernel: [    0.266652] loop: module loaded
+Nov 21 20:57:21 ubuntu kernel: [    0.268242] dw_spi_mmio 35000000.spi: bit_offset = 0
+Nov 21 20:57:21 ubuntu kernel: [    0.268303] dw_spi_mmio 35000000.spi: DMA init failed
+Nov 21 20:57:21 ubuntu kernel: [    0.437040] random: crng init done
+Nov 21 20:57:21 ubuntu kernel: [    0.668797] spi-nand: probe of spi7.0 failed with error -110
+Nov 21 20:57:21 ubuntu kernel: [    0.669249] dw_spi_mmio 34020000.spi: bit_offset = 0
+Nov 21 20:57:21 ubuntu kernel: [    0.672898] usbcore: registered new interface driver uas
+Nov 21 20:57:21 ubuntu kernel: [    0.672932] usbcore: registered new interface driver usb-storage
+Nov 21 20:57:21 ubuntu kernel: [    0.672979] usbcore: registered new interface driver ch341
+Nov 21 20:57:21 ubuntu kernel: [    0.672998] usbserial: USB Serial support registered for ch341-uart
+Nov 21 20:57:21 ubuntu kernel: [    0.673016] usbcore: registered new interface driver cp210x
+Nov 21 20:57:21 ubuntu kernel: [    0.673028] usbserial: USB Serial support registered for cp210x
+Nov 21 20:57:21 ubuntu kernel: [    0.673046] usbcore: registered new interface driver pl2303
+Nov 21 20:57:21 ubuntu kernel: [    0.673059] usbserial: USB Serial support registered for pl2303
+Nov 21 20:57:21 ubuntu kernel: [    0.674164] dw-rtc 31010000.rtc: registered as rtc0
+Nov 21 20:57:21 ubuntu kernel: [    0.674182] dw-rtc 31010000.rtc: setting system clock to 1970-01-01T00:00:00 UTC (0)
+Nov 21 20:57:21 ubuntu kernel: [    0.674297] i2c_dev: i2c /dev entries driver
+Nov 21 20:57:21 ubuntu kernel: [    0.674593] pps pps0: new PPS source hobot_pps.-1
+Nov 21 20:57:21 ubuntu kernel: [    0.674600] hobot-pps hobot_pps: register PPS source name:hobot_pps.-1
+Nov 21 20:57:21 ubuntu kernel: [    0.674631] pps pps0: Registered IRQ 37 as PPS source
+Nov 21 20:57:21 ubuntu kernel: [    0.674680] Error: Driver 'hobot-pps' is already registered, aborting...
+Nov 21 20:57:21 ubuntu kernel: [    0.677680] hwmon hwmon0: temp2_input not attached to any thermal zone
+Nov 21 20:57:21 ubuntu kernel: [    0.678034] dw_wdt 34250000.watchdog: No valid TOPs array specified
+Nov 21 20:57:21 ubuntu kernel: [    0.678289] device-mapper: uevent: version 1.0.3
+Nov 21 20:57:21 ubuntu kernel: [    0.678420] device-mapper: ioctl: 4.47.0-ioctl (2022-07-28) initialised: dm-devel@redhat.com
+Nov 21 20:57:21 ubuntu kernel: [    0.678986] sdhci: Secure Digital Host Controller Interface driver
+Nov 21 20:57:21 ubuntu kernel: [    0.678991] sdhci: Copyright(c) Pierre Ossman
+Nov 21 20:57:21 ubuntu kernel: [    0.678996] sdhci-pltfm: SDHCI platform and OF driver helper
+Nov 21 20:57:21 ubuntu kernel: [    0.679473] usbcore: registered new interface driver usbhid
+Nov 21 20:57:21 ubuntu kernel: [    0.679478] usbhid: USB HID core driver
+Nov 21 20:57:21 ubuntu kernel: [    0.679486] sdhci-dwcmshc 35030000.sdhci: mmc set to fixed voltage 1800
+Nov 21 20:57:21 ubuntu kernel: [    0.679508] sdhci-dwcmshc 35030000.sdhci: Failed to read toggle_interval_us, using default
+Nov 21 20:57:21 ubuntu kernel: [    0.679548] sdhci-dwcmshc 35030000.sdhci: MSHC_CTRL:0x0
+Nov 21 20:57:21 ubuntu kernel: [    0.679563] sdhci-dwcmshc 35040000.sdhci: MSHC_CTRL:0x40
+Nov 21 20:57:21 ubuntu kernel: [    0.679568] logger: created 2048K log 'log_main'
+Nov 21 20:57:21 ubuntu kernel: [    0.679629] logger: created 256K log 'log_events'
+Nov 21 20:57:21 ubuntu kernel: [    0.679688] logger: created 256K log 'log_radio'
+Nov 21 20:57:21 ubuntu kernel: [    0.679741] logger: created 256K log 'log_system'
+Nov 21 20:57:21 ubuntu kernel: [    0.679788] bootloader-log soc:membuff: log stored in 0x87ffc000, size 0x2000
+Nov 21 20:57:21 ubuntu kernel: [    0.680009] module version 0.1 init
+Nov 21 20:57:21 ubuntu kernel: [    0.680270] ipc-shm-hal: ipc_hal_probe(): IPCF device can't register major number.
+Nov 21 20:57:21 ubuntu kernel: [    0.681236] hobot-ipc-hal: probe of ipc_hal failed with error -16
+Nov 21 20:57:21 ubuntu kernel: [    0.681640] x5-ddrc-devfreq soc:ddrc-freq: userspace_gov: 1
+Nov 21 20:57:21 ubuntu kernel: [    0.682161] x5-dfi 38200000.dfi-monitor: apb clk rate: 200000000, interval: 1
+Nov 21 20:57:21 ubuntu kernel: [    0.683876]  cs_system_cfg: CoreSight Configuration manager initialised
+Nov 21 20:57:21 ubuntu kernel: [    0.684376] coresight-tmc 2c003000.etr: Detected dma mask 40bits
+Nov 21 20:57:21 ubuntu kernel: [    0.686425] CSCFG registered etm0
+Nov 21 20:57:21 ubuntu kernel: [    0.686431] coresight etm0: CPU0: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.686759] CSCFG registered etm1
+Nov 21 20:57:21 ubuntu kernel: [    0.686764] coresight etm1: CPU1: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.687122] CSCFG registered etm2
+Nov 21 20:57:21 ubuntu kernel: [    0.687127] coresight etm2: CPU2: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.687461] CSCFG registered etm3
+Nov 21 20:57:21 ubuntu kernel: [    0.687466] coresight etm3: CPU3: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.687811] CSCFG registered etm4
+Nov 21 20:57:21 ubuntu kernel: [    0.687816] coresight etm4: CPU4: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.688149] CSCFG registered etm5
+Nov 21 20:57:21 ubuntu kernel: [    0.688154] coresight etm5: CPU5: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.688475] CSCFG registered etm6
+Nov 21 20:57:21 ubuntu kernel: [    0.688480] coresight etm6: CPU6: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.688806] CSCFG registered etm7
+Nov 21 20:57:21 ubuntu kernel: [    0.688810] coresight etm7: CPU7: etm v4.2 initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.689269] coresight cti_sys0: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.689503] coresight cti_cpu0: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.689728] coresight cti_cpu1: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.689954] coresight cti_cpu2: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.690186] coresight cti_cpu3: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.690410] coresight cti_cpu4: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.690655] coresight cti_cpu5: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.690883] coresight cti_cpu6: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.691111] coresight cti_cpu7: CTI initialized
+Nov 21 20:57:21 ubuntu kernel: [    0.691531] optee: probing for conduit method.
+Nov 21 20:57:21 ubuntu kernel: [    0.691553] optee: revision 3.20 (a3b65462)
+Nov 21 20:57:21 ubuntu kernel: [    0.691707] optee: dynamic shared memory is enabled
+Nov 21 20:57:21 ubuntu kernel: [    0.692463] optee: initialized driver
+Nov 21 20:57:21 ubuntu kernel: [    0.693188] ipc-wrapper ipc-wrapper: AUDIO : audio wrapper probe
+Nov 21 20:57:21 ubuntu kernel: [    0.693616] cpu_dai_driver cpu-dai: AUDIO : ALSA cpu-dai driver probe succ
+Nov 21 20:57:21 ubuntu kernel: [    0.693626] cpu_dai_driver cpu-dai: AUDIO : ALSA platform driver probe succ
+Nov 21 20:57:21 ubuntu kernel: [    0.698566] machine-driver sound-machine: AUDIO : ALSA machine driver probe succ
+Nov 21 20:57:21 ubuntu kernel: [    0.699631] GACT probability NOT on
+Nov 21 20:57:21 ubuntu kernel: [    0.699669] u32 classifier
+Nov 21 20:57:21 ubuntu kernel: [    0.699672]     input device check on
+Nov 21 20:57:21 ubuntu kernel: [    0.699675]     Actions configured
+Nov 21 20:57:21 ubuntu kernel: [    0.699794] NET: Registered PF_PACKET protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.699806] NET: Registered PF_KEY protocol family
+Nov 21 20:57:21 ubuntu kernel: [    0.699810] 8021q: 802.1Q VLAN Support v1.8
+Nov 21 20:57:21 ubuntu kernel: [    0.699825] Found lo, alias (efault) on irq 0
+Nov 21 20:57:21 ubuntu kernel: [    0.699830] MAC: 00:00:00:00:00:00
+Nov 21 20:57:21 ubuntu kernel: [    0.699834] Tx queue length: 1000
+Nov 21 20:57:21 ubuntu kernel: [    0.699838] Invalid capabilities for NIC (lo), dropping from TSN list
+Nov 21 20:57:21 ubuntu kernel: [    0.699842] tsn_init_module: No capable NIC found. Perhaps load with in_debug=1 ?
+Nov 21 20:57:21 ubuntu kernel: [    0.701018] registered taskstats version 1
+Nov 21 20:57:21 ubuntu kernel: [    0.701024] Loading compiled-in X.509 certificates
+Nov 21 20:57:21 ubuntu kernel: [    0.703948] Loaded X.509 cert 'Build time autogenerated kernel key: b9a2a42439c311585917b898c0766365c4e15cbb'
+Nov 21 20:57:21 ubuntu kernel: [    0.704723] pstore: Using crash dump compression: deflate
+Nov 21 20:57:21 ubuntu kernel: [    0.705134] mmc2: SDHCI controller on 35030000.sdhci [35030000.sdhci] using ADMA 64-bit
+Nov 21 20:57:21 ubuntu kernel: [    0.707238] 
+Nov 21 20:57:21 ubuntu kernel: [    0.707244] ********************************************************************
+Nov 21 20:57:21 ubuntu kernel: [    0.707247] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE           **
+Nov 21 20:57:21 ubuntu kernel: [    0.707250] **                                                                **
+Nov 21 20:57:21 ubuntu kernel: [    0.707253] **  WRITEABLE clk DebugFS SUPPORT HAS BEEN ENABLED IN THIS KERNEL **
+Nov 21 20:57:21 ubuntu kernel: [    0.707256] **                                                                **
+Nov 21 20:57:21 ubuntu kernel: [    0.707259] ** This means that this kernel is built to expose clk operations  **
+Nov 21 20:57:21 ubuntu kernel: [    0.707261] ** such as parent or rate setting, enabling, disabling, etc.      **
+Nov 21 20:57:21 ubuntu kernel: [    0.707265] ** to userspace, which may compromise security on your system.    **
+Nov 21 20:57:21 ubuntu kernel: [    0.707268] **                                                                **
+Nov 21 20:57:21 ubuntu kernel: [    0.707270] ** If you see this message and you are not debugging the          **
+Nov 21 20:57:21 ubuntu kernel: [    0.707273] ** kernel, report this immediately to your vendor!                **
+Nov 21 20:57:21 ubuntu kernel: [    0.707275] **                                                                **
+Nov 21 20:57:21 ubuntu kernel: [    0.707279] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE           **
+Nov 21 20:57:21 ubuntu kernel: [    0.707282] ********************************************************************
+Nov 21 20:57:21 ubuntu kernel: [    0.709604] mmc0: SDHCI controller on 35040000.sdhci [35040000.sdhci] using ADMA 64-bit
+Nov 21 20:57:21 ubuntu kernel: [    0.716961] i2c_designware 320a0000.i2c: running with gpio recovery mode! scl,sda
+Nov 21 20:57:21 ubuntu kernel: [    0.717149] i2c i2c-7: using pinctrl states for GPIO recovery
+Nov 21 20:57:21 ubuntu kernel: [    0.717587] i2c_designware 340d0000.i2c: running with gpio recovery mode! scl,sda
+Nov 21 20:57:21 ubuntu kernel: [    0.717712] i2c i2c-2: using pinctrl states for GPIO recovery
+Nov 21 20:57:21 ubuntu kernel: [    0.717944] hpu3501-regulator hpu3501-regulator.1.auto: fault_cfgr will be default value
+Nov 21 20:57:21 ubuntu kernel: [    0.717951] hpu3501-regulator hpu3501-regulator.1.auto: ocp_cfg1r will be default value
+Nov 21 20:57:21 ubuntu kernel: [    0.717955] hpu3501-regulator hpu3501-regulator.1.auto: ocp_cfg2r will be default value
+Nov 21 20:57:21 ubuntu kernel: [    0.717961] hpu3501-regulator hpu3501-regulator.1.auto: reg 0x53 will be default value 0x4
+Nov 21 20:57:21 ubuntu kernel: [    0.719527] mmc2: new high speed SDIO card at address 0001
+Nov 21 20:57:21 ubuntu kernel: [    0.724960] hpu3501 set reg 0x53 to 0x4
+Nov 21 20:57:21 ubuntu kernel: [    0.725502] platform 3d080000.csi: Fixed dependency cycle(s) with /soc/a55_apb0/i2c@340d0000/sc230ai@30
+Nov 21 20:57:21 ubuntu kernel: [    0.725613] i2c 2-0030: Fixed dependency cycle(s) with /soc/cam/csi@3d080000
+Nov 21 20:57:21 ubuntu kernel: [    0.726234] i2c_designware 340e0000.i2c: running with gpio recovery mode! scl,sda
+Nov 21 20:57:21 ubuntu kernel: [    0.726371] i2c i2c-3: using pinctrl states for GPIO recovery
+Nov 21 20:57:21 ubuntu kernel: [    0.726800] i2c_designware 340f0000.i2c: running with gpio recovery mode! scl,sda
+Nov 21 20:57:21 ubuntu kernel: [    0.726920] i2c i2c-4: using pinctrl states for GPIO recovery
+Nov 21 20:57:21 ubuntu kernel: [    0.727429] xhci-hcd xhci-hcd.3.auto: xHCI Host Controller
+Nov 21 20:57:21 ubuntu kernel: [    0.727446] xhci-hcd xhci-hcd.3.auto: new USB bus registered, assigned bus number 1
+Nov 21 20:57:21 ubuntu kernel: [    0.727781] xhci-hcd xhci-hcd.3.auto: hcc params 0x0220fe6d hci version 0x110 quirks 0x0000008000010090
+Nov 21 20:57:21 ubuntu kernel: [    0.727810] xhci-hcd xhci-hcd.3.auto: irq 49, io mem 0x35100000
+Nov 21 20:57:21 ubuntu kernel: [    0.727903] xhci-hcd xhci-hcd.3.auto: xHCI Host Controller
+Nov 21 20:57:21 ubuntu kernel: [    0.727913] xhci-hcd xhci-hcd.3.auto: new USB bus registered, assigned bus number 2
+Nov 21 20:57:21 ubuntu kernel: [    0.727924] xhci-hcd xhci-hcd.3.auto: Host supports USB 3.0 SuperSpeed
+Nov 21 20:57:21 ubuntu kernel: [    0.728331] hub 1-0:1.0: USB hub found
+Nov 21 20:57:21 ubuntu kernel: [    0.728356] hub 1-0:1.0: 1 port detected
+Nov 21 20:57:21 ubuntu kernel: [    0.728589] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+Nov 21 20:57:21 ubuntu kernel: [    0.729885] hub 2-0:1.0: USB hub found
+Nov 21 20:57:21 ubuntu kernel: [    0.729908] hub 2-0:1.0: 1 port detected
+Nov 21 20:57:21 ubuntu kernel: [    0.732270] x5-ddrc-devfreq soc:ddrc-freq: userspace_gov: 1
+Nov 21 20:57:21 ubuntu kernel: [    0.732724] guc 34190000.adc: ADC calibration: 17
+Nov 21 20:57:21 ubuntu kernel: [    0.732735] guc 34190000.adc: ADC trimming: 8
+Nov 21 20:57:21 ubuntu kernel: [    0.733290] guc 34190000.adc: GUC Initialize Finish
+Nov 21 20:57:21 ubuntu kernel: [    0.735070] noc_qos 20530000.video_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.736213] noc_qos 20530080.jpeg_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.737383] noc_qos 20510280.isp_axi5_hdr_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.738533] noc_qos 20510300.isp_axi4_mcm_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.739676] noc_qos 20510380.isp_axi3_sp2_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.740829] noc_qos 20510480.isp_axi1_mp_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.745137] noc_qos 20540080.gpu3d_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.749444] noc_qos 20540000.gpu2d_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.751705] noc_qos 20520000.bpu_qos: noc qos init finished.
+Nov 21 20:57:21 ubuntu kernel: [    0.752913] noc_qos 20560000.hifi5_qos: consumer device is disabled, so qos isn't supported
+Nov 21 20:57:21 ubuntu kernel: [    0.752924] noc_qos: probe of 20560000.hifi5_qos failed with error -1
+Nov 21 20:57:21 ubuntu kernel: [    0.754253] mmc0: new HS200 MMC card at address 0001
+Nov 21 20:57:21 ubuntu kernel: [    0.754643] mmcblk0: mmc0:0001 TB2916 14.6 GiB 
+Nov 21 20:57:21 ubuntu kernel: [    0.756881]  mmcblk0: p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11 p12 p13
+Nov 21 20:57:21 ubuntu kernel: [    0.758109] mmcblk0boot0: mmc0:0001 TB2916 4.00 MiB 
+Nov 21 20:57:21 ubuntu kernel: [    0.758884] mmcblk0boot1: mmc0:0001 TB2916 4.00 MiB 
+Nov 21 20:57:21 ubuntu kernel: [    0.759530] mmcblk0rpmb: mmc0:0001 TB2916 4.00 MiB, chardev (243:0)
+Nov 21 20:57:21 ubuntu kernel: [    0.768864] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+Nov 21 20:57:21 ubuntu kernel: [    0.769137] hobot_remoteproc_init start
+Nov 21 20:57:21 ubuntu kernel: [    0.769404] hobot_remoteproc_init end
+Nov 21 20:57:21 ubuntu kernel: [    0.769622] ALSA device list:
+Nov 21 20:57:21 ubuntu kernel: [    0.769627]   #0: gua-audio
+Nov 21 20:57:21 ubuntu kernel: [    0.769773] dw-apb-uart 32120000.serial: forbid DMA for kernel console
+Nov 21 20:57:21 ubuntu kernel: [    0.773025] EXT4-fs (mmcblk0p9): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 21 20:57:21 ubuntu kernel: [    0.773059] VFS: Mounted root (ext4 filesystem) readonly on device 259:1.
+Nov 21 20:57:21 ubuntu kernel: [    0.773340] devtmpfs: mounted
+Nov 21 20:57:21 ubuntu kernel: [    0.773772] Freeing unused kernel memory: 2112K
+Nov 21 20:57:21 ubuntu kernel: [    0.773860] Run /sbin/init as init process
+Nov 21 20:57:21 ubuntu kernel: [    0.773865]   with arguments:
+Nov 21 20:57:21 ubuntu kernel: [    0.773869]     /sbin/init
+Nov 21 20:57:21 ubuntu kernel: [    0.773873]   with environment:
+Nov 21 20:57:21 ubuntu kernel: [    0.773876]     HOME=/
+Nov 21 20:57:21 ubuntu kernel: [    0.773879]     TERM=linux
+Nov 21 20:57:21 ubuntu kernel: [    0.847401] xhci-hcd xhci-hcd.4.auto: xHCI Host Controller
+Nov 21 20:57:21 ubuntu kernel: [    0.847431] xhci-hcd xhci-hcd.4.auto: new USB bus registered, assigned bus number 3
+Nov 21 20:57:21 ubuntu kernel: [    0.847518] xhci-hcd xhci-hcd.4.auto: USB3 root hub has no ports
+Nov 21 20:57:21 ubuntu kernel: [    0.847526] xhci-hcd xhci-hcd.4.auto: hcc params 0x0220fe6d hci version 0x110 quirks 0x0000008000010090
+Nov 21 20:57:21 ubuntu kernel: [    0.847565] xhci-hcd xhci-hcd.4.auto: irq 50, io mem 0x35300000
+Nov 21 20:57:21 ubuntu kernel: [    0.848127] hub 3-0:1.0: USB hub found
+Nov 21 20:57:21 ubuntu kernel: [    0.848156] hub 3-0:1.0: 1 port detected
+Nov 21 20:57:21 ubuntu kernel: [    2.811719] EXT4-fs (mmcblk0p9): re-mounted. Quota mode: disabled.
+Nov 21 20:57:21 ubuntu kernel: [    3.670379] hb_vpu 3b000000.vpu: Adding to iommu group 6
+Nov 21 20:57:21 ubuntu kernel: [    3.679691] hb_jpu 3b010000.jpu: Adding to iommu group 7
+Nov 21 20:57:21 ubuntu kernel: [    3.680376] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 0 done
+Nov 21 20:57:21 ubuntu kernel: [    3.680411] VIN_NODE soc:cam:vin_node@0: [FRT:D] hobot_vin_node_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    3.683142] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 1 done
+Nov 21 20:57:21 ubuntu kernel: [    3.683189] VIN_NODE soc:cam:vin_node@1: [FRT:D] hobot_vin_node_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    3.685426] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 2 done
+Nov 21 20:57:21 ubuntu kernel: [    3.685463] VIN_NODE soc:cam:vin_node@2: [FRT:D] hobot_vin_node_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    3.686960] [VIN_NODE]:[L1078]hobot_vin_node_probe hw_id 3 done
+Nov 21 20:57:21 ubuntu kernel: [    3.686979] VIN_NODE soc:cam:vin_node@3: [FRT:D] hobot_vin_node_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    3.687413] hobot_vpu_dev: [VPUDRV]vpu_init_system_mem:7158: vpu IO memory resource: physical base addr = 0x3b000000,virtual base addr = ffff80000a3c0000
+Nov 21 20:57:21 ubuntu kernel: [    3.704412] nano2d 3c010000.gc820: Adding to iommu group 9
+Nov 21 20:57:21 ubuntu kernel: [    3.705981] nano2d 3c010000.gc820: clk name: pclk, freq = 200000000.
+Nov 21 20:57:21 ubuntu kernel: [    3.706006] nano2d 3c010000.gc820: clk name: aclk, freq = 750000000.
+Nov 21 20:57:21 ubuntu kernel: [    3.706016] nano2d 3c010000.gc820: clk name: clk1x, freq = 750000000.
+Nov 21 20:57:21 ubuntu kernel: [    3.712279] gpu_parse_dt: register base(3c010000), irq(57).
+Nov 21 20:57:21 ubuntu kernel: [    3.714755] start to add opp table.
+Nov 21 20:57:21 ubuntu kernel: [    3.714769] finish to add opp table 4.
+Nov 21 20:57:21 ubuntu kernel: [    3.714804] Galcore version 6.4.14.9.674707
+Nov 21 20:57:21 ubuntu kernel: [    3.719481] create /dev/nano2d device.
+Nov 21 20:57:21 ubuntu kernel: [    3.719575] Insmod parameters:
+Nov 21 20:57:21 ubuntu kernel: [    3.719580] device[0] core[0]
+Nov 21 20:57:21 ubuntu kernel: [    3.719585]   irq line:57
+Nov 21 20:57:21 ubuntu kernel: [    3.719588]   register base:0x3c010000
+Nov 21 20:57:21 ubuntu kernel: [    3.719591]   register size:0x10000
+Nov 21 20:57:21 ubuntu kernel: [    3.719594] 
+Nov 21 20:57:21 ubuntu kernel: [    3.719596]   iommu enabled
+Nov 21 20:57:21 ubuntu kernel: [    3.719599]   contiguous base:0x0
+Nov 21 20:57:21 ubuntu kernel: [    3.719602]   contiguous size:0x0
+Nov 21 20:57:21 ubuntu kernel: [    3.719604]   command contiguous base:0x0
+Nov 21 20:57:21 ubuntu kernel: [    3.719607]   command contiguous size:0x0
+Nov 21 20:57:21 ubuntu kernel: [    3.719610] 
+Nov 21 20:57:21 ubuntu kernel: [    3.722262] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit1 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.726986] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit2 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.727773] [HOBOT_LPWM-0] (lpwm_platform_init): ctrl_reg = 0
+Nov 21 20:57:21 ubuntu kernel: [    3.733430] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit3 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.738949] [VIN_NODE]:[L610]type 3 vin_register_device_node done
+Nov 21 20:57:21 ubuntu kernel: [    3.738965] [HOBOT_LPWM-0] (hobot_lpwm_probe): Probe success
+Nov 21 20:57:21 ubuntu kernel: [    3.741480] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit4 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.754815] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit5 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.784347] aicbsp_init
+Nov 21 20:57:21 ubuntu kernel: [    3.785144] RELEASE_DATE:2024_0327_3561b08f
+Nov 21 20:57:21 ubuntu kernel: [    3.785157] aicbsp_resv_mem_init 
+Nov 21 20:57:21 ubuntu kernel: [    3.813316] [CODEC_NODE]:[L647]hobot_codec_node_probe start
+Nov 21 20:57:21 ubuntu kernel: [    3.813347] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit6 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.813693] [INFO][HOBOT_OSD](osd_probe) done
+Nov 21 20:57:21 ubuntu kernel: [    3.814174] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit7 is used
+Nov 21 20:57:21 ubuntu kernel: [    3.814425] [CODEC_NODE]:[L670][FRT:D] hobot_codec_node_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    4.959476] vs-cam-pulse 3d0b008c.cam_pulse: cam_pulse_probe successfully done!
+Nov 21 20:57:21 ubuntu kernel: [    4.987007] vin vcon0: self rx0 attr 0x521 bus 7 probe
+Nov 21 20:57:21 ubuntu kernel: [    4.987222] vin vcon1: self rx1 attr 0x521 bus 4 probe
+Nov 21 20:57:21 ubuntu kernel: [    4.987371] vin vcon2: self rx2 attr 0x5a1 bus 7 probe
+Nov 21 20:57:21 ubuntu kernel: [    4.987563] vin vcon3: self rx3 attr 0x521 bus 7 probe
+Nov 21 20:57:21 ubuntu kernel: [    4.987906] [VIN_NODE]:[L610]type 2 vin_register_device_node done
+Nov 21 20:57:21 ubuntu kernel: [    4.987912] vin vcon: init 4 vcon done
+Nov 21 20:57:21 ubuntu kernel: [    5.003017] hobot-sif 3d020000.sif: Adding to iommu group 1
+Nov 21 20:57:21 ubuntu kernel: [    5.003300] [VIN_NODE]:[L845]hw_id 0 vin_device_node_init done
+Nov 21 20:57:21 ubuntu kernel: [    5.003327] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit8 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.003452] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit9 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.003529] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit10 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.003604] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit11 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.003676] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 0 done
+Nov 21 20:57:21 ubuntu kernel: [    5.003720] hobot-sif 3d020000.sif: [FRT:D] cim_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.003727] [CIM]:[L1014]cim_probe hw_id 0 done, time used: 657us
+Nov 21 20:57:21 ubuntu kernel: [    5.003954] hobot-sif 3d030000.sif: Adding to iommu group 1
+Nov 21 20:57:21 ubuntu kernel: [    5.004237] [VIN_NODE]:[L845]hw_id 1 vin_device_node_init done
+Nov 21 20:57:21 ubuntu kernel: [    5.004261] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit12 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.004419] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit13 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.004596] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit14 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.004692] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit15 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.004775] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 1 done
+Nov 21 20:57:21 ubuntu kernel: [    5.005198] hobot-sif 3d030000.sif: [FRT:D] cim_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.005206] [CIM]:[L1014]cim_probe hw_id 1 done, time used: 1228us
+Nov 21 20:57:21 ubuntu kernel: [    5.005440] hobot-sif 3d040000.sif: Adding to iommu group 1
+Nov 21 20:57:21 ubuntu kernel: [    5.005691] [VIN_NODE]:[L845]hw_id 2 vin_device_node_init done
+Nov 21 20:57:21 ubuntu kernel: [    5.005714] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit16 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.010703] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit17 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.013305] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit18 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.014440] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit19 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.015183] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 2 done
+Nov 21 20:57:21 ubuntu kernel: [    5.015238] hobot-sif 3d040000.sif: [FRT:D] cim_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.015246] [CIM]:[L1014]cim_probe hw_id 2 done, time used: 9781us
+Nov 21 20:57:21 ubuntu kernel: [    5.015509] hobot-sif 3d050000.sif: Adding to iommu group 1
+Nov 21 20:57:21 ubuntu kernel: [    5.015893] [VIN_NODE]:[L845]hw_id 3 vin_device_node_init done
+Nov 21 20:57:21 ubuntu kernel: [    5.015922] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit20 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.016139] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit21 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.016358] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit22 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.016456] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit23 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.016553] [VIN_NODE]:[L999][S0]vin_node_device_node_init hw_id 3 done
+Nov 21 20:57:21 ubuntu kernel: [    5.016663] hobot-sif 3d050000.sif: [FRT:D] cim_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.016673] [CIM]:[L1014]cim_probe hw_id 3 done, time used: 1125us
+Nov 21 20:57:21 ubuntu kernel: [    5.017153] [VIN_NODE]:[L610]type 0 vin_register_device_node done
+Nov 21 20:57:21 ubuntu kernel: [    5.050460] vin sensor: init 24 sensor v1.0 done
+Nov 21 20:57:21 ubuntu kernel: [    5.068589] vin mipi0: probe with x5sys done
+Nov 21 20:57:21 ubuntu kernel: [    5.069472] file system registered
+Nov 21 20:57:21 ubuntu kernel: [    5.083583] CAM_SUBSYS soc:cam:cam_sys@0: [FRT:D] camsys_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.093072] vin mipi0: snrclk set disable
+Nov 21 20:57:21 ubuntu kernel: [    5.093107] vin mipi0: ver 0154 port0(0:0)
+Nov 21 20:57:21 ubuntu kernel: [    5.093445] vin mipi1: snrclk set disable
+Nov 21 20:57:21 ubuntu kernel: [    5.093471] vin mipi1: ver 0154 port1(0:1)
+Nov 21 20:57:21 ubuntu kernel: [    5.093888] vin mipi2: snrclk set disable
+Nov 21 20:57:21 ubuntu kernel: [    5.093914] vin mipi2: ver 0154 port2(1:0)
+Nov 21 20:57:21 ubuntu kernel: [    5.094377] vin mipi3: snrclk set disable
+Nov 21 20:57:21 ubuntu kernel: [    5.094403] vin mipi3: ver 0154 port3(1:1)
+Nov 21 20:57:21 ubuntu kernel: [    5.095170] [VIN_NODE]:[L610]type 1 vin_register_device_node done
+Nov 21 20:57:21 ubuntu kernel: [    5.095184] vin mipi-tx: dev0 dummy setcb
+Nov 21 20:57:21 ubuntu kernel: [    5.095188] vin mipi-tx: dev1 dummy setcb
+Nov 21 20:57:21 ubuntu kernel: [    5.095190] vin mipi: init 4 rx 2 tx done
+Nov 21 20:57:21 ubuntu kernel: [    5.104774] vin mipi: phy debug probed
+Nov 21 20:57:21 ubuntu kernel: [    5.104982] vin mipi0: debug probed
+Nov 21 20:57:21 ubuntu kernel: [    5.105143] vin mipi1: debug probed
+Nov 21 20:57:21 ubuntu kernel: [    5.105319] vin mipi2: debug probed
+Nov 21 20:57:21 ubuntu kernel: [    5.105550] vin mipi3: debug probed
+Nov 21 20:57:21 ubuntu kernel: [    5.122836] vs-isp 3d000000.isp: Adding to iommu group 8
+Nov 21 20:57:21 ubuntu kernel: [    5.123443] vs-isp 3d000000.isp: assigned reserved memory node linux,cma@88000000
+Nov 21 20:57:21 ubuntu kernel: [    5.123477] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit24 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.123645] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit25 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.123736] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit26 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.123869] vs-isp 3d000000.isp: VS ISP driver (native) probed done, time used: 967us
+Nov 21 20:57:21 ubuntu kernel: [    5.133901] read descriptors
+Nov 21 20:57:21 ubuntu kernel: [    5.133922] read strings
+Nov 21 20:57:21 ubuntu kernel: [    5.136430] vs-vse 3d010000.vse: Adding to iommu group 0
+Nov 21 20:57:21 ubuntu kernel: [    5.136716] vs-vse 3d010000.vse: cannot get reset control (err=-6)
+Nov 21 20:57:21 ubuntu kernel: [    5.136932] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit27 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.137626] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit28 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.137756] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit29 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.137986] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit30 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.138079] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[0] bit31 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.138193] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit0 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.138336] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit1 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.139151] vs-vse 3d010000.vse: VS VSE driver (native) probed done, time used: 2669us
+Nov 21 20:57:21 ubuntu kernel: [    5.152578] vin deserial: init 6 deserial v1.0 done
+Nov 21 20:57:21 ubuntu kernel: [    5.162468] HOBOT GDC 3d0c0000.gdc: Adding to iommu group 2
+Nov 21 20:57:21 ubuntu kernel: [    5.162654] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit2 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.162806] [VPF mgr]:[L271]vpf_alloc_minor_number: minor[1] bit3 is used
+Nov 21 20:57:21 ubuntu kernel: [    5.162908] HOBOT GDC 3d0c0000.gdc: [FRT:D] hobot_gdc_probe(0)
+Nov 21 20:57:21 ubuntu kernel: [    5.172940] [ISI_Sensor]:isi_sensor_init end
+Nov 21 20:57:21 ubuntu kernel: [    5.203364] bpu-core 3a000000.bpu: Adding to iommu group 10
+Nov 21 20:57:21 ubuntu kernel: [    5.203588] bpu-core 3a000000.bpu: Can't get bpu power delay, use default
+Nov 21 20:57:21 ubuntu kernel: [    5.211419] bpu_hw_io_x5: loading out-of-tree module taints kernel.
+Nov 21 20:57:21 ubuntu kernel: [    5.211439] bpu_hw_io_x5: module license 'Proprietary' taints kernel.
+Nov 21 20:57:21 ubuntu kernel: [    5.211443] Disabling lock debugging due to kernel taint
+Nov 21 20:57:21 ubuntu kernel: [    5.211863] bpu-core: hw-io: git commit: 42566cb
+Nov 21 20:57:21 ubuntu kernel: [    5.220747] UDC core: g_comp: couldn't find an available UDC or it's busy
+Nov 21 20:57:21 ubuntu kernel: [    5.248915] asoc-duplex-host-card snd0: asoc_simple_probe end
+Nov 21 20:57:21 ubuntu kernel: [    5.265527] ** HUGE-IC WLAN Card Driver(fmac) v2.2.1-29452
+Nov 21 20:57:21 ubuntu kernel: [    5.265542] hgic_usb_init:401::Enter, max_pkt_len = 2560
+Nov 21 20:57:21 ubuntu kernel: [    5.265629] usbcore: registered new interface driver hgicf
+Nov 21 20:57:21 ubuntu kernel: [    5.265635] hgic_usb_init:410::Leave
+Nov 21 20:57:21 ubuntu kernel: [    5.265639] hgic_sdio_init:1005::Enter, max_pkt_len = 8192
+Nov 21 20:57:21 ubuntu kernel: [    5.265960] hgic_sdio_probe:848::Enter, func->num:1, devid:4002
+Nov 21 20:57:21 ubuntu kernel: [    5.265973] hgic_sdio_probe:864::new sdio card: vendor:a012, id:4002
+Nov 21 20:57:21 ubuntu kernel: [    5.265979] hgicf_core_probe:983::qc_mode=0, no_bootdl=0, if_agg=0, txq_size=1024
+Nov 21 20:57:21 ubuntu kernel: [    5.265999] hgic_ota_init:78::Enter ...
+Nov 21 20:57:21 ubuntu kernel: [    5.266004] hgic_ota_init:85::Leave ...
+Nov 21 20:57:21 ubuntu kernel: [    5.266008] hgic_bootdl_init:43::Enter ...
+Nov 21 20:57:21 ubuntu kernel: [    5.266013] hgic_bootdl_init:49::Leave ...each packet len:32704
+Nov 21 20:57:21 ubuntu kernel: [    5.266020] hgicf_core_probe:1028::ok
+Nov 21 20:57:21 ubuntu kernel: [    5.266024] hgic_sdio_enable:817::Enter
+Nov 21 20:57:21 ubuntu kernel: [    5.266137] hgic_sdio_enable:836::ok
+Nov 21 20:57:21 ubuntu kernel: [    5.266156] hgicf_download_fw:733::Enter
+Nov 21 20:57:21 ubuntu kernel: [    5.266182] hgic_sdio_probe:908::ok
+Nov 21 20:57:21 ubuntu kernel: [    5.266309] hgic_sdio_init:1011::Leave
+Nov 21 20:57:21 ubuntu kernel: [    5.266314] leave hgicf_init
+Nov 21 20:57:21 ubuntu kernel: [    5.269033] enter hgic_bootdl_download
+Nov 21 20:57:21 ubuntu kernel: [    5.272421] hgic_get_fw_dl_addr:150::hgic_get_fw_dl_addr:Check Para:download addr:20001000
+Nov 21 20:57:21 ubuntu kernel: [    5.272441] hgic_get_fw_aes_en:114::hgic_get_fw_aes_en:Check Para:aes_en:0
+Nov 21 20:57:21 ubuntu kernel: [    5.272446] hgic_get_fw_crc_en:132::hgic_get_fw_crc_en:Check Para:crc_en:1
+Nov 21 20:57:21 ubuntu kernel: [    5.272451] hgic_get_fw_local_crc32:204::hgic_get_fw_local_crc32:Check Para:local crc:0
+Nov 21 20:57:21 ubuntu kernel: [    5.272456] hgic_get_fw_code_offset:186::hgic_get_fw_code_offset:Check Para:code offset:8192
+Nov 21 20:57:21 ubuntu kernel: [    5.272461] hgic_bootdl_parse_fw:186::firmware hdr len  : 8192
+Nov 21 20:57:21 ubuntu kernel: [    5.272465] hgic_bootdl_parse_fw:187::firmware run addr : 20001000
+Nov 21 20:57:21 ubuntu kernel: [    5.272469] hgic_bootdl_parse_fw:188::firmware size     : 349712
+Nov 21 20:57:21 ubuntu kernel: [    5.272473] hgic_bootdl_parse_fw:189::firmware aes_en:0,crc_en:1
+Nov 21 20:57:21 ubuntu kernel: [    5.274728] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.276875] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.279008] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.281083] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.283139] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.285191] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.287706] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.289866] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.293312] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.295421] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.296972] hgic_bootdl_send_fw:212::Send fw data success!
+Nov 21 20:57:21 ubuntu kernel: [    5.306152] hgic_bootdl_download:421::Cmd run success!
+Nov 21 20:57:21 ubuntu kernel: [    5.306169] hgic_bootdl_download:425::Release boot download firmware...
+Nov 21 20:57:21 ubuntu kernel: [    5.306224] leave hgic_bootdl_download
+Nov 21 20:57:21 ubuntu kernel: [    5.417091] enter hgic_sdio_reinit_card
+Nov 21 20:57:21 ubuntu kernel: [    5.459982] leave hgic_sdio_reinit_card
+Nov 21 20:57:21 ubuntu kernel: [    5.464112] hgic fw info:1.6.4.5, svn version:33267, 1e:9e:14:96:a8:20, smt_dat:124111319
+Nov 21 20:57:21 ubuntu kernel: [    5.464131] hgicf_create_iface:575::Enter
+Nov 21 20:57:21 ubuntu kernel: [    5.464483] hgicf_create_procfs:267::enter
+Nov 21 20:57:21 ubuntu kernel: [    5.464511] hgicf_create_procfs:294::leave
+Nov 21 20:57:21 ubuntu kernel: [    5.464564] hgicf_load_config:109::load conf file: /etc/hgicf.conf
+Nov 21 20:57:21 ubuntu kernel: [    5.464942] hgicf_load_config:124::param: [bss_bw=4]
+Nov 21 20:57:21 ubuntu kernel: [    5.471584] hgicf_load_config:124::param: [chan_list=9060,9100,9140,9180,9220]
+Nov 21 20:57:21 ubuntu kernel: [    5.485618] hgicf_load_config:124::param: [freq_range=]
+Nov 21 20:57:21 ubuntu kernel: [    5.485635] hgicf_load_config:128::invalid param:[freq_range=]
+Nov 21 20:57:21 ubuntu kernel: [    5.485640] hgicf_load_config:124::param: [key_mgmt=WPA-PSK]
+Nov 21 20:57:21 ubuntu kernel: [    5.491043] hgicf_load_config:124::param: [mode=sta]
+Nov 21 20:57:21 ubuntu kernel: [    5.496078] hgicf_load_config:124::param: [ssid=BestMow1]
+Nov 21 20:57:21 ubuntu kernel: [    5.510878] hgicf_load_config:124::param: [tx_mcs=255]
+Nov 21 20:57:21 ubuntu kernel: [    5.519203] hgicf_load_config:124::param: [wpa_psk=baa58569a9edd7c3a55e446bc658ef76a7173d023d256786832474d737756a11]
+Nov 21 20:57:21 ubuntu kernel: [    5.539597] hgicf_delay_init:816::Leave, ret=1, soft_fc=1
+Nov 21 20:57:28 ubuntu kernel: [   12.750770] EXT4-fs (mmcblk0p10): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 21 20:57:28 ubuntu kernel: [   12.754696] EXT4-fs (mmcblk0p11): mounted filesystem with ordered data mode. Quota mode: disabled.
+Nov 21 20:57:28 ubuntu kernel: [   12.759059] EXT4-fs (mmcblk0p13): mounted filesystem with ordered data mode. Quota mode: disabled.

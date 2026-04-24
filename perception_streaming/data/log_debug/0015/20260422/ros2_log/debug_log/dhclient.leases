@@ -1,0 +1,26 @@
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.14;
+  option subnet-mask 255.255.255.0;
+  option dhcp-lease-time 3600;
+  option routers 11.73.152.1;
+  option dhcp-message-type 5;
+  option dhcp-server-identifier 11.73.152.1;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  renew 3 2026/04/22 03:25:16;
+  rebind 3 2026/04/22 03:51:04;
+  expire 3 2026/04/22 03:58:34;
+}
+lease {
+  interface "hg0";
+  fixed-address 11.73.152.14;
+  option subnet-mask 255.255.255.0;
+  option routers 11.73.152.1;
+  option dhcp-lease-time 3600;
+  option dhcp-message-type 5;
+  option domain-name-servers 1.1.1.1,8.8.8.8,114.114.114.114;
+  option dhcp-server-identifier 11.73.152.1;
+  renew 3 2026/04/22 03:29:46;
+  rebind 3 2026/04/22 03:55:48;
+  expire 3 2026/04/22 04:03:18;
+}

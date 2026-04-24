@@ -1,0 +1,113 @@
+{
+    "all_map_area": 948.819,
+    "charging_pose": {
+        "latitude": "23.25792320",
+        "longitude": "114.12718989",
+        "theta": -2.62,
+        "x": 0.0,
+        "y": 0.06
+    },
+    "machine_ratio": 0.9974,
+    "map_element": [
+        {
+            "cached_learning_obstacles": [],
+            "dangerous_area": [],
+            "direction": 2.084,
+            "edge_reliable_ratio": 1.0,
+            "has_narrow_passage": true,
+            "is_cached_learning": false,
+            "learning_obstacle": false,
+            "map_area": 201.99,
+            "map_reliable_ratio": 1.0,
+            "map_type": "manual",
+            "max_slope": 0.0,
+            "name": "map1",
+            "obstacles": [
+                {
+                    "id": "obstacle2",
+                    "is_disabled": false,
+                    "obstacle_reliable": 1.0,
+                    "obstacle_type": "marking"
+                },
+                {
+                    "id": "obstacle3",
+                    "is_disabled": false,
+                    "obstacle_reliable": 1.0,
+                    "obstacle_type": "marking"
+                },
+                {
+                    "id": "obstacle4",
+                    "is_disabled": false,
+                    "obstacle_reliable": 1.0,
+                    "obstacle_type": "marking"
+                },
+                {
+                    "id": "obstacle5",
+                    "is_disabled": false,
+                    "obstacle_reliable": 0.8534,
+                    "obstacle_type": "manual"
+                },
+                {
+                    "id": "obstacle6",
+                    "is_disabled": false,
+                    "obstacle_reliable": 0.0,
+                    "obstacle_type": "manual"
+                },
+                {
+                    "id": "obstacle7",
+                    "is_disabled": false,
+                    "obstacle_reliable": 0.8534,
+                    "obstacle_type": ""
+                },
+                {
+                    "id": "obstacle8",
+                    "is_disabled": false,
+                    "obstacle_reliable": 0.0,
+                    "obstacle_type": ""
+                },
+                {
+                    "id": "obstacle9",
+                    "is_disabled": false,
+                    "obstacle_reliable": 1.0,
+                    "obstacle_type": "spilt"
+                }
+            ],
+            "slope_statistics": {
+                "0_12_ratio": 0.945,
+                "12_24_ratio": 0.0445,
+                "ge_24_ratio": 0.0105,
+                "map_inside_average_slope": 0.0
+            }
+        },
+        {
+            "cached_learning_obstacles": [],
+            "dangerous_area": [],
+            "direction": 0.0,
+            "edge_reliable_ratio": 1.0,
+            "has_narrow_passage": true,
+            "is_cached_learning": false,
+            "learning_obstacle": false,
+            "map_area": 746.83,
+            "map_reliable_ratio": 0.9915,
+            "map_type": "manual",
+            "max_slope": 0.0,
+            "name": "map2",
+            "obstacles": [
+                {
+                    "id": "obstacle1",
+                    "is_disabled": false,
+                    "obstacle_reliable": 1.0,
+                    "obstacle_type": "spilt"
+                }
+            ],
+            "slope_statistics": {
+                "0_12_ratio": 0.9864,
+                "12_24_ratio": 0.0129,
+                "ge_24_ratio": 0.0007,
+                "map_inside_average_slope": 0.0
+            }
+        }
+    ],
+    "map_num": 2,
+    "no_passage": []
+}

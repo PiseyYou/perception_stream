@@ -1,0 +1,10 @@
+{
+  "ssh_key_path": "bestmow_rsa_202604",
+  "ssh_host": "120.25.121.3",
+  "ssh_user": "root",
+  "default_ports": {
+    "realtime_monitor": 10015,
+    "log_fetch": 10016,
+    "stereo_analysis": 10115
+  }
+}

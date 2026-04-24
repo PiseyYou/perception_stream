@@ -1,0 +1,21 @@
+semantic_map:
+  version: 2.0
+  resolution: 0.070000000298023224
+  width: 530
+  height: 291
+  origin: [-1.1899999999999999, -15.33, 0]
+  frame_id: map
+  layers:
+    semantic: semantic.png
+    rgb: semantic_rgb.png
+    rgb_resolution: 0.02
+    height: height.png
+    height_resolution: 0.029999999999999999
+    height_unobserved: -32768
+  class_mapping:
+    0: lawn
+    10: movable
+    60: shrub
+    80: obstacle
+    100: animal
+    255: unknown

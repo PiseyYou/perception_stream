@@ -1,0 +1,127 @@
+04-22 19:45:27.516 E/        ( 2064): [28469.398438][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.523 W/TRACE   (  690): [28469.419922]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.523 E/TRACE   (  690): [28469.419922]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.558 W/TRACE   (  690): [28469.455078]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.558 E/TRACE   (  690): [28469.455078]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.558 E/TRACE   (  690): [28469.455078]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.558 E/CAMERA  (  690): [28469.455078]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.558 E/CAMERA  (  690): [28469.455078]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.558 E/        ( 2064): [28469.441406][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.558 E/        ( 2064): [28469.441406][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.564 W/TRACE   (  690): [28469.460938]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.564 E/TRACE   (  690): [28469.460938]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.600 W/TRACE   (  690): [28469.498047]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.600 E/TRACE   (  690): [28469.498047]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.600 E/TRACE   (  690): [28469.498047]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.600 E/CAMERA  (  690): [28469.498047]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.600 E/CAMERA  (  690): [28469.498047]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.600 E/        ( 2064): [28469.482422][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.600 E/        ( 2064): [28469.482422][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.606 W/TRACE   (  690): [28469.503906]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.606 E/TRACE   (  690): [28469.503906]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.641 W/TRACE   (  690): [28469.539062]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.641 E/TRACE   (  690): [28469.539062]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.641 E/TRACE   (  690): [28469.539062]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.641 E/CAMERA  (  690): [28469.539062]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.641 E/CAMERA  (  690): [28469.539062]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.641 E/        ( 2064): [28469.521484][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.641 E/        ( 2064): [28469.521484][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.647 W/TRACE   (  690): [28469.544922]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.647 E/TRACE   (  690): [28469.544922]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.683 W/TRACE   (  690): [28469.580078]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.683 E/TRACE   (  690): [28469.580078]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.683 E/TRACE   (  690): [28469.580078]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.683 E/CAMERA  (  690): [28469.580078]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.683 E/CAMERA  (  690): [28469.580078]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.683 E/        ( 2064): [28469.566406][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.683 E/        ( 2064): [28469.566406][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.690 W/TRACE   (  690): [28469.587891]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.690 E/TRACE   (  690): [28469.587891]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.725 W/TRACE   (  690): [28469.623047]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.725 E/TRACE   (  690): [28469.623047]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.725 E/TRACE   (  690): [28469.623047]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.725 E/CAMERA  (  690): [28469.623047]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.725 E/CAMERA  (  690): [28469.623047]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.725 E/        ( 2064): [28469.605469][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.725 E/        ( 2064): [28469.605469][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.731 W/TRACE   (  690): [28469.628906]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.731 E/TRACE   (  690): [28469.628906]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.766 W/TRACE   (  690): [28469.664062]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.766 E/TRACE   (  690): [28469.664062]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.766 E/TRACE   (  690): [28469.664062]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.766 E/CAMERA  (  690): [28469.664062]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.766 E/CAMERA  (  690): [28469.664062]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.766 E/        ( 2064): [28469.646484][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.766 E/        ( 2064): [28469.646484][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.773 W/TRACE   (  690): [28469.669922]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.773 E/TRACE   (  690): [28469.669922]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.808 W/TRACE   (  690): [28469.705078]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.808 E/TRACE   (  690): [28469.705078]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.808 E/TRACE   (  690): [28469.705078]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.808 E/CAMERA  (  690): [28469.705078]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.808 E/CAMERA  (  690): [28469.705078]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.808 E/        ( 2064): [28469.689453][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.808 E/        ( 2064): [28469.689453][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.814 W/TRACE   (  690): [28469.710938]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.814 E/TRACE   (  690): [28469.710938]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.850 W/TRACE   (  690): [28469.748047]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.850 E/TRACE   (  690): [28469.748047]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.850 E/TRACE   (  690): [28469.748047]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.850 E/CAMERA  (  690): [28469.748047]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.850 E/CAMERA  (  690): [28469.748047]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.850 E/        ( 2064): [28469.730469][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.850 E/        ( 2064): [28469.730469][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.857 W/TRACE   (  690): [28469.753906]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.857 E/TRACE   (  690): [28469.753906]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.891 W/TRACE   (  690): [28469.789062]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.891 E/TRACE   (  690): [28469.789062]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.891 E/TRACE   (  690): [28469.789062]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.891 E/CAMERA  (  690): [28469.789062]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.891 E/CAMERA  (  690): [28469.789062]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.891 E/        ( 2064): [28469.771484][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.891 E/        ( 2064): [28469.771484][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.897 W/TRACE   (  690): [28469.794922]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.897 E/TRACE   (  690): [28469.794922]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.933 W/TRACE   (  690): [28469.830078]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.933 E/TRACE   (  690): [28469.830078]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.933 E/TRACE   (  690): [28469.830078]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.933 E/CAMERA  (  690): [28469.830078]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.933 E/CAMERA  (  690): [28469.830078]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.933 E/        ( 2064): [28469.814453][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.933 E/        ( 2064): [28469.814453][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.940 W/TRACE   (  690): [28469.837891]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.940 E/TRACE   (  690): [28469.837891]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:27.974 W/TRACE   (  690): [28469.873047]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.974 E/TRACE   (  690): [28469.873047]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:27.974 E/TRACE   (  690): [28469.873047]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:27.974 E/CAMERA  (  690): [28469.873047]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:27.974 E/CAMERA  (  690): [28469.873047]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:27.975 E/        ( 2064): [28469.855469][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:27.975 E/        ( 2064): [28469.855469][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:27.981 W/TRACE   (  690): [28469.878906]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:27.981 E/TRACE   (  690): [28469.878906]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:28.016 W/TRACE   (  690): [28469.914062]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:28.016 E/TRACE   (  690): [28469.914062]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:28.016 E/TRACE   (  690): [28469.914062]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:28.016 E/CAMERA  (  690): [28469.914062]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:28.016 E/CAMERA  (  690): [28469.914062]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:28.016 E/        ( 2064): [28469.896484][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:28.016 E/        ( 2064): [28469.896484][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:28.023 W/TRACE   (  690): [28469.919922]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:28.023 E/TRACE   (  690): [28469.919922]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:28.058 W/TRACE   (  690): [28469.955078]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:28.058 E/TRACE   (  690): [28469.955078]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:28.058 E/TRACE   (  690): [28469.955078]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:28.058 E/CAMERA  (  690): [28469.955078]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:28.058 E/CAMERA  (  690): [28469.955078]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:28.058 E/        ( 2064): [28469.939453][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:28.058 E/        ( 2064): [28469.939453][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail
+04-22 19:45:28.064 W/TRACE   (  690): [28469.960938]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:28.064 E/TRACE   (  690): [28469.960938]CAM-ENGINE-CB: CamEngineCamerIcDrvMeasureCb AwbCtrlGetResult: 13
+04-22 19:45:28.099 W/TRACE   (  690): [28469.998047]AWB_CTRL: Index:0, AwbCtrlGetResult awb result get fail, cct value is zero
+04-22 19:45:28.099 E/TRACE   (  690): [28469.998047]CAM_ENGINE_API: CamEngineAwbGetResult: Get awb result fail (13)
+04-22 19:45:28.099 E/TRACE   (  690): [28469.998047]CAM_DEV_MODULE_ERROR: VsiCamDeviceAwbGetResult: CamEngineAwbGetResult failed(13)
+04-22 19:45:28.099 E/CAMERA  (  690): [28469.998047]camdev_data_transfer_custom failed to call VsiCamDeviceAwbGetResult (ret=0xd)
+04-22 19:45:28.100 E/CAMERA  (  690): [28469.998047]ISP0(0): failed to call camdev_control(err=-1).
+04-22 19:45:28.100 E/        ( 2064): [28469.980469][vpf_ioctl.c]:[vpf_ioc_get_ctrl][363]failed to ioctl: VIO_IOC_GET_CTRL (1 - Operation not permitted)
+04-22 19:45:28.100 E/        ( 2064): [28469.980469][hbn_vpf_interface.c]:[hbn_vnode_get_ctrl][1318]vs-isp0: vpf_ioc_get_ctrl failed COMMON get control fail

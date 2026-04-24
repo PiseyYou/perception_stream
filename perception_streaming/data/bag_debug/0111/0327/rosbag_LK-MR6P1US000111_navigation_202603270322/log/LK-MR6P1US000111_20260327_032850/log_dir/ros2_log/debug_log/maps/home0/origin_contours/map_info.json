@@ -1,0 +1,16 @@
+{
+    "all_map_area": 0.0,
+    "charging_pose": {
+        "latitude": "23.25792320",
+        "longitude": "114.12718989",
+        "theta": -2.62,
+        "x": 0.0,
+        "y": 0.06
+    },
+    "machine_ratio": 0.9993,
+    "map_element": [],
+    "map_num": 0,
+    "no_passage": [
+        "charging_station"
+    ]
+}

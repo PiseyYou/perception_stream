@@ -1,0 +1,82 @@
+--------- beginning of /dev/log_main
+11-22 04:57:23.218 I/        (  769): [OTA_INFO][veeprom_flag.c:86] veeprom crc, oricrc[a1c3d47e], newcrc[a1c3d47e], offset[1352]
+11-22 04:57:23.218 I/        (  769): [OTA_INFO][veeprom_flag.c:396] update part num: [0]
+11-22 04:57:23.220 I/        (  769): [OTA_INFO][ota_boot_control.c:304] This slot has been marked success before, no need to mark it repeatedly
+11-22 04:57:23.220 I/        (  769): [OTA_INFO][ota_boot_control.c:797] set slot:0 boot success
+11-22 04:57:23.221 I/        (  769): [OTA_INFO][veeprom_flag.c:86] veeprom crc, oricrc[a1c3d47e], newcrc[a1c3d47e], offset[1352]
+11-22 04:57:23.221 I/        (  769): [OTA_INFO][veeprom_flag.c:310] veeprom: flag [0], value [3]
+11-22 04:57:23.224 I/        (  769): [OTA_INFO][veeprom_flag.c:86] veeprom crc, oricrc[637d5378], newcrc[637d5378], offset[1352]
+11-22 04:57:23.224 I/        (  769): [OTA_INFO][veeprom_flag.c:396] update part num: [0]
+11-22 04:57:23.228 I/        (  769): [OTA_INFO][veeprom_flag.c:741] veeprom flag set default
+03-27 03:24:07.673 W/        ( 1993): [23.604353][camera_vpf]:[camera_vpf_vin_attr_show][994]     mipi : rx0 vc0(0) not enable
+03-27 03:24:07.673 W/        ( 1993): [23.604540][sensor_lib]:[camera_sensor_set_cali_name][585] calib_lname is null, we will try sensor_name_tuning.json.
+03-27 03:24:07.680 W/        ( 1993): [23.611790][camera_vpf]:[camera_vpf_vin_attr_show][994]     mipi : rx0 vc0(0) not enable
+03-27 03:24:07.791 W/        ( 1993): [23.722029][camera_vpf]:[camera_vpf_vin_attr_show][994]     mipi : rx0 vc0(0) not enable
+03-27 03:24:07.791 W/        ( 1993): [23.722095][sensor_lib]:[camera_sensor_set_cali_name][585] calib_lname is null, we will try sensor_name_tuning.json.
+03-27 03:24:07.950 E/        ( 1993): [23.881514][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:07.977 W/        ( 1993): [23.908792][sensor_lib]:[camera_sensor_get_iparam][2289] sensor1 sc132gs 0x0@0.0ps state 4-NOT_SUPPORT
+03-27 03:24:07.977 W/        ( 1993): [23.908855][sensor_comm]:[camera_sensor_emode_parse][149] sensor sc132gs extra_mode 0 emode name is NULL
+03-27 03:24:07.986 W/        ( 1993): [23.917334][sensor_lib]:[camera_sensor_get_iparam][2289] sensor0 sc031iot 0x0@0.0ps state 4-NOT_SUPPORT
+03-27 03:24:07.986 W/        ( 1993): [23.917376][sensor_comm]:[camera_sensor_emode_parse][149] sensor sc031iot extra_mode 0 emode name is NULL
+03-27 03:24:08.051 W/        ( 1993): [23.982832][sensor_lib]:[camera_sensor_get_iparam][2289] sensor2 sc031iot 0x0@0.0ps state 4-NOT_SUPPORT
+03-27 03:24:08.051 W/        ( 1993): [23.982880][sensor_comm]:[camera_sensor_emode_parse][149] sensor sc031iot extra_mode 0 emode name is NULL
+03-27 03:24:08.438 W/        ( 1993): [24.369564][camera_vpf]:[camera_vpf_vin_attr_show][994]     mipi : rx0 vc0(0) not enable
+03-27 03:24:08.450 E/        ( 1993): [24.381445][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:08.704 W/        ( 1993): [24.635019][sensor_lib]:[camera_sensor_get_iparam][2289] sensor3 sc132gs 0x0@0.0ps state 4-NOT_SUPPORT
+03-27 03:24:08.704 W/        ( 1993): [24.635069][sensor_comm]:[camera_sensor_emode_parse][149] sensor sc132gs extra_mode 0 emode name is NULL
+03-27 03:24:08.951 E/        ( 1993): [24.882471][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:09.450 E/        ( 1993): [25.381548][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:09.950 E/        ( 1993): [25.881245][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.450 E/        ( 1993): [26.381491][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.505 E/        ( 1993): [26.436119][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.505 E/        ( 1993): [26.436165][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.505 E/        ( 1993): [26.436399][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.506 E/        ( 1993): [26.437494][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.506 E/        ( 1993): [26.437534][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.506 E/        ( 1993): [26.437704][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.548 E/        ( 1993): [26.479025][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.548 E/        ( 1993): [26.479073][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.548 E/        ( 1993): [26.479277][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.589 E/        ( 1993): [26.520802][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.589 E/        ( 1993): [26.520851][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.590 E/        ( 1993): [26.521095][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.631 E/        ( 1993): [26.562340][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.631 E/        ( 1993): [26.562387][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.631 E/        ( 1993): [26.562592][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.673 E/        ( 1993): [26.604481][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.673 E/        ( 1993): [26.604553][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.673 E/        ( 1993): [26.604788][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.714 E/        ( 1993): [26.645609][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.714 E/        ( 1993): [26.645658][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.714 E/        ( 1993): [26.645941][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.770 E/        ( 1993): [26.701639][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.770 E/        ( 1993): [26.701704][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.770 E/        ( 1993): [26.701941][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.800 E/        ( 1993): [26.731760][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.800 E/        ( 1993): [26.731817][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.801 E/        ( 1993): [26.732092][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.839 E/        ( 1993): [26.770870][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.839 E/        ( 1993): [26.770935][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.840 E/        ( 1993): [26.771154][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.881 E/        ( 1993): [26.812653][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.881 E/        ( 1993): [26.812714][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.881 E/        ( 1993): [26.812925][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.923 E/        ( 1993): [26.854290][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.923 E/        ( 1993): [26.854343][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.923 E/        ( 1993): [26.854654][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.964 E/        ( 1993): [26.895733][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:10.964 E/        ( 1993): [26.895784][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:10.964 E/        ( 1993): [26.895985][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.006 E/        ( 1993): [26.937416][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.006 E/        ( 1993): [26.937468][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:11.006 E/        ( 1993): [26.937691][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.048 E/        ( 1993): [26.979088][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.048 E/        ( 1993): [26.979143][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:11.048 E/        ( 1993): [26.979357][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.103 E/        ( 1993): [27.034924][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.103 E/        ( 1993): [27.034988][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:11.104 E/        ( 1993): [27.035206][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.133 E/        ( 1993): [27.064663][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:11.133 E/        ( 1993): [27.064724][hbn_isp_api.c]:[hbn_isp_set_exposure_attr][110][hbn_isp_set_exposure_attr] get sensor param fail
+03-27 03:24:11.135 E/        ( 1993): [27.066511][hbn_isp_api.c]:[hbn_isp_ctrl][41]vnode is null
+03-27 03:24:21.150 D/[BPU_PLAT]( 3236): BPU Platform Version(1.3.6)! soc info(x5)

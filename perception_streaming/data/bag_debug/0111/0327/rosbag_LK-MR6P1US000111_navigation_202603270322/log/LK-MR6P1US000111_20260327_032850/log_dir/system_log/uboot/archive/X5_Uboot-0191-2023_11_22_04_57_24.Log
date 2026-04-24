@@ -1,0 +1,50 @@
+
+
+U-Boot 2022.10-gd5167c40-dirty (Dec 17 2025 - 17:21:13 +0800)
+
+Model: Horizon X5
+DRAM:  3.9 GiB
+console out start addr:0x0000000087ffc000, end addr:0x0000000087ffe000
+horizon_aon_pinctrl aon_iomuxc@31040000: Initialized D-Robotics pinctrl driver
+optee optee: OP-TEE: revision 3.20 (05a6c9de)
+ADC calibration: 17
+ADC trimming: 8
+horizon_lsio_pinctrl lsio_iomuxc@34180000: Initialized D-Robotics pinctrl driver
+horizon_hsio_pinctrl hsio_iomuxc@35050000: Initialized D-Robotics pinctrl driver
+horizon_dsp_pinctrl dsp_iomuxc@31040014: Initialized D-Robotics pinctrl driver
+Core:  157 devices, 29 uclasses, devicetree: separate
+WDT:   Started watchdog@34250000 with servicing (10s timeout)
+stop watchdog
+MMC:   sdio-host@35040000: 0, sdio-host@35020000: 1
+Loading Environment from MMC... (Tuning Ok!) *** Warning - bad CRC, using default environment
+
+In:    serial@32120000
+Out:   serial@32120000
+Err:   serial@32120000
+Net:   
+Warning: gmac-tsn@35010000 (eth0) using random MAC address - e6:78:91:d5:f1:18
+eth0: gmac-tsn@35010000
+Hit any key to stop autoboot:  3  2  1  0 
+ANDROID: Booting slot: a
+Using slot a
+Can't find partition 'boot_a'
+## Loading kernel from FIT Image at 90000000 ...
+   Using 'boardid-0x0202' configuration
+   Trying 'kernel' kernel subimage
+   Verifying Hash Integrity ... OK
+   Decrypting Data ... OK
+## Loading fdt from FIT Image at 90000000 ...
+   Using 'boardid-0x0202' configuration
+   Trying 'fdt5' fdt subimage
+   Verifying Hash Integrity ... OK
+   Decrypting Data ... OK
+   Booting using the fdt blob at 0x90982c64
+   Uncompressing Kernel Image
+   Loading Device Tree to 0000000087fd2000, end 0000000087ffb3de ... OK
+Set Mem[ion_reserved_ge4g] Size to 0x000000000c000000@0xa4100000
+Set Mem[ion_carveout_ge4g] Size to 0x000000000c000000@0xb0100000
+Set Mem[ion_cma_ge4g] Size to 0x000000000c000000@0xbc100000
+enable CPU 1.8G!
+
+Starting kernel ...
+

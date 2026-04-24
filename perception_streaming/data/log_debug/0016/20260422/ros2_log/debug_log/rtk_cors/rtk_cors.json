@@ -1,0 +1,8 @@
+{
+    "cors_caster_addr": "120.25.121.3",
+    "cors_caster_port": 8005,
+    "cors_user": "test",
+    "cors_password": "test",
+    "cors_mountpoint": "AUTO",
+    "force_cors": false
+}

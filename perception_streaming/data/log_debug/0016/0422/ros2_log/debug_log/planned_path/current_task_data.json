@@ -1,0 +1,62 @@
+{
+   "blade_working_time" : 430.95178245499994,
+   "boundary_areas" : {
+      "1000" : {
+         "area_id" : 0,
+         "final_index" : 20,
+         "finished" : true,
+         "prev_id" : -1,
+         "target_index" : 0
+      },
+      "1001" : {
+         "area_id" : 1,
+         "final_index" : 18,
+         "finished" : true,
+         "prev_id" : 0,
+         "target_index" : 0
+      },
+      "1002" : {
+         "area_id" : 2,
+         "final_index" : 22,
+         "finished" : true,
+         "prev_id" : 1,
+         "target_index" : 0
+      }
+   },
+   "cov_areas" : {
+      "0" : {
+         "area_id" : 0,
+         "final_index" : 46,
+         "finished" : true,
+         "prev_id" : 0,
+         "target_index" : 46
+      }
+   },
+   "current_status" : 2,
+   "max_covered_ratio" : 0.75204688310623169,
+   "missed" : "-7.52 -3.20,-7.27 -2.76;-7.07 -2.75,-7.42 -3.36;-7.22 -3.70,-6.51 -2.44;-6.71 -2.79,-5.59 -0.79;-5.76 -0.75,-6.00 -1.18;-6.18 -1.16,-5.93 -0.70;-6.10 -0.66,-6.41 -1.23;-5.73 -1.40,-7.12 -3.87;-7.01 -4.04,-5.97 -2.17;-5.70 -1.69,-5.28 -0.95;-4.90 -0.97,-6.74 -4.25;-6.91 -4.21,-6.33 -3.16;-5.94 -3.16,-6.54 -4.23;-6.16 -3.55,-4.73 -1.01;-4.73 -1.35,-5.07 -1.96;",
+   "prev_status" : 31,
+   "start_nav_time" : 1776671262.8137817,
+   "target_area_id" : 0,
+   "target_index" : 46,
+   "target_repeat_times" : 1,
+   "task_planned_area" : 15.867500305175781,
+   "timestamp" : "1776723881",
+   "total_covered_area" : 10.360000610351562,
+   "total_no_boundary_area" : 11.940625000000001,
+   "ts_boundary" : 78.221813496999999,
+   "ts_follow_count" : 39,
+   "ts_follow_total_len" : 85.734938624434164,
+   "ts_follow_total_sec" : 279.98280388600006,
+   "ts_max_pitch" : 0.1496635131407234,
+   "ts_max_roll" : 0.13082562967370989,
+   "ts_max_single_obstacle_sec" : 443.50589629500001,
+   "ts_mowing" : 269.869674046,
+   "ts_obstacle" : 1003.100821808,
+   "ts_other" : 35.904917808999997,
+   "ts_partition" : 89.503467791999995,
+   "ts_pause" : 72.716994201000006,
+   "ts_pause_count" : 2,
+   "ts_recovery" : 583.54989952900007,
+   "version" : "1.0"
+}

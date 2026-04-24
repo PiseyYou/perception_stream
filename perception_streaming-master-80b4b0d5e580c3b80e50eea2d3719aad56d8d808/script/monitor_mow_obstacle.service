@@ -1,0 +1,22 @@
+[Unit]
+Description=Mowing Obstacle Monitor Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/bin/bash /userdata/bestmow_data/image_perception_debug/monitor_mow_obstacle.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/userdata/log_dir/ros2_log/monitor_mow_obstacle.log
+StandardError=append:/userdata/log_dir/ros2_log/monitor_mow_obstacle.log
+
+# ROS2 环境变量
+Environment="ROS_DOMAIN_ID=0"
+Environment="RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+Environment="FASTRTPS_DEFAULT_PROFILES_FILE=/opt/ros/fastdds.xml"
+Environment="ROS_LOG_DIR=/userdata/log_dir/ros2_log"
+Environment="ROS_LOCALHOST_ONLY=1"
+
+[Install]
+WantedBy=multi-user.target

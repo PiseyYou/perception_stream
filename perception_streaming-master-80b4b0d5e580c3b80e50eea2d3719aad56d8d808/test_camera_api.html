@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Camera Bag API</title>
+</head>
+<body>
+    <h1>Test Camera Bag Files API</h1>
+    <button onclick="testAPI()">Test API</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testAPI() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Loading...';
+
+            try {
+                const bagDir = 'data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_camera_202603220059';
+                const url = `/offline/list_camera_bag_files?bag_dir=${encodeURIComponent(bagDir)}`;
+
+                console.log('Fetching:', url);
+                const res = await fetch(url);
+                const data = await res.json();
+
+                console.log('Response:', data);
+
+                if (data.ok) {
+                    resultEl.textContent = `Success!\nFiles: ${data.files.length}\n\nFirst file:\nImage: ${data.files[0].img}\nPCD: ${data.files[0].pcd}`;
+
+                    // Test loading first image
+                    const imgUrl = `/offline/local_file?path=${encodeURIComponent(data.files[0].img)}`;
+                    console.log('Testing image:', imgUrl);
+
+                    const imgRes = await fetch(imgUrl);
+                    console.log('Image response status:', imgRes.status);
+                } else {
+                    resultEl.textContent = `Error: ${data.error}`;
+                }
+            } catch (e) {
+                resultEl.textContent = `Exception: ${e.message}`;
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>

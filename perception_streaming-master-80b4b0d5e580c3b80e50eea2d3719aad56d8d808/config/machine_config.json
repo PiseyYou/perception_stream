@@ -1,0 +1,37 @@
+{
+  "machines": {
+    "test_machine_1": {
+      "name": "测试机1",
+      "host": "120.25.121.3",
+      "port": 10286,
+      "ssh_key": "../data/conf/bestmow_rsa_202604",
+      "user": "root",
+      "log_base_path": "/userdata/log_dir/ros2_log",
+      "image_base_path": "/userdata/bestmow_data/image_save_path"
+    },
+    "machine_template": {
+      "name": "机器显示名称",
+      "host": "IP地址或域名",
+      "port": 22,
+      "ssh_key": "/path/to/ssh/key",
+      "user": "root",
+      "log_base_path": "/userdata/log_dir/ros2_log",
+      "image_base_path": "/userdata/bestmow_data/image_save_path"
+    }
+  },
+  "analysis": {
+    "blade_current_threshold": 1500,
+    "uplift_count_threshold": 50,
+    "perception_distance_threshold": 5.0,
+    "speed_limit_threshold": 0.05,
+    "image_sync_delay_threshold": 0.2
+  },
+  "log_files": {
+    "perception": "stereo_perception_multi_*.log",
+    "navigation": "nav2_single_node_navigator_*.log",
+    "decision": "robot_decision_*.log",
+    "chassis": "chassis_node_*.log",
+    "coverage": "coverage_navigator_server_*.log",
+    "localization": "robot_combination_localization_*.log"
+  }
+}

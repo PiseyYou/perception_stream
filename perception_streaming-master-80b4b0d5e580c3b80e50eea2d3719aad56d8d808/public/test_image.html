@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Test</title>
+</head>
+<body>
+  <h1>Image Loading Test</h1>
+
+  <h2>Test 1: Direct path</h2>
+  <img src="/offline/local_file?path=data/visualization/0327/nav_images/stop1_0148_20260327_032248.jpg"
+       style="max-width: 400px; border: 1px solid red;"
+       onerror="console.error('Test 1 failed'); this.style.borderColor='red'"
+       onload="console.log('Test 1 loaded'); this.style.borderColor='green'" />
+
+  <h2>Test 2: Encoded path</h2>
+  <img id="test2" style="max-width: 400px; border: 1px solid red;" />
+
+  <h2>Test 3: bag_data static</h2>
+  <img src="/bag_data/images/frame_0000_left.jpg"
+       style="max-width: 400px; border: 1px solid red;"
+       onerror="console.error('Test 3 failed'); this.style.borderColor='red'"
+       onload="console.log('Test 3 loaded'); this.style.borderColor='green'" />
+
+  <script>
+    const path = 'data/visualization/0327/nav_images/stop1_0148_20260327_032248.jpg';
+    const url = `/offline/local_file?path=${encodeURIComponent(path)}`;
+    console.log('Test 2 URL:', url);
+    document.getElementById('test2').src = url;
+    document.getElementById('test2').onerror = () => {
+      console.error('Test 2 failed');
+      document.getElementById('test2').style.borderColor = 'red';
+    };
+    document.getElementById('test2').onload = () => {
+      console.log('Test 2 loaded');
+      document.getElementById('test2').style.borderColor = 'green';
+    };
+  </script>
+</body>
+</html>

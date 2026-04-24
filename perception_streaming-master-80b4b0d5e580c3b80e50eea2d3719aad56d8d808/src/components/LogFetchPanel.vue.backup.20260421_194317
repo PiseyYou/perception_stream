@@ -1,0 +1,504 @@
+<template>
+  <div class="lf-root">
+    <!-- ===== Section 1: SSH 日志拉取 ===== -->
+    <div class="lf-section">
+      <div class="lf-section-title">📡 远程日志拉取</div>
+      <div class="lf-row">
+        <label class="lf-label">端口号:</label>
+        <input v-model.number="port" type="number" class="lf-input-sm" placeholder="10123" />
+        <label class="lf-label">日志保存目录:</label>
+        <input v-model="localSaveDir" class="lf-input" placeholder="自动生成，如 /home/youfeng/debug/custom/0123/20260331/" />
+        <button class="lf-btn blue" :disabled="pullLoading || !port" @click="doPullLogs">
+          {{ pullLoading ? '⏳ 拉取中...' : '⬇ 拉取日志' }}
+        </button>
+        <button v-if="pullLoading" class="lf-btn red" @click="stopPull">■ 停止</button>
+      </div>
+      <div v-if="pullStatus" class="lf-status" :class="{ error: pullError }">{{ pullStatus }}</div>
+      <div v-if="pullLogLines.length" class="lf-terminal">
+        <div v-for="(line, i) in pullLogLines" :key="i" class="lf-log-line" :class="{ 'log-err': line.startsWith('ERROR') || line.startsWith('❌') }">{{ line }}</div>
+      </div>
+    </div>
+
+    <!-- ===== Section 2: 离线日志分析 ===== -->
+    <div class="lf-section">
+      <div class="lf-section-title">📂 离线日志 & 避障图片</div>
+      <div class="lf-row">
+        <label class="lf-label">日志文件夹:</label>
+        <input v-model="logDir" class="lf-input" placeholder="本地日志目录，如 /home/youfeng/debug/custom/0123/20260331/" />
+        <label class="lf-label">避障图片文件夹:</label>
+        <input v-model="imgDir" class="lf-input" placeholder="避障图片目录，如 /home/youfeng/debug/custom/0123/避障图片/" />
+        <button class="lf-btn green" :disabled="analyzeLoading || (!logDir && !imgDir)" @click="analyzeAvoiding">
+          {{ analyzeLoading ? '⏳ 分析中...' : '🔍 分析避障' }}
+        </button>
+      </div>
+      <div v-if="analyzeStatus" class="lf-status" :class="{ error: analyzeError }">{{ analyzeStatus }}</div>
+    </div>
+
+    <!-- ===== Section 3: 分析结果 ===== -->
+    <div v-if="analysisResult" class="lf-section">
+      <div class="lf-section-title">📊 避障原因分析报告</div>
+
+      <!-- Summary -->
+      <div class="lf-summary-bar">
+        <span class="lf-badge">避障事件: <b>{{ analysisResult.avoiding_count }}</b></span>
+        <span class="lf-badge">关联图片: <b>{{ analysisResult.image_count }}</b></span>
+        <span class="lf-badge">时间范围: <b>{{ analysisResult.time_range }}</b></span>
+      </div>
+
+      <!-- Log categories -->
+      <div class="lf-analysis-grid">
+        <!-- robot_decision -->
+        <div class="lf-log-card">
+          <div class="lf-card-title">🤖 robot_decision (AVOIDING)</div>
+          <div class="lf-log-terminal">
+            <div v-for="(row, i) in analysisResult.categories.robot_decision" :key="i" class="lf-log-row">
+              <span class="lf-log-ts">{{ row.ts }}</span>
+              <span class="lf-log-text">{{ row.text }}</span>
+            </div>
+            <div v-if="!analysisResult.categories.robot_decision.length" class="lf-log-empty">无 AVOIDING 日志</div>
+          </div>
+        </div>
+        <!-- nav -->
+        <div class="lf-log-card">
+          <div class="lf-card-title">🗺 nav 日志</div>
+          <div class="lf-log-terminal">
+            <div v-for="(row, i) in analysisResult.categories.nav" :key="i" class="lf-log-row">
+              <span class="lf-log-ts">{{ row.ts }}</span>
+              <span class="lf-log-text">{{ row.text }}</span>
+            </div>
+            <div v-if="!analysisResult.categories.nav.length" class="lf-log-empty">无 nav 日志</div>
+          </div>
+        </div>
+        <!-- stereo -->
+        <div class="lf-log-card">
+          <div class="lf-card-title">📷 stereo_perception 日志</div>
+          <div class="lf-log-terminal">
+            <div v-for="(row, i) in analysisResult.categories.stereo" :key="i" class="lf-log-row">
+              <span class="lf-log-ts">{{ row.ts }}</span>
+              <span class="lf-log-text">{{ row.text }}</span>
+            </div>
+            <div v-if="!analysisResult.categories.stereo.length" class="lf-log-empty">无 stereo 日志</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Images -->
+      <div v-if="analysisResult.images && analysisResult.images.length" class="lf-section-sub">
+        <div class="lf-card-title">🖼 避障图片 ({{ analysisResult.images.length }} 张)</div>
+        <div class="lf-thumb-strip">
+          <div
+            v-for="(img, i) in analysisResult.images" :key="img"
+            class="lf-thumb-item" :class="{ active: selectedImg === img }"
+            @click="selectedImg = img"
+          >
+            <img :src="localFileUrl(img)" loading="lazy" />
+            <div class="lf-thumb-name">{{ img.split('/').pop() }}</div>
+          </div>
+        </div>
+        <div v-if="selectedImg" class="lf-img-detail">
+          <img :src="localFileUrl(selectedImg)" class="lf-img-full" @click="lightboxSrc = localFileUrl(selectedImg)" />
+          <div class="lf-img-name">{{ selectedImg.split('/').pop() }}</div>
+        </div>
+      </div>
+
+      <!-- AI Analysis Conclusion -->
+      <div class="lf-conclusion">
+        <div class="lf-card-title">🧠 AI 分析意见</div>
+        <div class="lf-conclusion-body">
+          <div v-if="analysisLoading" class="lf-loading">正在生成分析意见...</div>
+          <div v-else-if="analysisResult.conclusion" class="lf-conclusion-text" v-html="formatConclusion(analysisResult.conclusion)"></div>
+          <div v-else class="lf-log-empty">暂无分析意见</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div v-if="lightboxSrc" class="lf-lightbox" @click="lightboxSrc = ''">
+      <span class="lf-lb-close" @click.stop="lightboxSrc = ''">✕</span>
+      <img :src="lightboxSrc" @click.stop />
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+
+const DEFAULT_PORT = 10123
+
+function defaultSaveDir(p: number): string {
+  const portSuffix = String(p).slice(-4)
+  const d = new Date()
+  const dateStr = d.getFullYear().toString() +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    String(d.getDate()).padStart(2, '0')
+  return `/home/youfeng/debug/custom/${portSuffix}/${dateStr}`
+}
+
+const port = ref<number | null>(DEFAULT_PORT)
+const localSaveDir = ref(defaultSaveDir(DEFAULT_PORT))
+const pullLoading = ref(false)
+const pullError = ref(false)
+const pullStatus = ref('')
+const pullLogLines = ref<string[]>([])
+let pullAbort: AbortController | null = null
+
+const logDir = ref('data/bag_debug/0111/0327/log/LK-MR6P1US000111_20260327_032850/log_dir')
+const imgDir = ref('data/log_debug/0123/20260413')
+const analyzeLoading = ref(false)
+const analyzeError = ref(false)
+const analyzeStatus = ref('')
+
+const analysisResult = ref<any>(null)
+const analysisLoading = ref(false)
+const selectedImg = ref('')
+const lightboxSrc = ref('')
+
+// Load default port from server config on mount
+onMounted(async () => {
+  try {
+    const res = await fetch('/offline/config')
+    const data = await res.json()
+    if (data.ok && data.default_ports?.log_fetch) {
+      port.value = data.default_ports.log_fetch
+      localSaveDir.value = defaultSaveDir(data.default_ports.log_fetch)
+    }
+  } catch (e) {
+    console.warn('Failed to load config:', e)
+  }
+})
+
+function localFileUrl(p: string) {
+  return `/offline/local_file?path=${encodeURIComponent(p)}`
+}
+
+function formatConclusion(text: string): string {
+  return text
+    .replace(/\n/g, '<br/>')
+    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+    .replace(/### (.*?)(<br\/?>|$)/g, '<h4>$1</h4>')
+    .replace(/## (.*?)(<br\/?>|$)/g, '<h3>$1</h3>')
+}
+
+async function doPullLogs() {
+  if (!port.value) return
+  pullLoading.value = true
+  pullError.value = false
+  pullStatus.value = ''
+  pullLogLines.value = []
+  pullAbort = new AbortController()
+
+  try {
+    const requestBody: any = { port: port.value }
+    if (localSaveDir.value && localSaveDir.value.trim()) {
+      requestBody.local_save_dir = localSaveDir.value.trim()
+    }
+    const res = await fetch('/offline/pull_robot_logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: pullAbort.signal,
+    })
+    const data = await res.json()
+    if (data.ok) {
+      pullStatus.value = `✅ 日志已拉取到: ${data.local_dir} (${data.file_count} 个文件)`
+      localSaveDir.value = data.local_dir
+      if (data.logs) pullLogLines.value = data.logs
+      // Auto-fill logDir if empty
+      if (!logDir.value) logDir.value = data.local_dir
+    } else {
+      pullError.value = true
+      pullStatus.value = `❌ ${data.error || '拉取失败'}`
+      if (data.logs) pullLogLines.value = data.logs
+    }
+  } catch (e: any) {
+    if (e.name !== 'AbortError') {
+      pullError.value = true
+      pullStatus.value = `❌ ${e.message}`
+    }
+  } finally {
+    pullLoading.value = false
+    pullAbort = null
+  }
+}
+
+function stopPull() {
+  pullAbort?.abort()
+  pullLoading.value = false
+  pullStatus.value = '已取消'
+}
+
+async function analyzeAvoiding() {
+  if (!logDir.value && !imgDir.value) return
+  analyzeLoading.value = true
+  analyzeError.value = false
+  analyzeStatus.value = ''
+  analysisResult.value = null
+  selectedImg.value = ''
+
+  try {
+    const res = await fetch('/offline/analyze_avoiding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        log_dir: logDir.value,
+        img_dir: imgDir.value,
+      }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      analyzeStatus.value = `✅ 分析完成，找到 ${data.avoiding_count} 个避障事件`
+      analysisResult.value = data
+    } else {
+      analyzeError.value = true
+      analyzeStatus.value = `❌ ${data.error || '分析失败'}`
+    }
+  } catch (e: any) {
+    analyzeError.value = true
+    analyzeStatus.value = `❌ ${e.message}`
+  } finally {
+    analyzeLoading.value = false
+  }
+}
+</script>
+
+<style scoped>
+.lf-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-size: 13px;
+  padding: 8px;
+}
+.lf-section {
+  background: #16213e;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.lf-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #7eb8f7;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #2a2a4a;
+  padding-bottom: 4px;
+}
+.lf-section-sub {
+  margin-top: 12px;
+}
+.lf-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.lf-label {
+  color: #aaa;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.lf-input {
+  flex: 1;
+  min-width: 200px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.lf-input-sm {
+  width: 90px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.lf-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.lf-btn.blue { background: #1565c0; color: #fff; }
+.lf-btn.blue:hover:not(:disabled) { background: #1976d2; }
+.lf-btn.green { background: #2e7d32; color: #fff; }
+.lf-btn.green:hover:not(:disabled) { background: #388e3c; }
+.lf-btn.red { background: #c62828; color: #fff; }
+.lf-btn.red:hover:not(:disabled) { background: #e53935; }
+.lf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lf-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #81c784;
+}
+.lf-status.error { color: #ef9a9a; }
+.lf-terminal {
+  margin-top: 8px;
+  background: #0d1117;
+  border: 1px solid #222;
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 11px;
+}
+.lf-log-line { color: #c8e6c9; line-height: 1.5; }
+.lf-log-line.log-err { color: #ef9a9a; }
+.lf-summary-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.lf-badge {
+  background: #1e3a5f;
+  border: 1px solid #2a5a8a;
+  border-radius: 12px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: #90caf9;
+}
+.lf-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: start;
+}
+@media (max-width: 1200px) {
+  .lf-analysis-grid { grid-template-columns: 1fr; }
+}
+.lf-log-card {
+  background: #0d1117;
+  border: 1px solid #2a2a4a;
+  border-radius: 5px;
+  padding: 8px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.lf-log-card .lf-log-terminal {
+  flex: 1;
+}
+.lf-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #90caf9;
+  margin-bottom: 6px;
+}
+.lf-log-terminal {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 11px;
+}
+.lf-log-row {
+  display: flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+.lf-log-ts {
+  color: #888;
+  white-space: nowrap;
+  min-width: 68px;
+}
+.lf-log-text {
+  color: #c8e6c9;
+  word-break: break-all;
+}
+.lf-log-empty {
+  color: #666;
+  font-style: italic;
+  font-size: 11px;
+}
+.lf-thumb-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+.lf-thumb-item {
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0d1117;
+  transition: border-color 0.15s;
+  width: 90px;
+}
+.lf-thumb-item.active { border-color: #42a5f5; }
+.lf-thumb-item img { width: 100%; height: 60px; object-fit: cover; display: block; }
+.lf-thumb-name {
+  font-size: 9px;
+  text-align: center;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 2px;
+}
+.lf-img-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.lf-img-full {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 4px;
+  cursor: zoom-in;
+  border: 1px solid #333;
+}
+.lf-img-name { font-size: 11px; color: #888; }
+.lf-conclusion {
+  background: #0d1117;
+  border: 1px solid #2a3a5a;
+  border-radius: 5px;
+  padding: 10px 14px;
+  margin-top: 10px;
+}
+.lf-conclusion-body { margin-top: 6px; }
+.lf-conclusion-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #ddd;
+}
+.lf-conclusion-text h3 { color: #90caf9; margin: 8px 0 4px; font-size: 14px; }
+.lf-conclusion-text h4 { color: #a5d6a7; margin: 6px 0 2px; font-size: 13px; }
+.lf-loading { color: #ffd54f; font-style: italic; }
+.lf-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: zoom-out;
+}
+.lf-lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 6px; }
+.lf-lb-close {
+  position: absolute;
+  top: 18px;
+  right: 28px;
+  font-size: 28px;
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+</style>

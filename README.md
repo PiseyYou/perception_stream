@@ -13,6 +13,7 @@ perception_process/
 ├── perception_streaming/       # 主项目
 │   ├── src/                    # 前端源码（Vue 3 + TypeScript）
 │   ├── robot_monitor/          # 后端服务（Python）
+│   ├── stereo_perception_multi2_offline_test/  # 双目感知离线测试工具（C++）
 │   ├── start.sh                # 一键启动脚本
 │   └── README.md               # 详细项目文档
 ├── logs/                       # 运行日志
@@ -43,6 +44,7 @@ cat README.md
 
 - **实时监控**：视频流、点云可视化、避障监控、日志控制台
 - **离线调试**：单目测试、Bag包分析、日志分析、双目分析
+- **双目离线测试**：C++ 离线处理工具，支持点云生成、障碍物检测、模式切换
 - **高级特性**：点云过滤、SFTP断点续传、端口映射、批量上传校验
 - **避障监控**：实时障碍物检测与可视化、障碍物类型分类、距离监控
 

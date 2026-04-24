@@ -1,0 +1,42 @@
+# Build directories
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+
+# Executables
+offline_test_main
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Testing
+Testing/
+
+# Output directories (optional - uncomment if you don't want to track outputs)
+# output/
+# segmentation/
+# pointcloud/
+# detection/
+# depth/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

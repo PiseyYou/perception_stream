@@ -4,15 +4,15 @@
 void stereo_point_cloud::show_xyz_rgbl_plane_point_cloud(
     pcl::PointCloud<pcl::PointXYZRGBL> xyz_rgbl_cloud, Mat &xyz_rgb, Mat &xyz_l,
     Mat &xyz_rgbl) {
-  pcl::PointCloud<pcl::PointXYZRGBL>::Ptr xyz_rgbl_cloud_ptr =
-      std::make_shared<pcl::PointCloud<pcl::PointXYZRGBL>>(xyz_rgbl_cloud);
+  pcl::PointCloud<pcl::PointXYZRGBL>::Ptr xyz_rgbl_cloud_ptr(
+      new pcl::PointCloud<pcl::PointXYZRGBL>(xyz_rgbl_cloud));
   stereo_xyz_rgbl_plane(xyz_rgbl_cloud_ptr, xyz_rgb, xyz_l, xyz_rgbl);
 }
 
 void stereo_point_cloud::show_xyz_rgbl_plane_point_cloud_final(
     pcl::PointCloud<pcl::PointXYZRGBL> xyz_rgbl_cloud, Mat &xyz_rgbl) {
-  pcl::PointCloud<pcl::PointXYZRGBL>::Ptr xyz_rgbl_cloud_ptr =
-      std::make_shared<pcl::PointCloud<pcl::PointXYZRGBL>>(xyz_rgbl_cloud);
+  pcl::PointCloud<pcl::PointXYZRGBL>::Ptr xyz_rgbl_cloud_ptr(
+      new pcl::PointCloud<pcl::PointXYZRGBL>(xyz_rgbl_cloud));
   stereo_xyz_rgbl_plane_final(xyz_rgbl_cloud_ptr, xyz_rgbl);
 }
 

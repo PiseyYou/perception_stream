@@ -335,6 +335,18 @@ const viewMode = ref<'columns' | 'timeline'>('columns')
 const focusedCardKey = ref<'robot_decision' | 'nav' | 'stereo' | null>(null)
 const timelineOverlayOpen = ref(false)
 
+async function readJsonResponse<T>(res: Response, action: string): Promise<T> {
+  const text = await res.text()
+  if (!text.trim()) {
+    throw new Error(`${action}返回空响应 (HTTP ${res.status})`)
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    throw new Error(`${action}返回非 JSON 响应 (HTTP ${res.status}): ${error}`)
+  }
+}
+
 function normalizeAnalysisResult(data: any): AnalysisResultData {
   return {
     avoiding_count: Number(data?.avoiding_count || 0),

@@ -202,13 +202,18 @@ inline cv::Mat visualizeDepth(const cv::Mat& depth, float max_depth = 10.0f) {
 /**
  * @brief 创建输出目录
  */
-inline void createOutputDirectories(const std::string& base_dir) {
+inline void createOutputDirectories(const std::string& base_dir,
+                                    const std::string& pointcloud_dir = "") {
     fs::create_directories(base_dir);
     fs::create_directories(base_dir + "/segmentation");
-    fs::create_directories(base_dir + "/pointcloud");
     fs::create_directories(base_dir + "/detection");
     fs::create_directories(base_dir + "/depth");
     fs::create_directories(base_dir + "/combined");  // 添加合并图像目录
+    if (!pointcloud_dir.empty()) {
+        fs::create_directories(pointcloud_dir);
+    } else {
+        fs::create_directories(base_dir + "/pointcloud");
+    }
 }
 
 /**

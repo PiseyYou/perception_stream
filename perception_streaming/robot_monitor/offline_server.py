@@ -95,11 +95,27 @@ def _strip_ansi(s: str) -> str:
 
 
 def broadcast(msg: dict):
-    data = "data: " + json.dumps(msg, ensure_ascii=False) + "\n\n"
+    try:
+        # 确保消息中的所有字符串都是有效的 UTF-8
+        def sanitize_value(v):
+            if isinstance(v, str):
+                return v.encode('utf-8', errors='replace').decode('utf-8')
+            elif isinstance(v, dict):
+                return {k: sanitize_value(val) for k, val in v.items()}
+            elif isinstance(v, list):
+                return [sanitize_value(item) for item in v]
+            return v
+
+        sanitized_msg = sanitize_value(msg)
+        data = "data: " + json.dumps(sanitized_msg, ensure_ascii=False) + "\n\n"
+    except Exception as e:
+        # 如果序列化失败，发送一个简化的错误消息
+        data = "data: " + json.dumps({"type": "error", "text": f"消息序列化失败: {str(e)}"}, ensure_ascii=True) + "\n\n"
+
     dead = []
     for wfile in list(_sse_clients):
         try:
-            wfile.write(data.encode())
+            wfile.write(data.encode('utf-8', errors='replace'))
             wfile.flush()
         except Exception:
             dead.append(wfile)
@@ -116,10 +132,17 @@ def _count_input_images(folder: str) -> int:
     images_dir = os.path.join(folder, "images")
     target_dir = images_dir if os.path.isdir(images_dir) else folder
     try:
-        return sum(
-            1 for name in os.listdir(target_dir)
-            if os.path.isfile(os.path.join(target_dir, name)) and name.lower().endswith(img_exts)
-        )
+        count = 0
+        for name in os.listdir(target_dir):
+            # 处理可能的文件名编码问题
+            try:
+                if isinstance(name, bytes):
+                    name = name.decode('utf-8', errors='replace')
+                if os.path.isfile(os.path.join(target_dir, name)) and name.lower().endswith(img_exts):
+                    count += 1
+            except (UnicodeDecodeError, OSError):
+                continue
+        return count
     except OSError:
         return 0
 
@@ -230,18 +253,24 @@ def scan_input_dirs(base: str) -> list:
 
 def build_output_dir(input_dir: str, infer_mode: int, erode_pixel: int = 205) -> str:
     mode_suffix = f"{infer_mode}_{erode_pixel}"
-    if infer_mode == 99: # Special mode for Night Offline Debug (使用 stereo_perception_multi2_offline_test)
-        # 输出到与右侧预览窗口相同的路径结构
-        # 例如: data/stereo_debug/0115/20260421 -> data/stereo_debug/0115/20260421_output_k100_dsg
-        return os.path.join(input_dir, "output_k100_dsg")
-    if infer_mode == 6: # Day mode using stereo_perception_multi2_offline_test with Model 6
-        return os.path.join(input_dir, "output_k100_day")
+    if infer_mode == 99:
+        return os.path.join(input_dir, "dsg_7_205_432")
+    if infer_mode == 6:
+        return os.path.join(input_dir, "sub_6_205_432")
     if infer_mode == 5:
         return os.path.join(input_dir, f"cdt_mul_{mode_suffix}_0303_update_432")
     elif infer_mode == 7:
         return os.path.join(input_dir, f"dsg_7_205_432")
     else:
         return os.path.join(input_dir, f"output_{mode_suffix}")
+
+
+def build_pointcloud_dir(input_dir: str, infer_mode: int, erode_pixel: int = 205) -> str:
+    if infer_mode == 99:
+        return os.path.join(input_dir, "pcd_7_205_432")
+    if infer_mode == 6:
+        return os.path.join(input_dir, "pcd_6_205_432")
+    return os.path.join(input_dir, f"pcd_{infer_mode}_{erode_pixel}_432")
 
 
 def _result_mode_candidates(prefer_mode: int | None = None) -> list[int]:
@@ -262,27 +291,38 @@ def _collect_result_images(output_dir: str) -> list[str]:
         target_dir = os.path.join(output_dir, rel_dir) if rel_dir else output_dir
         if not os.path.isdir(target_dir):
             continue
-        files = sorted(
-            glob.glob(os.path.join(target_dir, "*.jpg")) +
-            glob.glob(os.path.join(target_dir, "*.png"))
-        )
-        if files:
-            return [os.path.relpath(path, output_dir) for path in files]
+        try:
+            files = sorted(
+                glob.glob(os.path.join(target_dir, "*.jpg")) +
+                glob.glob(os.path.join(target_dir, "*.png"))
+            )
+            if files:
+                result = []
+                for path in files:
+                    try:
+                        # 确保路径可以正确编码
+                        rel_path = os.path.relpath(path, output_dir)
+                        if isinstance(rel_path, bytes):
+                            rel_path = rel_path.decode('utf-8', errors='replace')
+                        result.append(rel_path)
+                    except (UnicodeDecodeError, OSError):
+                        continue
+                return result
+        except (OSError, UnicodeDecodeError):
+            continue
     return []
 
 
 def _find_result_pcd_dir(folder: str, output_dir: str, infer_mode: int, erode_pixel: int = 205) -> tuple[str, list[str]]:
     candidates = []
 
-    if output_dir:
-        candidates.append(os.path.join(output_dir, "pointcloud"))
-
     candidates.extend([
+        build_pointcloud_dir(folder, infer_mode, erode_pixel),
         os.path.join(folder, "dsg_pcd_debug"),
         os.path.join(folder, "dsg_multi_pcd"),
-        os.path.join(folder, f"pcd_{infer_mode}_{erode_pixel}_432"),
         os.path.join(folder, "pcd_7_205_432"),
         os.path.join(folder, "pcd_99_205_432"),
+        os.path.join(output_dir, "pointcloud") if output_dir else "",
         os.path.join(folder, "images", "pcd_7_205_0304_432"),
     ])
 
@@ -291,9 +331,22 @@ def _find_result_pcd_dir(folder: str, output_dir: str, infer_mode: int, erode_pi
         if not candidate or candidate in seen or not os.path.isdir(candidate):
             continue
         seen.add(candidate)
-        pcds = sorted(os.path.basename(path) for path in glob.glob(os.path.join(candidate, "*.pcd")))
-        if pcds or candidate.endswith("/pointcloud"):
-            return candidate, pcds
+        try:
+            pcd_files = glob.glob(os.path.join(candidate, "*.pcd"))
+            pcds = []
+            for path in pcd_files:
+                try:
+                    basename = os.path.basename(path)
+                    if isinstance(basename, bytes):
+                        basename = basename.decode('utf-8', errors='replace')
+                    pcds.append(basename)
+                except (UnicodeDecodeError, OSError):
+                    continue
+            pcds = sorted(pcds)
+            if pcds or candidate.endswith("/pointcloud"):
+                return candidate, pcds
+        except (OSError, UnicodeDecodeError):
+            continue
     return "", []
 
 
@@ -317,6 +370,48 @@ def _find_existing_result(folder: str, prefer_mode: int | None = None, erode_pix
     return {"ok": False, "error": "No existing results found"}
 
 
+def _sync_legacy_pointcloud_dir(output_dir: str, pointcloud_dir: str) -> tuple[str, list[str]]:
+    if pointcloud_dir and os.path.isdir(pointcloud_dir):
+        try:
+            pcd_files = glob.glob(os.path.join(pointcloud_dir, "*.pcd"))
+            pcds = []
+            for path in pcd_files:
+                try:
+                    basename = os.path.basename(path)
+                    if isinstance(basename, bytes):
+                        basename = basename.decode('utf-8', errors='replace')
+                    pcds.append(basename)
+                except (UnicodeDecodeError, OSError):
+                    continue
+            pcds = sorted(pcds)
+            if pcds:
+                return pointcloud_dir, pcds
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    legacy_dir = os.path.join(output_dir, "pointcloud")
+    if not os.path.isdir(legacy_dir):
+        return pointcloud_dir, []
+
+    try:
+        os.makedirs(pointcloud_dir, exist_ok=True)
+        copied = []
+        for legacy_path in sorted(glob.glob(os.path.join(legacy_dir, "*.pcd"))):
+            try:
+                basename = os.path.basename(legacy_path)
+                if isinstance(basename, bytes):
+                    basename = basename.decode('utf-8', errors='replace')
+                target_path = os.path.join(pointcloud_dir, basename)
+                if os.path.abspath(legacy_path) != os.path.abspath(target_path):
+                    shutil.copy2(legacy_path, target_path)
+                copied.append(basename)
+            except (UnicodeDecodeError, OSError):
+                continue
+        return pointcloud_dir, copied
+    except (OSError, UnicodeDecodeError):
+        return pointcloud_dir, []
+
+
 def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_export_run: bool = False, resume: bool = False):
     """
     使用 Docker 容器运行离线感知程序
@@ -324,11 +419,12 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
     global _last_result, _running
     _running = True
     final_pic_dir = build_output_dir(input_dir, infer_mode, erode_pixel)
+    final_pcd_dir = build_pointcloud_dir(input_dir, infer_mode, erode_pixel)
     _last_result = {}
     _reset_progress_state(input_dir=input_dir, infer_mode=infer_mode, total=_count_input_images(input_dir))
 
     broadcast({"type": "start", "input_dir": input_dir, "infer_mode": infer_mode,
-               "output_dir": final_pic_dir, "resume": resume})
+               "output_dir": final_pic_dir, "pcd_dir": final_pcd_dir, "resume": resume})
 
     # Docker 配置
     DOCKER_IMAGE = "perception-runtime:latest"
@@ -336,7 +432,8 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
 
     # 本地项目根目录
     LOCAL_PROJECT_DIR = PROJECT_ROOT
-    local_data_abs = os.path.abspath(os.path.join(LOCAL_PROJECT_DIR, input_dir))
+    # input_dir is already absolute path after conversion in do_POST
+    local_data_abs = input_dir if os.path.isabs(input_dir) else os.path.abspath(os.path.join(LOCAL_PROJECT_DIR, input_dir))
 
     try:
         broadcast({"type": "log", "text": f"[Docker] 检查镜像 {DOCKER_IMAGE}..."})
@@ -345,7 +442,7 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         # 检查 Docker 镜像是否存在
         check_img = subprocess.run(
             ["docker", "images", "-q", DOCKER_IMAGE],
-            capture_output=True, text=True
+            capture_output=True, text=True, encoding='utf-8', errors='replace'
         )
         if not check_img.stdout.strip():
             broadcast({"type": "error", "text": f"Docker 镜像 {DOCKER_IMAGE} 不存在，请先构建镜像"})
@@ -361,25 +458,26 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
 
         # 构建 Docker 命令
         if infer_mode == 99:
-            # 夜间模式：使用 stereo_perception_multi2_offline_test with Model 7 (DSG)
-            exe_cmd = f"/app/bin/offline_test_main"
+            # 夜间模式：使用 offline_perception_debug_432 with Model 7 (DSG)
+            exe_cmd = f"/app/bin/offline_perception_debug_432"
             env_vars = [
                 f"OFFLINE_INPUT_DIR=/app/input",
-                f"OFFLINE_OUTPUT_DIR=/app/output",
                 f"OFFLINE_INFER_MODE=7",
-                f"HARDWARE_MODE=K100",
-                f"DSG_MODEL_PATH=/app/models/dsg_multi_20260407_640x384.bin",
-            ]
-        elif infer_mode == 6:
-            # 白天模式：使用 stereo_perception_multi2_offline_test with Model 6
-            exe_cmd = f"/app/bin/offline_test_main"
-            env_vars = [
-                f"OFFLINE_INPUT_DIR=/app/input",
-                f"OFFLINE_OUTPUT_DIR=/app/output",
-                f"OFFLINE_INFER_MODE=6",
-                f"HARDWARE_MODE=K100",
+                f"OFFLINE_ERODE_PIXEL={erode_pixel}",
                 f"DSG_MODEL_PATH=/app/models/dsg_multi_20260407_640x384.bin",
                 f"CDT_MODEL_PATH=/app/models/cdt_20251125_640x384.bin",
+                "OPENCV_OPENCL_DEVICE=disabled",
+            ]
+        elif infer_mode == 6:
+            # 白天模式：使用 offline_perception_debug_432 with Model 6 (Sub)
+            exe_cmd = f"/app/bin/offline_perception_debug_432"
+            env_vars = [
+                f"OFFLINE_INPUT_DIR=/app/input",
+                f"OFFLINE_INFER_MODE=6",
+                f"OFFLINE_ERODE_PIXEL={erode_pixel}",
+                f"DSG_MODEL_PATH=/app/models/sub_20260303_640x384.bin",
+                f"CDT_MODEL_PATH=/app/models/cdt_20251125_640x384.bin",
+                "OPENCV_OPENCL_DEVICE=disabled",
             ]
         else:
             exe_cmd = f"/app/bin/offline_perception_debug_432"
@@ -394,48 +492,99 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
             env_vars.append("RESUME_OFFLINE=1")
 
         # 构建 docker run 命令
-        # 对于 mode=99 和 mode=6，输出目录应该是 final_pic_dir
-        if infer_mode == 99 or infer_mode == 6:
-            output_mount_path = os.path.abspath(final_pic_dir)
-            # 确保输出目录存在
-            os.makedirs(output_mount_path, exist_ok=True)
-            broadcast({"type": "log", "text": f"[Docker] 创建输出目录: {output_mount_path}"})
-            _set_progress_status(f"创建输出目录: {os.path.basename(output_mount_path)}")
-        else:
-            output_mount_path = os.path.join(LOCAL_PROJECT_DIR, 'data', 'stereo_debug')
+        # offline_perception_debug_432 会在输入目录创建输出子目录
+        input_container_path = "/app/input"
+        output_container_path = "/app/output"
+        pcd_container_path = "/app/pcd_output"
 
         docker_cmd = [
             "docker", "run", "--rm",
             "--name", CONTAINER_NAME,
-            "-v", f"{local_data_abs}:/app/input",
-            "-v", f"{output_mount_path}:/app/output",
+            "-v", f"{local_data_abs}:{input_container_path}",
+        ]
+
+        # 对于 mode=99 和 mode=6，不需要额外的输出挂载
+        # offline_perception_debug_432 会在输入目录创建输出子目录
+
+        # 构建bash命令
+        bash_cmd_parts = ["ln -sf /app/models /models"]
+        if env_vars:
+            bash_cmd_parts.extend([f"export {var}" for var in env_vars])
+        bash_cmd_parts.append(exe_cmd)
+        bash_cmd = " && ".join(bash_cmd_parts)
+
+        docker_cmd.extend([
             "-w", "/app",
             DOCKER_IMAGE,
             "bash", "-c",
-            f"mkdir -p /app/input /app/output && ln -sf /app/models /models && " + " && ".join([f"export {var}" for var in env_vars]) + f" && {exe_cmd}"
-        ]
+            bash_cmd
+        ])
 
         broadcast({"type": "log", "text": f"[Docker] 启动命令: {' '.join(docker_cmd[:10])}..."})
+        broadcast({"type": "log", "text": f"[Docker] 完整bash命令: {bash_cmd}"})
+        broadcast({"type": "log", "text": f"[Docker] infer_mode={infer_mode}, 期望使用 Model {infer_mode}"})
 
         # 运行 Docker 容器
-        proc = subprocess.Popen(docker_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        broadcast({"type": "log", "text": f"[Docker] 启动容器..."})
+        # 使用 bufsize=0 (无缓冲) 或 -1 (默认缓冲) 而不是 1 (行缓冲，仅文本模式支持)
+        proc = subprocess.Popen(docker_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=-1)
+
+        broadcast({"type": "log", "text": f"[Docker] 容器已启动，等待输出..."})
 
         # 实时获取输出
+        line_count = 0
         for line in proc.stdout:
-            _update_progress_from_log(line.rstrip())
-            broadcast({"type": "log", "text": line.rstrip()})
+            line_count += 1
+            # 使用 errors='replace' 处理无效的 UTF-8 字节
+            try:
+                decoded_line = line.decode('utf-8', errors='replace')
+            except AttributeError:
+                # 如果已经是字符串，直接使用
+                decoded_line = line
+            stripped = decoded_line.rstrip()
+            if stripped:  # 只处理非空行
+                _update_progress_from_log(stripped)
+                broadcast({"type": "log", "text": stripped})
+
+            # 每10行输出一次心跳
+            if line_count % 10 == 0:
+                broadcast({"type": "log", "text": f"[Docker] 已处理 {line_count} 行输出..."})
 
         proc.wait()
         exit_status = proc.returncode
 
-        broadcast({"type": "log", "text": f"[Docker] 程序结束，退出码: {exit_status}"})
+        broadcast({"type": "log", "text": f"[Docker] 程序结束，退出码: {exit_status}, 共输出 {line_count} 行"})
         _set_progress_status(f"程序结束，退出码: {exit_status}")
+
+        # 重命名旧格式输出目录为新格式
+        if infer_mode == 6:
+            # 查找旧格式目录: cdt_sub_6_205_0319_det_0.2_pc_432
+            old_pattern = os.path.join(local_data_abs, "cdt_sub_6_*_pc_432")
+            import glob
+            try:
+                old_dirs = glob.glob(old_pattern)
+                if old_dirs:
+                    old_dir = old_dirs[0]
+                    new_dir = final_pic_dir
+                    if os.path.exists(old_dir) and old_dir != new_dir:
+                        if os.path.exists(new_dir):
+                            import shutil
+                            shutil.rmtree(new_dir)
+                        os.rename(old_dir, new_dir)
+                        old_basename = os.path.basename(old_dir)
+                        new_basename = os.path.basename(new_dir)
+                        if isinstance(old_basename, bytes):
+                            old_basename = old_basename.decode('utf-8', errors='replace')
+                        if isinstance(new_basename, bytes):
+                            new_basename = new_basename.decode('utf-8', errors='replace')
+                        broadcast({"type": "log", "text": f"[重命名] {old_basename} -> {new_basename}"})
+            except (OSError, UnicodeDecodeError) as e:
+                broadcast({"type": "log", "text": f"[重命名警告] {str(e)}"})
 
         # 获取输出文件列表
         if infer_mode == 99 or infer_mode == 6:
-            # mode=99 和 mode=6 使用 stereo_perception_multi2_offline_test，输出在 final_pic_dir
             dsg_dir = final_pic_dir
-            pcd_dir = os.path.join(final_pic_dir, "pointcloud")
+            pcd_dir = final_pcd_dir
         else:
             # 其他模式：图片输出到 dsg_* 目录，点云输出到 pcd_* 目录
             dsg_dir = os.path.join(os.path.dirname(local_data_abs), f"dsg_{infer_mode}_{erode_pixel}_432")
@@ -446,6 +595,10 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         if rel_images:
             output_images = [os.path.join(dsg_dir, rel_path) for rel_path in rel_images]
 
+        if infer_mode in (99, 6):
+            pcd_dir, rel_pcds = _sync_legacy_pointcloud_dir(dsg_dir, pcd_dir)
+        else:
+            rel_pcds = []
         pcd_dir, rel_pcds = _find_result_pcd_dir(input_dir, dsg_dir, infer_mode, erode_pixel)
         if rel_pcds:
             output_pcds = [os.path.join(pcd_dir, fname) for fname in rel_pcds]
@@ -480,8 +633,12 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         _running = False
         return
     except Exception as e:
-        broadcast({"type": "error", "text": f"执行失败: {str(e)}"})
-        _set_progress_status(f"执行失败: {str(e)}")
+        import traceback
+        error_msg = str(e).encode('utf-8', errors='replace').decode('utf-8')
+        traceback_str = traceback.format_exc()
+        broadcast({"type": "error", "text": f"执行失败: {error_msg}"})
+        broadcast({"type": "log", "text": f"[错误堆栈]\n{traceback_str}"})
+        _set_progress_status(f"执行失败: {error_msg}")
         _running = False
         return
 
@@ -681,7 +838,7 @@ def parse_bag_timerange(bag_dir: str) -> tuple[datetime | None, datetime | None]
     metadata_path = os.path.join(bag_dir, "metadata.yaml")
     if os.path.isfile(metadata_path):
         try:
-            with open(metadata_path) as f:
+            with open(metadata_path, encoding='utf-8', errors='replace') as f:
                 meta = yaml.safe_load(f)
             info = meta.get("rosbag2_bagfile_information", {})
             ns_epoch = info.get("starting_time", {}).get("nanoseconds_since_epoch")
@@ -698,7 +855,7 @@ def parse_bag_timerange(bag_dir: str) -> tuple[datetime | None, datetime | None]
     if not os.path.isfile(manifest_path):
         return None, None
     try:
-        with open(manifest_path) as f:
+        with open(manifest_path, encoding='utf-8', errors='replace') as f:
             m = json.load(f)
         recorded_at = m.get("recorded_at", "")
         duration_s = float(m.get("duration_s", 0))
@@ -1145,7 +1302,7 @@ def _filter_pcd_file(pcd_path: str) -> bool:
     Returns True if successful, False otherwise.
     """
     try:
-        with open(pcd_path, 'r') as f:
+        with open(pcd_path, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
 
         # Find data start
@@ -2214,6 +2371,10 @@ class OfflineHandler(BaseHTTPRequestHandler):
         path = parsed.path
         qs = parse_qs(parsed.query)
 
+        if path == "/offline/check":
+            self._json({"ok": True, "status": "running", "port": OFFLINE_SERVER_PORT})
+            return
+
         if path == "/offline/list_camera_bag_files":
             # 列出 camera bag 中的所有图片和点云文件
             bag_dir = qs.get("bag_dir", [""])[0]
@@ -2378,10 +2539,34 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 if not os.path.isdir(images_dir) or not any(f.lower().endswith(img_exts) for f in os.listdir(images_dir)):
                     images_dir = folder
 
+                # 点云目录查找逻辑：
+                # 1. 先检查子目录 pointclouds 或 pcd
+                # 2. 如果当前文件夹名是 dsg_7_205_432 或 sub_6_205_432，查找平级的 pcd_7_205_432 或 pcd_6_205_432
                 pcds_dir = os.path.join(folder, "pointclouds")
                 if not os.path.isdir(pcds_dir) or not any(f.lower().endswith('.pcd') for f in os.listdir(pcds_dir)):
                     alt = os.path.join(folder, "pcd")
-                    pcds_dir = alt if os.path.isdir(alt) and any(f.lower().endswith('.pcd') for f in os.listdir(alt)) else folder
+                    if os.path.isdir(alt) and any(f.lower().endswith('.pcd') for f in os.listdir(alt)):
+                        pcds_dir = alt
+                    else:
+                        # 检查是否是 dsg_* 或 sub_* 文件夹，如果是则查找对应的 pcd_* 文件夹
+                        folder_name = os.path.basename(folder)
+                        if folder_name.startswith('dsg_') or folder_name.startswith('sub_'):
+                            # 提取模式编号，例如 dsg_7_205_432 -> 7, sub_6_205_432 -> 6
+                            parts = folder_name.split('_')
+                            if len(parts) >= 2:
+                                mode_num = parts[1]
+                                pcd_folder_name = f"pcd_{mode_num}_205_432"
+                                parent_dir = os.path.dirname(folder)
+                                sibling_pcd_dir = os.path.join(parent_dir, pcd_folder_name)
+                                if os.path.isdir(sibling_pcd_dir) and any(f.lower().endswith('.pcd') for f in os.listdir(sibling_pcd_dir)):
+                                    pcds_dir = sibling_pcd_dir
+                                    print(f"[Scan] Found sibling pcd directory: {sibling_pcd_dir}")
+                                else:
+                                    pcds_dir = folder
+                            else:
+                                pcds_dir = folder
+                        else:
+                            pcds_dir = folder
 
                 print(f"[Scan] folder={folder}, images_dir={images_dir}, pcds_dir={pcds_dir}")
                 all_images = sorted(
@@ -2831,6 +3016,11 @@ class OfflineHandler(BaseHTTPRequestHandler):
             if _running:
                 self._json({"ok": False, "error": "already running"}, 409)
                 return
+
+            # Convert relative path to absolute path
+            if not os.path.isabs(input_dir):
+                input_dir = os.path.abspath(os.path.join(PROJECT_ROOT, input_dir))
+
             if not os.path.isdir(input_dir):
                 self._json({"ok": False, "error": f"directory not found: {input_dir}"}, 400)
                 return
@@ -3316,6 +3506,7 @@ def _build_file_tree(base_dir: str, max_depth: int = 4) -> list:
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+    allow_reuse_address = True
 
 
 def main():

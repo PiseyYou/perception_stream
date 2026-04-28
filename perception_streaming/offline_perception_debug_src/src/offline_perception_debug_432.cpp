@@ -13,14 +13,22 @@
 #include <iostream>
 #include <map>
 #include <unordered_map>
-#include <opencv2/opencv.hpp>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <string>
 #include <vector>
 
-// 引入感知模块头文件
+// PCL 头文件必须在 OpenCV 之前包含，避免 detail 命名空间冲突
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+
+// 引入感知模块头文件（包含 PCL/VTK）
+#include "stereo_multi_match.h"
+#include "stereo_point_cloud_rgbl.h"
+
+// OpenCV 必须在 PCL 之后包含
+#include <opencv2/opencv.hpp>
+
+// 其他感知模块
 #include "cdt_perception.h"
 #include "det_perception.h"
 #include "dsg_perception.h"
@@ -28,8 +36,6 @@
 #include "offline_utils.hpp"
 #include "qr_cs_perception.h"
 #include "seg_perception.h"
-#include "stereo_multi_match.h"
-#include "stereo_point_cloud_rgbl.h"
 
 namespace fs = std::filesystem;
 using namespace cv;
@@ -1441,11 +1447,11 @@ int main(int argc, char **argv)
       to_string(config.infer_mode) + "_" + to_string(config.erode_pixel);
   if (config.infer_mode == 5)
   {
-    config.finalPicDir = input_dir + "/cdt_mul_" + mode_suffix + "_0303_update_432/";
+    config.finalPicDir = input_dir + "/mul_" + mode_suffix + "_432/";
   }
   else if (config.infer_mode == 6)
   {
-    config.finalPicDir = input_dir + "/cdt_sub_" + mode_suffix + "_0319_det_0.2_pc_432/";
+    config.finalPicDir = input_dir + "/sub_" + mode_suffix + "_432/";
   }
   else if (config.infer_mode == 7)
   {

@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     // ========== 从环境变量读取配置 ==========
     std::string input_dir;
     std::string output_dir;
+    std::string pointcloud_dir;
     int infer_mode = 7;  // 默认使用 DSG 模式
     bool use_k100_mode = true;  // 默认使用 K100 模式
 
@@ -65,28 +66,38 @@ int main(int argc, char** argv) {
         std::cout << "[Config] Output dir from argv: " << output_dir << std::endl;
     }
 
-    // 读取推理模式
-    const char* env_mode = std::getenv("OFFLINE_INFER_MODE");
-    if (env_mode != nullptr) {
-        infer_mode = std::atoi(env_mode);
-        std::cout << "[Config] Infer mode from env: " << infer_mode << std::endl;
-    } else if (argc >= 4) {
-        infer_mode = std::atoi(argv[3]);
-        std::cout << "[Config] Infer mode from argv: " << infer_mode << std::endl;
+    const char* env_pcd_output = std::getenv("OFFLINE_POINTCLOUD_DIR");
+    if (env_pcd_output != nullptr) {
+        pointcloud_dir = env_pcd_output;
+        std::cout << "[Config] Pointcloud dir from env: " << pointcloud_dir << std::endl;
     }
 
-    // 读取硬件模式
-    const char* env_hardware = std::getenv("HARDWARE_MODE");
-    if (env_hardware != nullptr) {
-        std::string hw_str = env_hardware;
-        std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
-        use_k100_mode = (hw_str == "k100");
-        std::cout << "[Config] Hardware mode from env: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
-    } else if (argc >= 5) {
+    // 读取推理模式（命令行参数优先于环境变量）
+    if (argc >= 4) {
+        infer_mode = std::atoi(argv[3]);
+        std::cout << "[Config] Infer mode from argv: " << infer_mode << std::endl;
+    } else {
+        const char* env_mode = std::getenv("OFFLINE_INFER_MODE");
+        if (env_mode != nullptr) {
+            infer_mode = std::atoi(env_mode);
+            std::cout << "[Config] Infer mode from env: " << infer_mode << std::endl;
+        }
+    }
+
+    // 读取硬件模式（命令行参数优先于环境变量）
+    if (argc >= 5) {
         std::string hw_str = argv[4];
         std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
         use_k100_mode = (hw_str == "k100");
         std::cout << "[Config] Hardware mode from argv: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
+    } else {
+        const char* env_hardware = std::getenv("HARDWARE_MODE");
+        if (env_hardware != nullptr) {
+            std::string hw_str = env_hardware;
+            std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
+            use_k100_mode = (hw_str == "k100");
+            std::cout << "[Config] Hardware mode from env: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
+        }
     }
 
     // 设置环境变量，让 HardwareDetector 读取到正确的模式
@@ -123,6 +134,10 @@ int main(int argc, char** argv) {
         config.output_dir = output_dir;
         std::cout << "[Config] Using specified output dir: " << output_dir << std::endl;
     }
+    if (!pointcloud_dir.empty()) {
+        config.pointcloud_dir = pointcloud_dir;
+        std::cout << "[Config] Using specified pointcloud dir: " << pointcloud_dir << std::endl;
+    }
     // 否则留空，让 auto_configure() 自动生成带模式信息的目录名
 
     // 输出控制
@@ -135,6 +150,9 @@ int main(int argc, char** argv) {
     // 自动配置（根据硬件模式选择模型等）
     config.auto_configure();
 
+    std::cout << "[Config] Effective infer mode: " << config.infer_mode << std::endl;
+    std::cout << "[Config] Effective hardware mode: " << (config.use_k100_mode ? "K100" : "bestmow") << std::endl;
+
     // 打印配置
     config.print();
 
@@ -145,7 +163,7 @@ int main(int argc, char** argv) {
     }
 
     // ========== 创建输出目录 ==========
-    createOutputDirectories(config.output_dir);
+    createOutputDirectories(config.output_dir, config.pointcloud_dir);
 
     // ========== 扫描图像文件 ==========
     std::cout << "\n[Scan] Scanning input directory..." << std::endl;

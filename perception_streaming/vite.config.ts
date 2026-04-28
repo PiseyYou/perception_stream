@@ -263,6 +263,8 @@ function bagDataPlugin() {
 export default defineConfig({
   plugins: [vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
   server: {
+    host: '0.0.0.0',
+    port: 5173,
     open: true,
     watch: {
       ignored: ['**/data/**', '**/node_modules/**', '**/.git/**'],

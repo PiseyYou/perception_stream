@@ -17,8 +17,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 #    set(CMAKE_BUILD_TYPE Debug)
 #endif()
 
-set(DEPS_ROOT /home/youfeng/CLionProjects/05-offline_debug_fusion/deps_gcc11.3/x86/)
+# 使用项目根目录的 lib 作为依赖库路径
+get_filename_component(PROJECT_ROOT "${PROJECT_SOURCE_DIR}/.." ABSOLUTE)
+set(DEPS_ROOT ${PROJECT_ROOT}/lib)
 message(STATUS "DEPS_ROOT: ${DEPS_ROOT}")
+message(STATUS "PROJECT_ROOT: ${PROJECT_ROOT}")
 
 # 查找OpenCV
 find_package(OpenCV 4 REQUIRED)
@@ -58,17 +61,19 @@ include_directories(
 # 链接目录
 link_directories(
     ${PCL_LIBRARY_DIRS}
-    ${DEPS_ROOT}/dnn_x86/lib
+    ${DEPS_ROOT}/dnn_x86
 )
 
-SET(LINK_libs dnn hbdk_sim_x86 z dl rt pthread)
+SET(LINK_libs dnn_mock hbdk_sim_x86_mock z dl rt pthread)
 
 # 添加PCL定义
 add_definitions(${PCL_DEFINITIONS})
 
-# 源文件
-set(SOURCES
-    src/offline_perception_debug.cpp
+# ========================================
+# 目标 1: offline_perception_debug_432
+# ========================================
+set(SOURCES_432
+    src/offline_perception_debug_432.cpp
     src/offline_utils.cpp
     src/stereo_multi_match.cpp
     src/multi_sub_perception.cpp
@@ -77,100 +82,53 @@ set(SOURCES
     src/cdt_perception.cpp
     src/qr_cs_perception.cpp
     src/cls_perception.cpp
+    src/dsg_perception.cpp
     src/multiscale_filter.cpp
     src/stereo_point_cloud_rgbl.cpp
 )
 
-# 可执行文件
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(offline_perception_debug_432 ${SOURCES_432})
 
-# 链接库
-target_link_libraries(${PROJECT_NAME}
-    ${OpenCV_LIBS}  ${PCL_LIBRARIES} ${LINK_libs} ${JSONCPP_LIBRARIES}
-)
-
-# 安装规则
-install(TARGETS ${PROJECT_NAME}
-    RUNTIME DESTINATION bin
-)
-
-# 源文件
-set(SOURCES
-        src/offline_perception_debug_432.cpp
-        src/offline_utils.cpp
-        src/stereo_multi_match.cpp
-        src/multi_sub_perception.cpp
-        src/seg_perception.cpp
-        src/det_perception.cpp
-        src/cdt_perception.cpp
-        src/qr_cs_perception.cpp
-        src/cls_perception.cpp
-        src/dsg_perception.cpp
-        src/multiscale_filter.cpp
-        src/stereo_point_cloud_rgbl.cpp
-)
-
-# 可执行文件
-add_executable(offline_perception_debug_432 ${SOURCES})
-
-# 链接库
-target_link_libraries(offline_perception_debug_432  ${OpenCV_LIBS}  ${PCL_LIBRARIES} ${LINK_libs} ${JSONCPP_LIBRARIES}
+target_link_libraries(offline_perception_debug_432
+    ${OpenCV_LIBS}
+    ${PCL_LIBRARIES}
+    ${LINK_libs}
+    ${JSONCPP_LIBRARIES}
 )
 
 install(TARGETS offline_perception_debug_432
-        RUNTIME DESTINATION bin
+    RUNTIME DESTINATION bin
 )
 
-set(SOURCES
-        src/offline_perception_debug_color.cpp
-        src/offline_utils.cpp
-        src/stereo_multi_match.cpp
-        src/multi_sub_perception.cpp
-        src/seg_perception.cpp
-        src/det_perception.cpp
-        src/cdt_perception.cpp
-        src/qr_cs_perception.cpp
-        src/cls_perception.cpp
-        src/multiscale_filter.cpp
-        src/stereo_point_cloud_rgbl.cpp
+# ========================================
+# 目标 2: offline_perception_debug_432_sob
+# ========================================
+set(SOURCES_432_SOB
+    src/offline_perception_debug_432_sob.cpp
+    src/offline_utils.cpp
+    src/stereo_multi_match.cpp
+    src/multi_sub_perception.cpp
+    src/seg_perception.cpp
+    src/det_perception.cpp
+    src/cdt_perception.cpp
+    src/qr_cs_perception.cpp
+    src/cls_perception.cpp
+    src/dsg_perception.cpp
+    src/multiscale_filter.cpp
+    src/stereo_point_cloud_rgbl.cpp
 )
 
-# 可执行文件
-add_executable(offline_perception_debug_color ${SOURCES})
+add_executable(offline_perception_debug_432_sob ${SOURCES_432_SOB})
 
-# 链接库
-target_link_libraries(offline_perception_debug_color  ${OpenCV_LIBS}  ${PCL_LIBRARIES} ${LINK_libs} ${JSONCPP_LIBRARIES}
-)
-
-install(TARGETS offline_perception_debug_color
-        RUNTIME DESTINATION bin
-)
-
-
-set(SOURCES
-        src/offline_perception_debug_432_sob.cpp
-        src/offline_utils.cpp
-        src/stereo_multi_match.cpp
-        src/multi_sub_perception.cpp
-        src/seg_perception.cpp
-        src/det_perception.cpp
-        src/cdt_perception.cpp
-        src/qr_cs_perception.cpp
-        src/cls_perception.cpp
-        src/dsg_perception.cpp
-        src/multiscale_filter.cpp
-        src/stereo_point_cloud_rgbl.cpp
-)
-
-# 可执行文件
-add_executable(offline_perception_debug_432_sob ${SOURCES})
-
-# 链接库
-target_link_libraries(offline_perception_debug_432_sob  ${OpenCV_LIBS}  ${PCL_LIBRARIES} ${LINK_libs} ${JSONCPP_LIBRARIES}
+target_link_libraries(offline_perception_debug_432_sob
+    ${OpenCV_LIBS}
+    ${PCL_LIBRARIES}
+    ${LINK_libs}
+    ${JSONCPP_LIBRARIES}
 )
 
 install(TARGETS offline_perception_debug_432_sob
-        RUNTIME DESTINATION bin
+    RUNTIME DESTINATION bin
 )
 
 # 打印配置信息

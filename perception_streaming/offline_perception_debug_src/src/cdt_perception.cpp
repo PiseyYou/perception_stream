@@ -153,11 +153,11 @@ void cdt_perception::processSmallFeatureMap(hbDNNTensor* cls_tensor, hbDNNTensor
                                             std::vector<std::vector<Bbox>>& bboxes,
                                             std::vector<std::vector<float>>& scores,
                                             int H_8, int W_8) {
-    if (cls_tensor->properties.quantiType != NONE) {
+    if (cls_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_NONE) {
         std::cout << "output[order[0]] QuantiType is not NONE, please check!" << std::endl;
         return;
     }
-    if (bbox_tensor->properties.quantiType != SCALE) {
+    if (bbox_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_SCALE) {
         std::cout << "output[order[1]] QuantiType is not SCALE, please check!" << std::endl;
         return;
     }
@@ -230,11 +230,11 @@ void cdt_perception::processMediumFeatureMap(hbDNNTensor* cls_tensor, hbDNNTenso
                                              std::vector<std::vector<Bbox>>& bboxes,
                                              std::vector<std::vector<float>>& scores,
                                              int H_16, int W_16) {
-    if (cls_tensor->properties.quantiType != NONE) {
+    if (cls_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_NONE) {
         std::cout << "output[order[2]] QuantiType is not NONE, please check!" << std::endl;
         return;
     }
-    if (bbox_tensor->properties.quantiType != SCALE) {
+    if (bbox_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_SCALE) {
         std::cout << "output[order[3]] QuantiType is not SCALE, please check!" << std::endl;
         return;
     }
@@ -307,11 +307,11 @@ void cdt_perception::processLargeFeatureMap(hbDNNTensor* cls_tensor, hbDNNTensor
                                             std::vector<std::vector<Bbox>>& bboxes,
                                             std::vector<std::vector<float>>& scores,
                                             int H_32, int W_32) {
-    if (cls_tensor->properties.quantiType != NONE) {
+    if (cls_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_NONE) {
         std::cout << "output[order[4]] QuantiType is not NONE, please check!" << std::endl;
         return;
     }
-    if (bbox_tensor->properties.quantiType != SCALE) {
+    if (bbox_tensor->properties.quantiType != HB_DNN_QUANTI_TYPE_SCALE) {
         std::cout << "output[order[5]] QuantiType is not SCALE, please check!" << std::endl;
         return;
     }

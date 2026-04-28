@@ -11,14 +11,22 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <opencv2/opencv.hpp>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <string>
 #include <vector>
 
-// 引入感知模块头文件
+// PCL 头文件必须在 OpenCV 之前包含，避免 detail 命名空间冲突
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+
+// 引入感知模块头文件（包含 PCL/VTK）
+#include "stereo_multi_match.h"
+#include "stereo_point_cloud_rgbl.h"
+
+// OpenCV 必须在 PCL 之后包含
+#include <opencv2/opencv.hpp>
+
+// 其他感知模块
 #include "cdt_perception.h"
 #include "det_perception.h"
 #include "dsg_perception.h"
@@ -26,8 +34,6 @@
 #include "offline_utils.hpp"
 #include "qr_cs_perception.h"
 #include "seg_perception.h"
-#include "stereo_multi_match.h"
-#include "stereo_point_cloud_rgbl.h"
 
 namespace fs = std::filesystem;
 using namespace cv;

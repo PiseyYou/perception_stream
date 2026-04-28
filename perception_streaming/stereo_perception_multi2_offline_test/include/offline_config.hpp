@@ -30,9 +30,10 @@ struct OfflineConfig {
     bool enable_dsg_outlier_removal = false;           // 点云融合时启用离群点移除
 
     // ========== 路径配置 ==========
-    std::string model_dir = "../models/";
+    std::string model_dir = "/app/models/";  // Docker 容器中的模型路径
     std::string input_dir = "";
     std::string output_dir = "";  // 留空，由 auto_configure() 自动生成
+    std::string pointcloud_dir = "";
 
     // 模型文件名（根据推理模式和硬件模式自动选择）
     std::string mul_sub_model_name = "";  // Model 6
@@ -75,7 +76,23 @@ struct OfflineConfig {
         std::string erode_suffix = erode_pixel > 0 ? "_erode" + std::to_string(erode_pixel) : "";
 
         if (output_dir.empty()) {
-            output_dir = input_dir + "/output_" + mode_name + "_" + hw_suffix + erode_suffix + "/";
+            if (infer_mode == 6) {
+                output_dir = input_dir + "/sub_6_205_432";
+            } else if (infer_mode == 7) {
+                output_dir = input_dir + "/dsg_7_205_432";
+            } else {
+                output_dir = input_dir + "/output_" + mode_name + "_" + hw_suffix + erode_suffix + "/";
+            }
+        }
+
+        if (pointcloud_dir.empty()) {
+            if (infer_mode == 6) {
+                pointcloud_dir = input_dir + "/pcd_6_205_432";
+            } else if (infer_mode == 7) {
+                pointcloud_dir = input_dir + "/pcd_7_205_432";
+            } else {
+                pointcloud_dir = output_dir + "/pointcloud";
+            }
         }
     }
 
@@ -102,6 +119,7 @@ struct OfflineConfig {
         std::cout << "Area threshold: " << area_threshold << std::endl;
         std::cout << "\nInput dir: " << input_dir << std::endl;
         std::cout << "Output dir: " << output_dir << std::endl;
+        std::cout << "Pointcloud dir: " << pointcloud_dir << std::endl;
         std::cout << "\nOutput options:" << std::endl;
         std::cout << "  - Segmentation: " << (save_segmentation ? "yes" : "no") << std::endl;
         std::cout << "  - Point cloud: " << (save_pointcloud ? "yes" : "no") << std::endl;

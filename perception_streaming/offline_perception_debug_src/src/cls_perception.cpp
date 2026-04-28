@@ -114,10 +114,10 @@ void cls_perception::get_topk_result(hbDNNTensor *tensor,
     // << " shape3: " << shape[3] << std::endl;
     for (auto i = 0; i < tensor_len; i++) {
         float score = 0.0;
-        if (tensor->properties.quantiType == SHIFT) {
+        if (tensor->properties.quantiType == HB_DNN_QUANTI_TYPE_SHIFT) {
             // std::cout << "shift" << std::endl;
             score = data[i] / (1 << shift[i]);
-        } else if (tensor->properties.quantiType == SCALE) {
+        } else if (tensor->properties.quantiType == HB_DNN_QUANTI_TYPE_SCALE) {
             // std::cout << "scale" << std::endl;
             score = data[i] * scale[i];
         } else {

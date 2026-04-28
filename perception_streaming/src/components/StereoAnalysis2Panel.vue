@@ -3,15 +3,15 @@
     <div class="sa2-input-bar">
       <label>SN末尾4位:</label>
       <input v-model="snLast4" class="sa2-sn-input" placeholder="0015" maxlength="4" @input="onSnInput" />
-      <label>📁 双目文件夹目录:</label>
-      <input v-model="folderPath" class="sa2-path-input" placeholder="含 images/ pointclouds/ 子目录的文件夹路径" @keyup.enter="doScan" />
+      <label>📁 夜晚双目文件目录:</label>
+      <input v-model="folderPath" class="sa2-path-input" placeholder="含 images/ pointclouds/ 子目录的文件夹路径" @keyup.enter="doScanNight" />
       <button class="sa2-dbg-btn" style="background:#4c1d95;margin-right:8px" :disabled="offlineRunning || !folderPath.trim() || pairs.length === 0" @click="() => { console.log('[Button Click] Night Debug clicked'); runNightOfflineDebug(); }">{{ offlineRunning ? '⏳ 运行中...' : '🌙 夜间离线debug' }}</button>
-      <label>📁 白天双目文件夹目录:</label>
+      <label>📁 白天双目文件目录:</label>
       <input v-model="dayFolderPath" class="sa2-path-input" placeholder="data/stereo_debug/0016/20260420" @keyup.enter="doScanDay" />
       <button class="sa2-dbg-btn" style="background:#fb923c;color:#000;margin-right:8px" :disabled="offlineRunning || !dayFolderPath.trim()" @click="runDayOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '☀️ 白天离线debug' }}</button>
       <label>标签:</label>
       <input v-model.number="filterLabel" type="number" class="sa2-label-input" />
-      <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="doScan">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
+      <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="() => doScan()">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
       <span v-if="scanStatus" class="sa2-status" :class="{ error: scanError }">{{ scanStatus }}</span>
       <span class="sa2-sep">|</span>
       <label>归档目录:</label>
@@ -141,19 +141,6 @@ function onSnInput() {
   }
 }
 
-// Load default port from server config on mount
-onMounted(async () => {
-  try {
-    const res = await fetch('/offline/config')
-    const data = await res.json()
-    if (data.ok && data.default_ports?.stereo_analysis) {
-      uploadPort.value = data.default_ports.stereo_analysis
-    }
-  } catch (e) {
-    console.warn('Failed to load config:', e)
-  }
-})
-
 interface Pair { pcd: string; img: string | null }
 const pairs = ref<Pair[]>([])
 const imagesDir = ref('')
@@ -175,6 +162,31 @@ let offlineReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let offlineStatusPollTimer: ReturnType<typeof setInterval> | null = null
 let offlineRunToken = 0
 
+async function readJsonResponse<T>(res: Response, action: string): Promise<T> {
+  const text = await res.text()
+  if (!text.trim()) {
+    throw new Error(`${action}返回空响应 (HTTP ${res.status})`)
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    throw new Error(`${action}返回非 JSON 响应 (HTTP ${res.status}): ${error}`)
+  }
+}
+
+// Load default port from server config on mount
+onMounted(async () => {
+  try {
+    const res = await fetch('/offline/config')
+    const data = await readJsonResponse<any>(res, '加载配置')
+    if (data.ok && data.default_ports?.stereo_analysis) {
+      uploadPort.value = data.default_ports.stereo_analysis
+    }
+  } catch (e) {
+    console.warn('Failed to load config:', e)
+  }
+})
+
 function resetResultState() {
   resultImages.value = []
   resultPcds.value = []
@@ -183,6 +195,29 @@ function resetResultState() {
   resultSelectedIdx.value = -1
   resultDirLabel.value = ''
   resultPcdStatus.value = ''
+}
+
+function expectedResultDir(mode: number, inputDir: string) {
+  const base = inputDir.replace(/\/+$/, '')
+  if (mode === 6) return `${base}/sub_6_205_432`
+  if (mode === 99) return `${base}/dsg_7_205_432`
+  if (mode === 7) return `${base}/dsg_7_205_432`
+  return `${base}/output_${mode}_205`
+}
+
+function expectedResultPcdDir(mode: number, inputDir: string) {
+  const base = inputDir.replace(/\/+$/, '')
+  if (mode === 6) return `${base}/pcd_6_205_432`
+  if (mode === 99 || mode === 7) return `${base}/pcd_7_205_432`
+  return `${base}/pcd_${mode}_205_432`
+}
+
+function applyInferredResultDirs(mode: number, inputDir: string) {
+  resultDir.value = expectedResultDir(mode, inputDir)
+  resultPcdDir.value = expectedResultPcdDir(mode, inputDir)
+  resultDirLabel.value = resultDir.value.split('/').pop() || ''
+  console.log('[doScan] Inferred resultDir:', resultDir.value)
+  console.log('[doScan] Inferred resultPcdDir:', resultPcdDir.value)
 }
 
 function baseName(path: string) {
@@ -292,7 +327,7 @@ async function reconcileOfflineRunState(runToken: number, inputDir: string) {
   try {
     const res = await fetch('/offline/status')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
+    const data = await readJsonResponse<any>(res, '查询离线状态')
     if (runToken !== offlineRunToken) return
     syncProgressFromStatus(data.progress)
 
@@ -428,7 +463,7 @@ async function doScan(preferMode?: number) {
   try {
     const url = `/offline/scan_nav_folder?folder=${encodeURIComponent(folderPath.value)}&filter_label=${filterLabel.value}`
     const res = await fetch(url)
-    const data = await res.json()
+    const data = await readJsonResponse<any>(res, '扫描双目目录')
     if (!data.ok) { scanStatus.value = data.error || '扫描失败'; scanError.value = true; return }
     imagesDir.value = data.images_dir || ''
     pcdsDir.value = data.pcds_dir || ''
@@ -455,42 +490,34 @@ async function doScan(preferMode?: number) {
       // 检查是否已有结果输出
       const query = new URLSearchParams({ folder: folderPath.value })
       if (typeof preferMode === 'number') query.set('prefer_mode', String(preferMode))
-      const checkRes = await fetch(`/offline/check_existing_result?${query.toString()}`)
-      const checkData = await checkRes.json()
-      console.log('[doScan] check_existing_result response:', checkData)
-      if (checkData.ok && checkData.output_dir) {
-        resultDir.value = checkData.output_dir
-        resultImages.value = checkData.images || []
-        resultDirLabel.value = checkData.output_dir.split('/').pop() || ''
-        resultPcdDir.value = checkData.pcd_dir || ''
-        resultPcds.value = checkData.pcds || []
-        console.log('[doScan] resultPcdDir set to:', resultPcdDir.value)
-        console.log('[doScan] resultImages count:', resultImages.value.length)
-        offlineStatus.value = `✓ 已加载现有结果 (${resultImages.value.length} 张)`
-        await nextTick()
-        if (resultPcdCanvasRef.value && !resultPcdCtx)
-          resultPcdCtx = initViewer(resultPcdCanvasRef.value)
-        selectPair(0)
-      } else {
-        console.log('[doScan] No existing result found, will infer pcd_dir after processing')
-        // 如果没有现有结果，尝试推断可能的结果点云目录
-        const possiblePcdDirs = [
-          folderPath.value + '/pcd_7_205_432',
-          folderPath.value + '/pcd_output',
-          folderPath.value + '/pointclouds_result'
-        ]
-        for (const dir of possiblePcdDirs) {
-          try {
-            const testRes = await fetch(`/offline/local_file?path=${encodeURIComponent(dir)}`)
-            if (testRes.ok) {
-              resultPcdDir.value = dir
-              console.log('[doScan] Inferred resultPcdDir:', dir)
-              break
-            }
-          } catch (e) {
-            // 继续尝试下一个
-          }
+      const mode = typeof preferMode === 'number' ? preferMode : lastOfflineInferMode.value
+      try {
+        const checkRes = await fetch(`/offline/check_existing_result?${query.toString()}`)
+        const checkData = await readJsonResponse<any>(checkRes, '检查已有结果')
+        console.log('[doScan] check_existing_result response:', checkData)
+        if (checkData.ok && checkData.output_dir) {
+          resultDir.value = checkData.output_dir
+          resultImages.value = checkData.images || []
+          resultDirLabel.value = checkData.output_dir.split('/').pop() || ''
+          resultPcdDir.value = checkData.pcd_dir || ''
+          resultPcds.value = checkData.pcds || []
+          console.log('[doScan] resultPcdDir set to:', resultPcdDir.value)
+          console.log('[doScan] resultImages count:', resultImages.value.length)
+          offlineStatus.value = `✓ 已加载现有结果 (${resultImages.value.length} 张)`
+        } else {
+          console.log('[doScan] No existing result found, will infer pcd_dir after processing')
+          applyInferredResultDirs(mode, folderPath.value)
         }
+      } catch (error) {
+        console.warn('[doScan] check_existing_result failed, continuing with inferred result dirs:', error)
+        applyInferredResultDirs(mode, folderPath.value)
+      }
+      await nextTick()
+      if (resultPcdCanvasRef.value && !resultPcdCtx)
+        resultPcdCtx = initViewer(resultPcdCanvasRef.value)
+      await selectPair(0)
+      if (!offlineStatus.value && resultDir.value) {
+        offlineStatus.value = '已加载原始预览'
       }
     }
   } catch (e) {
@@ -499,10 +526,26 @@ async function doScan(preferMode?: number) {
 }
 
 async function doScanDay() {
-  // 将白天文件夹路径同步到主文件夹路径，然后执行扫描
+  // 白天模式：扫描白天文件夹，使用 mode=6 (Sub)
+  if (!dayFolderPath.value || !dayFolderPath.value.trim()) {
+    console.warn('[doScanDay] dayFolderPath is empty')
+    return
+  }
   folderPath.value = dayFolderPath.value
   lastOfflineInferMode.value = 6
+  // 扫描时指定 preferMode=6，这样会查找 sub_6_205_432 和 pcd_6_205_432
   await doScan(6)
+}
+
+async function doScanNight() {
+  // 夜晚模式：扫描夜晚文件夹，使用 mode=99/7 (DSG)
+  if (!folderPath.value || !folderPath.value.trim()) {
+    console.warn('[doScanNight] folderPath is empty')
+    return
+  }
+  lastOfflineInferMode.value = 99
+  // 扫描时指定 preferMode=99，这样会查找 dsg_7_205_432 和 pcd_7_205_432
+  await doScan(99)
 }
 
 function imgUrl(fname: string) {
@@ -543,7 +586,7 @@ async function archiveFrame() {
         archive_dir: archiveDir.value,
       }),
     })
-    const data = await res.json()
+    const data = await readJsonResponse<any>(res, '归档障碍帧')
     if (data.ok) {
       archiveStatus.value = `✓ 已归档 ${data.archived_count} 文件`
     } else {
@@ -638,7 +681,7 @@ async function runNightOfflineDebug() {
   // - Maps detection IDs to 100+ format
   // - Supports optional CDT (charge station detection)
   // - Performs depth computation and fusion at 432 resolution
-  await doRunOffline(folderPath.value, 7, 205, false)
+  await doRunOffline(folderPath.value, 99, 205, false)
 }
 
 async function resumeOfflineDebug() {
@@ -647,9 +690,12 @@ async function resumeOfflineDebug() {
 }
 
 async function runDayOfflineDebug() {
+  console.log('[runDayOfflineDebug] === START ===')
+  console.log('[runDayOfflineDebug] dayFolderPath:', dayFolderPath.value)
+  console.log('[runDayOfflineDebug] folderPath:', folderPath.value)
+  console.log('[runDayOfflineDebug] pairs.length:', pairs.value.length)
+
   try {
-    console.log('[runDayOfflineDebug] Starting Day mode processing with Model 6')
-    console.log('[runDayOfflineDebug] dayFolderPath:', dayFolderPath.value)
     lastOfflineInferMode.value = 6
 
     if (!dayFolderPath.value || !dayFolderPath.value.trim()) {
@@ -661,9 +707,11 @@ async function runDayOfflineDebug() {
 
     // 先扫描白天文件夹，确保 pairs 有数据
     if (pairs.value.length === 0 || folderPath.value !== dayFolderPath.value) {
-      console.log('[runDayOfflineDebug] Scanning day folder first...')
+      console.log('[runDayOfflineDebug] Need to scan first')
       folderPath.value = dayFolderPath.value
+      console.log('[runDayOfflineDebug] Calling doScan(6)...')
       await doScan(6)
+      console.log('[runDayOfflineDebug] doScan completed, pairs.length:', pairs.value.length)
 
       // 等待扫描完成
       if (pairs.value.length === 0) {
@@ -677,18 +725,18 @@ async function runDayOfflineDebug() {
     console.log('[runDayOfflineDebug] Found', pairs.value.length, 'pairs')
 
     // 检查是否有已处理的结果，如果有则继续执行
-    const hasResults = resultImages.value.length > 0
+    const expectedDir = expectedResultDir(6, dayFolderPath.value)
+    const hasResults = resultImages.value.length > 0 && resultDir.value === expectedDir
     const resume = hasResults
+    console.log('[runDayOfflineDebug] expectedDir:', expectedDir)
     console.log('[runDayOfflineDebug] hasResults:', hasResults, 'resume:', resume)
 
     // Mode 6: CDT+Multi-Sub Day mode
-    // - Uses Model 6 for daytime scenes
-    // - K100 hardware mode
-    // - Processes with CDT + Multi-Sub model
     console.log('[runDayOfflineDebug] Calling doRunOffline with mode=6')
     await doRunOffline(dayFolderPath.value, 6, 205, resume)
+    console.log('[runDayOfflineDebug] === END ===')
   } catch (error) {
-    console.error('[runDayOfflineDebug] Error:', error)
+    console.error('[runDayOfflineDebug] === ERROR ===', error)
     offlineStatus.value = `✗ 错误: ${error}`
     offlineError.value = true
     offlineRunning.value = false
@@ -729,7 +777,7 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
       body: JSON.stringify({ input_dir: inputDir, infer_mode: inferMode, erode_pixel: erodePixel, resume }),
     })
     console.log('[doRunOffline] Response status:', res.status)
-    const startData = await res.json()
+    const startData = await readJsonResponse<any>(res, '启动离线调试')
     console.log('[doRunOffline] Response data:', startData)
     if (!startData.ok) {
       offlineStatus.value = `✗ ${startData.error}`; offlineError.value = true

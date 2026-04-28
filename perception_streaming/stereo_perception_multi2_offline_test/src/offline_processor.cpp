@@ -238,15 +238,13 @@ bool OfflineProcessor::initDSGPerception() {
 bool OfflineProcessor::initStereoMatcher() {
     std::cout << "[Init] Initializing stereo matcher..." << std::endl;
 
-    // 根据推理模式选择参数初始化方法
-    // Mode 7 (DSG 夜间模式) 使用自适应参数，其他模式使用原始参数
-    if (config_.infer_mode == 7) {
-        stereo_matcher_.stereo_multi_param_init_6m_adaptive();
-        std::cout << "[Init] Stereo matcher initialized (adaptive parameters for night mode)" << std::endl;
-    } else {
-        stereo_matcher_.stereo_multi_param_init();
-        std::cout << "[Init] Stereo matcher initialized (original parameters)" << std::endl;
-    }
+    // 禁用 OpenCL 以避免在 Docker 容器中的段错误
+    cv::ocl::setUseOpenCL(false);
+    std::cout << "[Init] OpenCL disabled for stereo matcher" << std::endl;
+
+    // 初始化立体匹配器参数
+    stereo_matcher_.stereo_multi_param_init();
+    std::cout << "[Init] Stereo matcher initialized" << std::endl;
 
     return true;
 }
@@ -413,32 +411,8 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
     // ========== 1. DSG 推理 ==========
     std::cout << "[Process] Running DSG inference..." << std::endl;
 
-    // 设置推理内部尺寸（关键！）
-    dsg_perception_.ori_height = resized_img.rows;
-    dsg_perception_.ori_width = resized_img.cols;
-
-    std::cout << "[Debug] DSG ori_width=" << dsg_perception_.ori_width
-              << ", ori_height=" << dsg_perception_.ori_height << std::endl;
-
-    // 使用完整接口进行推理（与参考代码一致）
-    std::vector<Detection> dect_src;
-    cv::Mat img_label = cv::Mat::zeros(384, 640, CV_8UC1) + 1;
-
-    std::cout << "[Debug] Before inference - img_label size: " << img_label.size()
-              << ", type: " << img_label.type() << std::endl;
-
-    // 注意：lab_dst 是输出参数，DSG 函数会直接写入结果
-    dsg_perception_.perception_process_bgr_no_argmax_erode(
-        resized_img, dect_src, img_label, lab_dst, config_.erode_pixel);
-
-    std::cout << "[Debug] After inference - img_label stats:" << std::endl;
-    cv::Scalar img_label_mean = cv::mean(img_label);
-    double img_label_min, img_label_max;
-    cv::minMaxLoc(img_label, &img_label_min, &img_label_max);
-    std::cout << "  size: " << img_label.size()
-              << ", mean: " << img_label_mean[0]
-              << ", min: " << img_label_min
-              << ", max: " << img_label_max << std::endl;
+    // 使用简化的推理接口
+    dsg_perception_.process_infer_match(resized_img, lab_dst);
 
     std::cout << "[Debug] After inference - lab_dst stats:" << std::endl;
     if (!lab_dst.empty()) {
@@ -458,20 +432,8 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
         return result;
     }
 
-    // ========== 检测框处理（对齐参考代码） ==========
-    std::vector<Detection> dst_detections;
-    dst_detections.clear();
-
-    // 根据配置决定是否处理检测框
-    bool enable_draw_box = config_.enable_draw_detection_box;
-    if (enable_draw_box) {
-        for (const auto& det : dect_src) {
-            Detection fixed_det = det;
-            fixed_det.id += 100;  // 映射到 100+ 格式
-            dst_detections.push_back(fixed_det);
-        }
-    }
-    result.detections = dst_detections;
+    // DSG 模式不返回检测框，只有分割结果
+    result.detections.clear();
 
     // 更新分割结果（lab_dst 已经是 640x384）
     result.segmentation = lab_dst;
@@ -667,7 +629,10 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
 
     // 保存点云
     if (config_.save_pointcloud && !result.pointcloud.empty()) {
-        std::string pcd_path = config_.output_dir + "/pointcloud/" + image_name + ".pcd";
+        const std::string& pointcloud_base = config_.pointcloud_dir.empty()
+            ? config_.output_dir + "/pointcloud"
+            : config_.pointcloud_dir;
+        std::string pcd_path = pointcloud_base + "/" + image_name + ".pcd";
         pcl::io::savePCDFileBinary(pcd_path, result.pointcloud);
         std::cout << "[Save] Point cloud saved: " << pcd_path << std::endl;
     }

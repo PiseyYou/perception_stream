@@ -1,9 +1,13 @@
 #ifndef OFFLINE_PROCESSOR_HPP
 #define OFFLINE_PROCESSOR_HPP
 
-#include <opencv2/opencv.hpp>
+// 在包含任何库之前，先定义宏阻止 PCL 包含 FLANN 头文件
+#define PCL_NO_FLANN
+
+// PCL 头文件必须在 OpenCV 之前包含，避免 flann 命名空间冲突
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
 

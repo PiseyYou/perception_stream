@@ -1,37 +1,42 @@
+// 在包含任何库之前，先定义宏阻止 PCL 包含 FLANN 头文件
+#define PCL_NO_FLANN
+
 #include <iostream>
 #include <vector>
 #include <string>
 #include <chrono>
 #include <math.h>
 
+// PCL 头文件必须在 OpenCV 之前包含，避免 detail 命名空间冲突
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+// #include <pcl/visualization/pcl_visualizer.h>  // 离线测试不需要可视化
+#include <pcl/filters/passthrough.h>
+// #include <pcl/search/kdtree.h>  // 不需要，会引入 FLANN 依赖
+// #include <pcl/segmentation/extract_clusters.h>  // 不需要
+#include <pcl/filters/voxel_grid.h>
+// #include <pcl/search/search.h>  // 不需要
+// #include <pcl/memory.h>  // PCL 1.10 不需要此头文件
+
+// OpenCV 头文件在 PCL 之后
 #include "opencv2/calib3d.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/highgui.hpp"
 #include "opencv2/core/ocl.hpp"
 
 #include "multiscale_filter.hpp"
-
-#include <pcl/point_cloud.h>
-#include <pcl/impl/point_types.hpp>
-#include <pcl/visualization/pcl_visualizer.h>
 #include <perception_common.h>
 
-#include <pcl/filters/passthrough.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/segmentation/extract_clusters.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/search/search.h>
-#include <pcl/memory.h>
-
-using namespace std;
-using namespace cv;
+// 不在头文件中使用 using namespace，避免污染包含此头文件的所有文件
+// using namespace std;
+// using namespace cv;
 
 class StereoMultiMatch
 {
 public:
     double cx, cy, fx, fy;
-    Mat Pl, Pr;
-    Mat P2, Q;
+    cv::Mat Pl, Pr;
+    cv::Mat P2, Q;
     bool match_enable_ces_show=false;
 
     cv::Mat depth_;
@@ -39,21 +44,21 @@ public:
 
     void stereo_multi_param_init();
 
-    Mat stereo_multi_process_depth(Mat &rectifyL, Mat &rectifyR);
-    Mat stereo_multi_process_filter(Mat &disparity_, cv::Mat lab_dst, bool enable_height_filter_);
+    cv::Mat stereo_multi_process_depth(cv::Mat &rectifyL, cv::Mat &rectifyR);
+    cv::Mat stereo_multi_process_filter(cv::Mat &disparity_, cv::Mat lab_dst, bool enable_height_filter_);
 
     cv::Mat stereo_multi_process(cv::Mat& rectifyL, cv::Mat& rectifyR, bool enable_height_filter_);
 
     void stereo_point_ori_rgb_filter(pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud, pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
 
-    void stereo_process_pc_rgbl_depth(const Mat &depth, Mat &ori_mat, pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud, pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
+    void stereo_process_pc_rgbl_depth(const cv::Mat &depth, cv::Mat &ori_mat, pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud, pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
 
-    void stereo_process_pc_rgbl_dest(const Mat &depth, Mat &ori_mat, std::vector<Detection> &dect_src,
+    void stereo_process_pc_rgbl_dest(const cv::Mat &depth, cv::Mat &ori_mat, std::vector<Detection> &dect_src,
                                                        pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud, pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
-    void stereo_process_pci_depth_rgb_seg_fusion(const Mat &depth, const Mat &lab, Mat &ori_mat,
+    void stereo_process_pci_depth_rgb_seg_fusion(const cv::Mat &depth, const cv::Mat &lab, cv::Mat &ori_mat,
                                                                    pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
                                                                    pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
-    void stereo_process_pci_depth_rgb_seg_det_fusion(const Mat &depth, const Mat &lab, std::vector<Detection> &dect_src, Mat &ori_mat,
+    void stereo_process_pci_depth_rgb_seg_det_fusion(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
     void det_pc_rgb_label(Detection& det, const cv::Point& pt, pcl::PointXYZRGBL& pci);
@@ -62,13 +67,13 @@ public:
 private:
     using Clock = std::chrono::high_resolution_clock;
 
-    Mat stereoImg;
-    Mat rgbImageL, rgbImageR;
-    Mat grayImageL, grayImageR;
-    Mat rectifyImageL, rectifyImageR;
+    cv::Mat stereoImg;
+    cv::Mat rgbImageL, rgbImageR;
+    cv::Mat grayImageL, grayImageR;
+    cv::Mat rectifyImageL, rectifyImageR;
 
-    Mat half_grayImageL, half_grayImageR;
-    Mat temp_grayImageL;
+    cv::Mat half_grayImageL, half_grayImageR;
+    cv::Mat temp_grayImageL;
 
     bool use_background_substract_= false;
     bool use_multiscale_filter_= true;
@@ -93,7 +98,7 @@ private:
     void stereo_dis_init();
 
     void stereo_base_param_init();
-    bool setStereoMatcherParameters(string dirPath);
+    bool setStereoMatcherParameters(std::string dirPath);
     cv::Mat backgroundSubstract(const cv::Mat& src);
 
 

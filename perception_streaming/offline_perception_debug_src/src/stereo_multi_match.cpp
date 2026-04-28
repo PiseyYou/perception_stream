@@ -258,7 +258,7 @@ cv::Mat StereoMultiMatch::stereo_multi_process(cv::Mat &rectifyL,
     return depth_.clone(); // 或者使用 std::move(depth_)
 }
 
-Mat StereoMultiMatch::stereo_multi_process_depth(Mat &rectifyL, Mat &rectifyR)
+cv::Mat StereoMultiMatch::stereo_multi_process_depth(cv::Mat &rectifyL, cv::Mat &rectifyR)
 {
     temp_grayImageL = rectifyL.clone();
 
@@ -312,7 +312,7 @@ Mat StereoMultiMatch::stereo_multi_process_depth(Mat &rectifyL, Mat &rectifyR)
     return disparity_;
 }
 
-Mat StereoMultiMatch::stereo_multi_process_filter(Mat &disparity_,
+cv::Mat StereoMultiMatch::stereo_multi_process_filter(cv::Mat &disparity_,
                                                   cv::Mat lab_dst,
                                                   bool enable_height_filter_)
 {
@@ -395,8 +395,8 @@ bool StereoMultiMatch::in_range(const cv::Point &top_left,
 void StereoMultiMatch::det_pc_rgb_label(Detection &det, const cv::Point &pt,
                                         pcl::PointXYZRGBL &pci)
 {
-    Point left(det.bbox.xmin, det.bbox.ymin);
-    Point right(det.bbox.xmax, det.bbox.ymax);
+    cv::Point left(det.bbox.xmin, det.bbox.ymin);
+    cv::Point right(det.bbox.xmax, det.bbox.ymax);
     if (in_range(left, right, pt))
     {
         int temp_id = det.id + 100;
@@ -408,7 +408,7 @@ void StereoMultiMatch::det_pc_rgb_label(Detection &det, const cv::Point &pt,
 }
 
 void StereoMultiMatch::stereo_process_pc_rgbl_depth(
-    const Mat &depth, Mat &ori_mat,
+    const cv::Mat &depth, cv::Mat &ori_mat,
     pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
     pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud)
 {
@@ -425,7 +425,7 @@ void StereoMultiMatch::stereo_process_pc_rgbl_depth(
                 pc_rgbl.x = (x - cx) * d / fx;
                 pc_rgbl.y = (y - cy) * d / fy;
                 pc_rgbl.z = d;
-                Vec3b color = ori_mat.at<Vec3b>(y, x);
+                cv::Vec3b color = ori_mat.at<cv::Vec3b>(y, x);
                 uint8_t r = static_cast<uint8_t>(color[2]); // 红色分量
                 uint8_t g = static_cast<uint8_t>(color[1]); // 绿色分量
                 uint8_t b = static_cast<uint8_t>(color[0]); // 蓝色分量
@@ -453,7 +453,7 @@ void StereoMultiMatch::stereo_process_pc_rgbl_depth(
 }
 
 void StereoMultiMatch::stereo_process_pc_rgbl_dest(
-    const Mat &depth, Mat &ori_mat, std::vector<Detection> &dect_src,
+    const cv::Mat &depth, cv::Mat &ori_mat, std::vector<Detection> &dect_src,
     pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
     pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud)
 {
@@ -470,7 +470,7 @@ void StereoMultiMatch::stereo_process_pc_rgbl_dest(
                 pc_rgbl.y = (y - cy) * d / fy;
                 pc_rgbl.z = d;
 
-                Vec3b color = ori_mat.at<Vec3b>(y, x);
+                cv::Vec3b color = ori_mat.at<cv::Vec3b>(y, x);
                 uint8_t r = static_cast<uint8_t>(color[2]); // 红色分量
                 uint8_t g = static_cast<uint8_t>(color[1]); // 绿色分量
                 uint8_t b = static_cast<uint8_t>(color[0]); // 蓝色分量
@@ -499,7 +499,7 @@ void StereoMultiMatch::stereo_process_pc_rgbl_dest(
 }
 
 void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_fusion(
-    const Mat &depth, const Mat &lab, Mat &ori_mat,
+    const cv::Mat &depth, const cv::Mat &lab, cv::Mat &ori_mat,
     pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
     pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud)
 {
@@ -516,7 +516,7 @@ void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_fusion(
                 pc_rgbl.y = (y - cy) * d / fy;
                 pc_rgbl.z = d;
 
-                Vec3b color = ori_mat.at<Vec3b>(y, x);
+                cv::Vec3b color = ori_mat.at<cv::Vec3b>(y, x);
                 uint8_t r = static_cast<uint8_t>(color[2]); // 红色分量
                 uint8_t g = static_cast<uint8_t>(color[1]); // 绿色分量
                 uint8_t b = static_cast<uint8_t>(color[0]); // 蓝色分量
@@ -541,8 +541,8 @@ void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_fusion(
 };
 
 void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_det_fusion(
-    const Mat &depth, const Mat &lab, std::vector<Detection> &,
-    Mat &ori_mat, pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
+    const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &,
+    cv::Mat &ori_mat, pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
     pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud)
 {
     int safe_rows = std::min({VALID_HEIGHT, depth.rows, lab.rows, ori_mat.rows});
@@ -598,7 +598,7 @@ void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_det_fusion(
                 pc_rgbl.y = (y - cy) * d / fy;
                 pc_rgbl.z = d;
 
-                Vec3b color = ori_mat.at<Vec3b>(y, x);
+                cv::Vec3b color = ori_mat.at<cv::Vec3b>(y, x);
                 uint8_t r = static_cast<uint8_t>(color[2]); // 红色分量
                 uint8_t g = static_cast<uint8_t>(color[1]); // 绿色分量
                 uint8_t b = static_cast<uint8_t>(color[0]); // 蓝色分量
@@ -687,7 +687,7 @@ void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_det_fusion(
             pc_rgbl.y = (y - cy) * d / fy;
             pc_rgbl.z = d;
 
-            Vec3b color = ori_mat.at<Vec3b>(y, x);
+            cv::Vec3b color = ori_mat.at<cv::Vec3b>(y, x);
             uint8_t r = static_cast<uint8_t>(color[2]);
             uint8_t g = static_cast<uint8_t>(color[1]);
             uint8_t b = static_cast<uint8_t>(color[0]);
@@ -743,13 +743,13 @@ void StereoMultiMatch::stereo_point_ori_rgb_filter(
     pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud)
 {
     pcl::PointCloud<pcl::PointXYZRGBL>::Ptr input_cloud =
-        std::make_shared<pcl::PointCloud<pcl::PointXYZRGBL>>(xyz_rgbl_cloud);
+        boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBL>>(xyz_rgbl_cloud);
     pcl::PointCloud<pcl::PointXYZRGBL>::Ptr output_cloud(
         new pcl::PointCloud<pcl::PointXYZRGBL>());
 
     if (input_cloud->empty())
     {
-        cout << "Input cloud is empty, nothing to filter." << endl;
+        std::cout << "Input cloud is empty, nothing to filter." << std::endl;
         out_xyz_rgbl_cloud.clear();
         return;
     }

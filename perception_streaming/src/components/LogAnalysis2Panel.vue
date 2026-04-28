@@ -360,7 +360,7 @@ async function loadDefaultPreview() {
     // 尝试从nav包路径加载已提取的图片
     const navPath = navBagPath.value.trim()
     if (!navPath) {
-      alert('請先輸入 Nav 包路徑')
+      console.log('[loadDefaultPreview] Nav 包路徑為空，跳過加載')
       return
     }
 
@@ -374,7 +374,7 @@ async function loadDefaultPreview() {
     })
 
     if (!res.ok) {
-      alert(`無法讀取目錄: ${imgDir}`)
+      console.log(`[loadDefaultPreview] 無法讀取目錄: ${imgDir}，可能尚未提取`)
       return
     }
 
@@ -383,11 +383,12 @@ async function loadDefaultPreview() {
       previewBaseDir.value = imgDir
       previewImages.value = data.images
       previewSelectedIdx.value = 0
+      console.log(`[loadDefaultPreview] 成功加載 ${data.images.length} 張圖片`)
     } else {
-      alert(`目錄中沒有找到圖片: ${imgDir}`)
+      console.log(`[loadDefaultPreview] 目錄中沒有找到圖片: ${imgDir}`)
     }
   } catch (e) {
-    alert(`加載預覽失敗: ${e}`)
+    console.error(`[loadDefaultPreview] 加載預覽失敗:`, e)
   } finally {
     loadingPreview.value = false
   }
@@ -1026,12 +1027,12 @@ onBeforeUnmount(() => {
 .la2-thumb-strip { display:flex; gap:5px; padding:6px 10px; overflow-x:auto; overflow-y:hidden; background:#080c14; border-bottom:1px solid #1e2a3a; flex-shrink:0; }
 .la2-extracted-body { display:grid; grid-template-columns:3fr 2fr; height:380px; }
 .la2-extracted-body-3col { display:grid; grid-template-columns:180px 1fr 1fr; height:500px; gap:0; }
-.la2-thumb-column { overflow-y:auto; overflow-x:hidden; background:#080c14; border-right:1px solid #1e2a3a; padding:6px; display:flex; flex-direction:column; gap:6px; }
+.la2-thumb-column { overflow-y:auto; overflow-x:hidden; background:#080c14; border-right:1px solid #1e2a3a; padding:6px; display:flex; flex-direction:column; gap:6px; height:100%; }
 .la2-ext-thumb-vertical { flex-shrink:0; width:100%; cursor:pointer; border:2px solid #333; border-radius:4px; overflow:hidden; transition:border-color .2s; }
 .la2-ext-thumb-vertical.active { border-color:#4fc3f7; }
 .la2-ext-thumb-vertical:hover { border-color:#90caf9; }
 .la2-ext-thumb-vertical img { width:100%; height:80px; object-fit:cover; display:block; }
-.la2-extracted-img-main { overflow:hidden; display:flex; align-items:center; justify-content:center; background:#050810; border-right:1px solid #1e2a3a; }
+.la2-extracted-img-main { overflow:hidden; display:flex; align-items:center; justify-content:center; background:#050810; border-right:1px solid #1e2a3a; height:100%; }
 .la2-ext-img-full { max-width:100%; max-height:100%; object-fit:contain; display:block; }
 .la2-ext-thumb { flex-shrink:0; width:80px; cursor:pointer; border:2px solid #333; border-radius:4px; overflow:hidden; transition:border-color .2s; }
 .la2-ext-thumb.active { border-color:#4fc3f7; }
@@ -1049,7 +1050,8 @@ onBeforeUnmount(() => {
 .la2-preview-thumb-label { font-size:9px; color:#555; padding:2px 4px; text-align:center; background:#0a0e15; }
 .la2-preview-main { overflow:hidden; display:flex; align-items:center; justify-content:center; background:#050810; padding:8px; }
 .la2-preview-main img { max-width:100%; max-height:100%; object-fit:contain; cursor:zoom-in; border:1px solid #333; border-radius:4px; }
-.la2-extracted-pcd { position:relative; height:100%; overflow:hidden; }
+.la2-extracted-pcd { position:relative; height:100%; overflow:hidden; background:#050810; }
 .la2-ext-pcd-canvas { width:100%; height:100%; display:block; background:#050810; overflow:hidden; }
+.la2-extract-pcd-slot { width:100%; height:100%; display:block; }
 .log-err { color:#ef5350; }
 </style>

@@ -1105,16 +1105,16 @@ async function analyzeAvoiding() {
   padding: 8px;
   margin-bottom: 8px;
   box-shadow: 0 8px 18px rgba(3, 6, 16, 0.2);
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: min(33vh, 240px);
+  max-height: min(33vh, 240px);
 }
 .lf-timeline-terminal {
   flex: 1;
   min-height: 0;
-  height: min(33vh, 240px);
-  max-height: min(33vh, 240px);
+  overflow-y: auto;
 }
 .lf-timeline-row {
   display: grid;
@@ -1188,9 +1188,10 @@ async function analyzeAvoiding() {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-height: 90px;
-  overflow-y: auto;
-  margin-bottom: 4px;
+  max-height: 270px;
+  overflow-y: hidden;
+  margin-bottom: 6px;
+  flex-shrink: 0;
 }
 .lf-thumb-item {
   cursor: pointer;
@@ -1200,6 +1201,7 @@ async function analyzeAvoiding() {
   background: rgba(10, 14, 21, 0.96);
   transition: border-color 0.15s ease, transform 0.15s ease;
   width: 72px;
+  flex-shrink: 0;
 }
 .lf-thumb-item:hover { transform: translateY(-1px); }
 .lf-thumb-item.active { border-color: #42a5f5; box-shadow: 0 0 0 1px rgba(66, 165, 245, 0.22); }
@@ -1217,12 +1219,13 @@ async function analyzeAvoiding() {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-height: 0;
 }
 .lf-img-full {
-  max-width: 100%;
+  width: 100%;
+  height: 100%;
   flex: 1;
   min-height: 0;
   border-radius: 10px;

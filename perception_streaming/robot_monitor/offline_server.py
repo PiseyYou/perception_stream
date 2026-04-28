@@ -3290,6 +3290,46 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "logs": logs}, 500)
             return
 
+        if path == "/offline/list_images":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            dir_path = body.get("dir", "")
+
+            if not dir_path:
+                self._json({"ok": False, "error": "dir parameter required"}, 400)
+                return
+
+            # 检查目录是否存在
+            if not os.path.exists(dir_path):
+                self._json({"ok": False, "error": f"目录不存在: {dir_path}"}, 404)
+                return
+
+            if not os.path.isdir(dir_path):
+                self._json({"ok": False, "error": f"路径不是目录: {dir_path}"}, 400)
+                return
+
+            # 扫描图片文件
+            try:
+                image_extensions = {'.jpg', '.jpeg', '.png', '.bmp'}
+                images = []
+                for filename in os.listdir(dir_path):
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext in image_extensions:
+                        images.append(filename)
+
+                # 按文件名排序
+                images.sort()
+
+                self._json({
+                    "ok": True,
+                    "images": images,
+                    "count": len(images),
+                    "dir": dir_path
+                })
+            except Exception as e:
+                self._json({"ok": False, "error": f"读取目录失败: {str(e)}"}, 500)
+            return
+
         if path == "/offline/upload_images":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}

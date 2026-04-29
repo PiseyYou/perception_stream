@@ -36,6 +36,11 @@
           :class="{ active: activeTab === 'stereoanalysis2' }"
           @click="activeTab = 'stereoanalysis2'"
         >双目分析</button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'prelabel' }"
+          @click="activeTab = 'prelabel'"
+        >预标注上传</button>
       </nav>
       <div class="header-status">
         <span class="status-dot" :class="{ active: mqttConnected }"></span>
@@ -114,6 +119,11 @@
       <StereoAnalysis2Panel />
     </div>
 
+    <!-- Prelabel Pipeline -->
+    <div v-show="activeTab === 'prelabel'" class="app-content bag-tab">
+      <PrelabelPipelinePanel />
+    </div>
+
     <!-- Log Fetch Analysis -->
     <div v-show="activeTab === 'logfetch'" class="app-content bag-tab">
       <LogFetchPanel />
@@ -143,8 +153,9 @@ import LogAnalysis2Panel from './components/LogAnalysis2Panel.vue'
 import StereoAnalysis2Panel from './components/StereoAnalysis2Panel.vue'
 import LogFetchPanel from './components/LogFetchPanel.vue'
 import BagOfflinePanel from './components/BagOfflinePanel.vue'
+import PrelabelPipelinePanel from './components/PrelabelPipelinePanel.vue'
 
-const activeTab = ref<'live' | 'loganalysis2' | 'logfetch' | 'bagoffline' | 'stereoanalysis2'>('live')
+const activeTab = ref<'live' | 'loganalysis2' | 'logfetch' | 'bagoffline' | 'stereoanalysis2' | 'prelabel'>('live')
 
 const sidebarCollapsed = ref(false)
 const pclCollapsed = ref(false)

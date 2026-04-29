@@ -23,6 +23,7 @@ from socketserver import ThreadingMixIn
 from threading import Thread
 from urllib.parse import urlparse, parse_qs
 from config_loader import get_ssh_key_path, get_ssh_host, get_ssh_user, get_default_port
+from prelabel_pipeline import routes as prelabel_routes
 
 try:
     from PIL import Image
@@ -2349,8 +2350,8 @@ class OfflineHandler(BaseHTTPRequestHandler):
 
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Prelabel-Owner-Token")
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -2370,6 +2371,10 @@ class OfflineHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         qs = parse_qs(parsed.query)
+
+        if path.startswith("/prelabel/"):
+            prelabel_routes.handle(self, parsed)
+            return
 
         if path == "/offline/check":
             self._json({"ok": True, "status": "running", "port": OFFLINE_SERVER_PORT})
@@ -3005,6 +3010,10 @@ class OfflineHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if path.startswith("/prelabel/"):
+            prelabel_routes.handle(self, parsed)
+            return
+
         if path == "/offline/run":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
@@ -3506,6 +3515,28 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "命令超时"})
             except Exception as e:
                 self._json({"ok": False, "error": str(e)})
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/prelabel/"):
+            prelabel_routes.handle(self, parsed)
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/prelabel/"):
+            prelabel_routes.handle(self, parsed)
             return
 
         self.send_response(404)

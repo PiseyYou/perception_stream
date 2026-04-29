@@ -295,6 +295,12 @@ export default defineConfig({
           });
         },
       },
+      '/prelabel': {
+        target: 'http://localhost:8769',
+        changeOrigin: true,
+        timeout: 300000,
+        proxyTimeout: 300000,
+      },
       '/ros2deploy': {
         target: 'http://localhost:8769',
         changeOrigin: true,

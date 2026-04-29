@@ -46,6 +46,50 @@ class PrelabelConfigTest(unittest.TestCase):
             self.assertEqual(cfg["cvat_servers"][0]["user"], "alice")
             self.assertEqual(cfg["cvat_servers"][0]["password"], "secret")
 
+    def test_load_config_expands_project_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "prelabel_config.yaml"
+            config_path.write_text(yaml.safe_dump({
+                "cvat_servers": [{"id": "remote", "name": "Remote", "host": "127.0.0.1", "port": 8080}],
+                "docker": {"container": "MPformer"},
+                "model": {
+                    "demo_dir": "${MPFORMER_ROOT}/MP-Former/demo",
+                    "config": "${MPFORMER_ROOT}/MP-Former/output/config.yaml",
+                    "weights": "${MPFORMER_ROOT}/MP-Former/output/model.pth",
+                },
+                "labels_csv": "${MPFORMER_ROOT}/MP-Former/demo/lhx/labels.csv",
+                "output_base": "${MPFORMER_ROOT}/MP-Former/demo/output",
+                "upload_dir": "${STREAMING_DIR}/data/prelabel_uploads",
+                "runs_dir": "${PROJECT_ROOT}/perception_streaming/data/prelabel_runs",
+                "browse_roots": ["${MPFORMER_ROOT}"],
+                "segment_size": 1000,
+            }, allow_unicode=True), encoding="utf-8")
+
+            with patch.dict(os.environ, {
+                "CVAT_REMOTE_USER": "alice",
+                "CVAT_REMOTE_PASSWORD": "secret",
+                "MPFORMER_ROOT": "/opt/mpformer",
+            }, clear=False):
+                cfg = load_config(config_path)
+
+            self.assertEqual(cfg["model"]["demo_dir"], "/opt/mpformer/MP-Former/demo")
+            self.assertEqual(cfg["browse_roots"], ["/opt/mpformer"])
+            self.assertTrue(cfg["upload_dir"].endswith("/perception_streaming/data/prelabel_uploads"))
+
+    def test_load_config_can_preserve_placeholders_for_settings_save(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "prelabel_config.yaml"
+            config_path.write_text(yaml.safe_dump({
+                "cvat_servers": [{"id": "remote", "name": "Remote", "host": "127.0.0.1", "port": 8080}],
+                "docker": {"container": "MPformer"},
+                "model": {"demo_dir": "${MPFORMER_ROOT}/MP-Former/demo"},
+            }, allow_unicode=True), encoding="utf-8")
+
+            cfg = load_config(config_path, expand_placeholders=False, require_credentials=False)
+
+            self.assertEqual(cfg["model"]["demo_dir"], "${MPFORMER_ROOT}/MP-Former/demo")
+            self.assertNotIn("user", cfg["cvat_servers"][0])
+
     def test_load_config_requires_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "prelabel_config.yaml"

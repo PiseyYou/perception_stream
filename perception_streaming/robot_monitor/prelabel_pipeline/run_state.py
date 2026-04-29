@@ -13,7 +13,7 @@ from .path_utils import validate_run_id
 
 STREAMING_DIR = Path(__file__).resolve().parents[2]
 RUNS_DIR = STREAMING_DIR / "data" / "prelabel_runs"
-UPLOADS_DIR = Path("/media/sdc2/lhx/MPformer/pipeline_uploads")
+UPLOADS_DIR = STREAMING_DIR / "data" / "prelabel_uploads"
 UPLOAD_META_NAME = ".upload_meta.json"
 TERMINAL_STATUSES = {"success", "failed", "cancelled"}
 INTERRUPTED_RESTART_MSG = "服务重启，运行中任务已中断"

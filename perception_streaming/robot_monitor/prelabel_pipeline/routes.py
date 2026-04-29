@@ -670,7 +670,7 @@ def _handle_cvat_users(handler, query: dict) -> None:
 
 def _handle_cvat_servers(handler) -> None:
     try:
-        cfg = config_manager.load_config()
+        cfg = config_manager.load_config(expand_placeholders=False, require_credentials=False)
         _send_json(handler, {"ok": True, "servers": config_manager.safe_cvat_servers(cfg)})
     except Exception as exc:
         _send_json(handler, {"ok": False, "error": str(exc)}, status=500)
@@ -679,7 +679,7 @@ def _handle_cvat_servers(handler) -> None:
 def _handle_cvat_server_patch(handler, server_id: str) -> None:
     body = _read_json(handler)
     try:
-        cfg = config_manager.load_config()
+        cfg = config_manager.load_config(expand_placeholders=False, require_credentials=False)
         server = next((item for item in cfg.get("cvat_servers", []) if item.get("id") == server_id), None)
         if not server:
             _send_json(handler, {"ok": False, "error": "server not found"}, status=404)

@@ -14,17 +14,17 @@ docker:
   container: "MPformer"
 
 model:
-  demo_dir: "/media/sdc2/lhx/MPformer/MP-Former/demo"
-  config: "/media/sdc2/lhx/MPformer/MP-Former/output/config.yaml"
-  weights: "/media/sdc2/lhx/MPformer/MP-Former/output/model_1884999.pth"
+  demo_dir: "${MPFORMER_ROOT}/MP-Former/demo"
+  config: "${MPFORMER_ROOT}/MP-Former/output/config.yaml"
+  weights: "${MPFORMER_ROOT}/MP-Former/output/model_1884999.pth"
   min_area: 50
   smooth_contours: true
   fill_holes: true
 
-labels_csv: "/media/sdc2/lhx/MPformer/MP-Former/demo/lhx/labels.csv"
-output_base: "/media/sdc2/lhx/MPformer/MP-Former/demo/output"
-upload_dir: "/media/sdc2/lhx/MPformer/pipeline_uploads"
-runs_dir: "/media/sdc2/lhx/perception_process/perception_streaming/data/prelabel_runs"
+labels_csv: "${MPFORMER_ROOT}/MP-Former/demo/lhx/labels.csv"
+output_base: "${MPFORMER_ROOT}/MP-Former/demo/output"
+upload_dir: "${STREAMING_DIR}/data/prelabel_uploads"
+runs_dir: "${STREAMING_DIR}/data/prelabel_runs"
 browse_roots:
-  - "/media/sdc2/lhx/MPformer"
+  - "${MPFORMER_ROOT}"
 segment_size: 1000

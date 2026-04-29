@@ -117,12 +117,16 @@ body {
   color: #6b7280;
   flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
   margin-left: auto;
   padding-left: 12px;
   border-left: 1px solid rgba(99, 102, 241, 0.12);
 }
 
 .header-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

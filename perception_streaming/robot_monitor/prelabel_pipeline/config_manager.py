@@ -7,25 +7,54 @@ from pathlib import Path
 import yaml
 
 BASE_DIR = Path(__file__).resolve().parent
+STREAMING_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_MPFORMER_ROOT = STREAMING_DIR.parent.parent / "MPformer"
 CONFIG_PATH = BASE_DIR / "prelabel_config.yaml"
 _REQUIRED_KEYS = {"cvat_servers", "docker", "model"}
 
 
-def load_config(config_path: str | Path | None = None) -> dict:
+def _expand_placeholders(value):
+    if isinstance(value, dict):
+        return {key: _expand_placeholders(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_placeholders(item) for item in value]
+    if isinstance(value, str):
+        replacements = {
+            "STREAMING_DIR": str(STREAMING_DIR),
+            "PROJECT_ROOT": str(STREAMING_DIR.parent),
+            "MPFORMER_ROOT": os.environ.get("MPFORMER_ROOT", str(DEFAULT_MPFORMER_ROOT)),
+        }
+        expanded = value
+        for key, replacement in replacements.items():
+            expanded = expanded.replace(f"${{{key}}}", replacement).replace(f"${key}", replacement)
+        return os.path.expandvars(expanded)
+    return value
+
+
+def load_config(
+    config_path: str | Path | None = None,
+    *,
+    expand_placeholders: bool = True,
+    require_credentials: bool = True,
+) -> dict:
     path = Path(config_path) if config_path else CONFIG_PATH
     with path.open("r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     if not isinstance(cfg, dict):
         raise ValueError("prelabel config must be a mapping")
+    if expand_placeholders:
+        cfg = _expand_placeholders(cfg)
 
     for server in cfg.get("cvat_servers", []):
         sid = server["id"].upper().replace("-", "_")
         user = os.environ.get(f"CVAT_{sid}_USER", server.get("user", ""))
         password = os.environ.get(f"CVAT_{sid}_PASSWORD", server.get("password", ""))
-        if not user or not password:
+        if require_credentials and (not user or not password):
             raise ValueError(f"请设置环境变量 CVAT_{sid}_USER 和 CVAT_{sid}_PASSWORD")
-        server["user"] = user
-        server["password"] = password
+        if user:
+            server["user"] = user
+        if password:
+            server["password"] = password
     return cfg
 
 

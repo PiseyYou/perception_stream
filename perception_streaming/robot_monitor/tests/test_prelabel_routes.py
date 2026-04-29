@@ -253,7 +253,7 @@ class PrelabelRoutesTest(unittest.TestCase):
         body = json.dumps({"host": "localhost", "port": 8081, "name": "Ignored"}).encode("utf-8")
         handler = FakeHandler(body=body, headers={"Content-Length": str(len(body))})
 
-        with patch.object(routes.config_manager, "load_config", return_value=cfg), \
+        with patch.object(routes.config_manager, "load_config", return_value=cfg) as load_config, \
              patch.object(routes.config_manager, "save_config") as save_config, \
              patch.object(routes.core, "clear_cvat_session_cache") as clear_cache:
             routes.handle(handler, parsed("/prelabel/settings/cvat-server/local"))
@@ -261,6 +261,7 @@ class PrelabelRoutesTest(unittest.TestCase):
         payload = self._json_payload(handler)
         self.assertEqual(payload["server"], {"id": "local", "name": "Local", "host": "localhost", "port": 8081})
         self.assertNotIn("secret", json.dumps(payload, ensure_ascii=False))
+        load_config.assert_called_once_with(expand_placeholders=False, require_credentials=False)
         save_config.assert_called_once()
         clear_cache.assert_called_once_with("local")
 

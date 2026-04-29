@@ -1,0 +1,30 @@
+cvat_servers:
+  - id: "remote"
+    name: "远程服务器"
+    host: "192.168.55.246"
+    port: 8080
+    # credentials from CVAT_REMOTE_USER / CVAT_REMOTE_PASSWORD
+  - id: "local"
+    name: "本机服务器"
+    host: "localhost"
+    port: 8080
+    # credentials from CVAT_LOCAL_USER / CVAT_LOCAL_PASSWORD
+
+docker:
+  container: "MPformer"
+
+model:
+  demo_dir: "/media/sdc2/lhx/MPformer/MP-Former/demo"
+  config: "/media/sdc2/lhx/MPformer/MP-Former/output/config.yaml"
+  weights: "/media/sdc2/lhx/MPformer/MP-Former/output/model_1884999.pth"
+  min_area: 50
+  smooth_contours: true
+  fill_holes: true
+
+labels_csv: "/media/sdc2/lhx/MPformer/MP-Former/demo/lhx/labels.csv"
+output_base: "/media/sdc2/lhx/MPformer/MP-Former/demo/output"
+upload_dir: "/media/sdc2/lhx/MPformer/pipeline_uploads"
+runs_dir: "/media/sdc2/lhx/perception_process/perception_streaming/data/prelabel_runs"
+browse_roots:
+  - "/media/sdc2/lhx/MPformer"
+segment_size: 1000

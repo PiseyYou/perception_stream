@@ -3,7 +3,8 @@ cvat_servers:
     name: "远程服务器"
     host: "192.168.55.246"
     port: 8080
-    # remote credentials can be set here or with CVAT_REMOTE_USER / CVAT_REMOTE_PASSWORD
+    user: "linghaoxiang"
+    password: "qazqaz2580"
   - id: "local"
     name: "本机服务器"
     host: "localhost"

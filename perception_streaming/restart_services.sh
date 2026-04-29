@@ -1,7 +1,8 @@
 #!/bin/bash
 # Quick restart script for offline_server and ssh_bridge services
 
-PROJECT_DIR="/home/youfeng/CLionProjects/07_openclaw_auto/project/perception_streaming-master-80b4b0d5e580c3b80e50eea2d3719aad56d8d808"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
 
 echo "=== Stopping old services ==="
 pkill -f offline_server.py

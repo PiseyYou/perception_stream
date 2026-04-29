@@ -59,7 +59,8 @@ export interface LogEntry {
   relevant: boolean
 }
 
-const BRIDGE_URL = 'ws://localhost:8765'
+const BRIDGE_HOST = location.hostname || 'localhost'
+const BRIDGE_URL = `ws://${BRIDGE_HOST}:8765`
 
 export function useObstacleMonitor(
   getMqttConnected: () => boolean | undefined,

@@ -24,6 +24,7 @@ from threading import Thread
 from urllib.parse import urlparse, parse_qs
 from config_loader import get_ssh_key_path, get_ssh_host, get_ssh_user, get_default_port
 from prelabel_pipeline import routes as prelabel_routes
+from prelabel_pipeline.path_utils import InvalidPathError, resolve_under
 
 try:
     from PIL import Image
@@ -45,11 +46,12 @@ MONO_EXE = os.path.abspath(os.path.join(PROJECT_ROOT, "bin/dsg_mono_perception")
 MONO_MODEL = os.path.abspath(os.path.join(PROJECT_ROOT, "models/dsg_multi_20260407_640x384.bin"))
 DSG_MODEL = os.path.abspath(os.path.join(PROJECT_ROOT, "models/dsg_multi_20260407_640x384.bin"))
 CDT_MODEL = os.path.abspath(os.path.join(PROJECT_ROOT, "models/cdt_20251125_640x384.bin"))
+OFFLINE_DOCKER_CONTAINER = "perception_offline_runner"
 
 # BAG_DATA_DIR is set by vite.config.ts via env var, fallback to default
 BAG_DATA_DIR = os.environ.get(
     "BAG_DATA_DIR",
-    "/home/youfeng/debug/03/19/rosbag_LK-MR6P1US000111_camera_202603190309/stereo_output_rosbag_LK-MR6P1US000111_camera_202603190309_0"
+    os.path.join(PROJECT_ROOT, "data/bag_debug/0111/0327/rosbag_LK-MR6P1US000111_camera_202603220059")
 )
 
 INFER_MODES = {
@@ -85,8 +87,24 @@ _progress_state: dict = {
     "updated_at": 0.0,
 }
 _docker_sessions: dict = {}  # holds current docker PTY session
+_OFFLINE_FILE_ROOTS = [PROJECT_ROOT, BAG_DATA_DIR]
 
 _ANSI_RE = re.compile(r'\x1b(?:\[[\d;]*[a-zA-Z]|\][^\x07]*\x07|[()][AB012]|[=>])')
+
+
+def _resolve_legacy_path(path: str, roots: list[str | Path]) -> str:
+    if not path:
+        raise ValueError("missing path")
+
+    root_dirs = [Path(root).expanduser() for root in roots]
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = Path(PROJECT_ROOT) / candidate
+
+    try:
+        return str(resolve_under(candidate, root_dirs))
+    except InvalidPathError as exc:
+        raise ValueError(f"invalid path: {exc}")
 
 def _strip_ansi(s: str) -> str:
     s = _ANSI_RE.sub('', s)
@@ -413,12 +431,44 @@ def _sync_legacy_pointcloud_dir(output_dir: str, pointcloud_dir: str) -> tuple[s
         return pointcloud_dir, []
 
 
+def _stop_offline_proc() -> tuple[bool, str]:
+    global _current_proc
+    proc = _current_proc
+    if proc is not None:
+        _current_proc = None
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+            return True, "offline process terminated"
+        except Exception as exc:
+            return False, f"停止离线进程失败: {exc}"
+
+    try:
+        result = subprocess.run(
+            ["docker", "stop", OFFLINE_DOCKER_CONTAINER],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if result.returncode == 0:
+            return True, "offline docker stopped"
+        if result.stderr.strip():
+            return False, result.stderr.strip()
+        return False, result.stdout.strip() or "no running offline container"
+    except FileNotFoundError:
+        return False, "docker 未安装或不可用"
+    except Exception as exc:
+        return False, f"停止失败: {exc}"
+
+
 def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_export_run: bool = False, resume: bool = False):
     """
     使用 Docker 容器运行离线感知程序
     """
-    global _last_result, _running
+    global _last_result, _running, _current_proc
     _running = True
+    proc = None
     final_pic_dir = build_output_dir(input_dir, infer_mode, erode_pixel)
     final_pcd_dir = build_pointcloud_dir(input_dir, infer_mode, erode_pixel)
     _last_result = {}
@@ -429,7 +479,7 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
 
     # Docker 配置
     DOCKER_IMAGE = "perception-runtime:latest"
-    CONTAINER_NAME = "perception_offline_runner"
+    CONTAINER_NAME = OFFLINE_DOCKER_CONTAINER
 
     # 本地项目根目录
     LOCAL_PROJECT_DIR = PROJECT_ROOT
@@ -529,6 +579,7 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         broadcast({"type": "log", "text": f"[Docker] 启动容器..."})
         # 使用 bufsize=0 (无缓冲) 或 -1 (默认缓冲) 而不是 1 (行缓冲，仅文本模式支持)
         proc = subprocess.Popen(docker_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=-1)
+        _current_proc = proc
 
         broadcast({"type": "log", "text": f"[Docker] 容器已启动，等待输出..."})
 
@@ -631,7 +682,6 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
     except FileNotFoundError:
         broadcast({"type": "error", "text": "Docker 未安装或不可用"})
         _set_progress_status("Docker 未安装或不可用")
-        _running = False
         return
     except Exception as e:
         import traceback
@@ -640,10 +690,12 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
         broadcast({"type": "error", "text": f"执行失败: {error_msg}"})
         broadcast({"type": "log", "text": f"[错误堆栈]\n{traceback_str}"})
         _set_progress_status(f"执行失败: {error_msg}")
-        _running = False
         return
 
-    _running = False
+    finally:
+        if proc is _current_proc:
+            _current_proc = None
+        _running = False
 
 
 def run_mono_test(input_dir: str) -> dict:
@@ -2691,11 +2743,15 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            # If path is relative, resolve it relative to the project root
-            if not os.path.isabs(fpath):
-                # Get the project root directory (parent of robot_monitor)
-                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                fpath = os.path.join(project_root, fpath)
+            try:
+                fpath = _resolve_legacy_path(fpath, _OFFLINE_FILE_ROOTS)
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain")
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(f"Invalid path: {exc}".encode())
+                return
 
             if not os.path.isfile(fpath):
                 print(f"[local_file] File not found: {fpath}")
@@ -2770,35 +2826,37 @@ class OfflineHandler(BaseHTTPRequestHandler):
             relative_path = path.replace("/offline/extracted_image/", "")
             relative_path = unquote(relative_path)
 
-            # The path should be: {dir_path}/{filename}
-            # Try to construct the full path
-            if relative_path:
-                # If it's an absolute path, use it directly
-                if os.path.isabs(relative_path):
-                    fpath = relative_path
-                else:
-                    # Otherwise, treat it as relative to PROJECT_ROOT
-                    fpath = os.path.join(PROJECT_ROOT, relative_path)
-
-                if os.path.isfile(fpath):
-                    with open(fpath, "rb") as f:
-                        data = f.read()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "image/jpeg")
-                    self.send_header("Content-Length", str(len(data)))
-                    self.send_cors()
-                    self.end_headers()
-                    self.wfile.write(data)
-                else:
-                    print(f"[DEBUG] Image not found: {fpath}")
-                    self.send_response(404)
-                    self.send_header("Content-Type", "text/plain")
-                    self.send_cors()
-                    self.end_headers()
-                    self.wfile.write(f"File not found: {fpath}".encode())
-            else:
+            if not relative_path:
                 self.send_response(400)
                 self.end_headers()
+                return
+
+            try:
+                fpath = _resolve_legacy_path(relative_path, _OFFLINE_FILE_ROOTS)
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain")
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(f"Invalid path: {exc}".encode())
+                return
+
+            if os.path.isfile(fpath):
+                with open(fpath, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                print(f"[DEBUG] Image not found: {fpath}")
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain")
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(f"File not found: {fpath}".encode())
             return
 
         # Serve pcd by filename
@@ -3039,11 +3097,11 @@ class OfflineHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/offline/stop":
-            if _current_proc:
-                _current_proc.terminate()
-                self._json({"ok": True})
+            stopped, message = _stop_offline_proc()
+            if stopped:
+                self._json({"ok": True, "message": message})
             else:
-                self._json({"ok": False, "error": "not running"})
+                self._json({"ok": False, "error": message})
             return
 
         if path == "/offline/check_result":
@@ -3455,7 +3513,12 @@ class OfflineHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
             dir_path = body.get("path", "")
-            if not dir_path or not os.path.isdir(dir_path):
+            try:
+                dir_path = _resolve_legacy_path(dir_path, [PROJECT_ROOT])
+            except ValueError as exc:
+                self._json({"ok": False, "error": f"无效路径: {exc}"})
+                return
+            if not os.path.isdir(dir_path):
                 self._json({"ok": False, "error": f"目录不存在: {dir_path}"})
                 return
             files = _build_file_tree(dir_path)
@@ -3466,7 +3529,12 @@ class OfflineHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
             fpath = body.get("path", "")
-            if not fpath or not os.path.isfile(fpath):
+            try:
+                fpath = _resolve_legacy_path(fpath, [PROJECT_ROOT])
+            except ValueError as exc:
+                self._json({"ok": False, "error": f"无效路径: {exc}"})
+                return
+            if not os.path.isfile(fpath):
                 self._json({"ok": False, "error": "文件不存在"})
                 return
             try:

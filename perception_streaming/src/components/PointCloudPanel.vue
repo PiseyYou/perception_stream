@@ -31,7 +31,8 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as THREE from 'three'
 
-const WS_URL = 'ws://localhost:8767'
+const WS_HOST = location.hostname || 'localhost'
+const WS_URL = `ws://${WS_HOST}:8766`
 
 const emit = defineEmits<{ (e: 'collapse'): void }>()
 

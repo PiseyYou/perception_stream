@@ -3,12 +3,13 @@ cvat_servers:
     name: "远程服务器"
     host: "192.168.55.246"
     port: 8080
-    # credentials from CVAT_REMOTE_USER / CVAT_REMOTE_PASSWORD
+    # remote credentials can be set here or with CVAT_REMOTE_USER / CVAT_REMOTE_PASSWORD
   - id: "local"
     name: "本机服务器"
     host: "localhost"
     port: 8080
-    # credentials from CVAT_LOCAL_USER / CVAT_LOCAL_PASSWORD
+    user: "admin"
+    password: "wbmhhh666"
 
 docker:
   container: "MPformer"

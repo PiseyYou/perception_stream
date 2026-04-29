@@ -35,7 +35,7 @@ def load_config(
     config_path: str | Path | None = None,
     *,
     expand_placeholders: bool = True,
-    require_credentials: bool = True,
+    require_credentials: bool = False,
 ) -> dict:
     path = Path(config_path) if config_path else CONFIG_PATH
     with path.open("r", encoding="utf-8") as f:

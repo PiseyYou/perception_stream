@@ -462,7 +462,7 @@ async function loadCvatServers(): Promise<void> {
     const data = await apiJson<{ ok: boolean; servers: CvatServer[] }>('/prelabel/cvat-servers')
     cvatServers.value = (data.servers || []).map(server => ({ ...server, password: '' }))
     if (!selectedServerId.value && cvatServers.value.length) {
-      selectedServerId.value = cvatServers.value[0].id
+      selectedServerId.value = (cvatServers.value.find(server => server.has_password) || cvatServers.value[0]).id
     }
   } catch (error) {
     pushLog({ type: 'log', level: 'error', msg: `CVAT server 加载失败: ${messageOf(error)}` })
@@ -976,6 +976,8 @@ function findResultLink(result: unknown): string {
 }
 
 .server-row {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(120px, 1fr) 74px minmax(112px, 0.7fr) minmax(112px, 0.7fr) auto;
   padding: 5px;
   background: #0b1220;
   border: 1px solid #1f2a3b;
@@ -1037,16 +1039,16 @@ function findResultLink(result: unknown): string {
 }
 
 .host-input {
-  flex: 1;
+  width: 100%;
 }
 
 .port-input {
-  width: 76px;
+  width: 74px;
 }
 
 .user-input,
 .password-input {
-  width: 120px;
+  width: 100%;
 }
 
 .segmented {
@@ -1525,6 +1527,10 @@ function findResultLink(result: unknown): string {
   .user-input,
   .password-input {
     width: 100%;
+  }
+
+  .server-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

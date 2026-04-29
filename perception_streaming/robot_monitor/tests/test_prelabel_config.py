@@ -90,13 +90,14 @@ class PrelabelConfigTest(unittest.TestCase):
             self.assertEqual(cfg["model"]["demo_dir"], "${MPFORMER_ROOT}/MP-Former/demo")
             self.assertNotIn("user", cfg["cvat_servers"][0])
 
-    def test_load_config_requires_credentials(self):
+    def test_load_config_allows_unconfigured_servers(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "prelabel_config.yaml"
             self._write_config(config_path)
             with patch.dict(os.environ, {}, clear=True):
-                with self.assertRaises(ValueError):
-                    load_config(config_path)
+                cfg = load_config(config_path)
+            self.assertEqual(cfg["cvat_servers"][0]["host"], "127.0.0.1")
+            self.assertNotIn("password", cfg["cvat_servers"][0])
 
     def test_load_config_requires_mapping_yaml(self):
         with tempfile.TemporaryDirectory() as tmp:

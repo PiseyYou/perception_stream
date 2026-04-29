@@ -67,15 +67,19 @@ def save_config(config: dict, config_path: str | Path | None = None) -> None:
         missing_text = ", ".join(sorted(missing))
         raise ValueError(f"prelabel config missing required keys: {missing_text}")
     safe = copy.deepcopy(config)
-    for server in safe.get("cvat_servers", []):
-        server.pop("user", None)
-        server.pop("password", None)
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(safe, f, allow_unicode=True, sort_keys=False)
 
 
 def safe_cvat_servers(config: dict) -> list[dict]:
     return [
-        {"id": s["id"], "name": s["name"], "host": s["host"], "port": s["port"]}
+        {
+            "id": s["id"],
+            "name": s["name"],
+            "host": s["host"],
+            "port": s["port"],
+            "user": s.get("user", ""),
+            "has_password": bool(s.get("password")),
+        }
         for s in config.get("cvat_servers", [])
     ]

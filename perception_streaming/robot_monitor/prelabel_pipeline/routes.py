@@ -693,6 +693,16 @@ def _handle_cvat_server_patch(handler, server_id: str) -> None:
             if port < 1 or port > 65535:
                 raise ValueError("invalid port")
             server["port"] = port
+        if "user" in body:
+            user = str(body["user"]).strip()
+            if user:
+                server["user"] = user
+            else:
+                server.pop("user", None)
+        if "password" in body:
+            password = str(body["password"])
+            if password:
+                server["password"] = password
         config_manager.save_config(cfg)
         core.clear_cvat_session_cache(server_id)
         _send_json(handler, {"ok": True, "server": config_manager.safe_cvat_servers({"cvat_servers": [server]})[0]})

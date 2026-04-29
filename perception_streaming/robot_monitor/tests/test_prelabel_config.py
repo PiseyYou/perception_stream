@@ -108,10 +108,10 @@ class PrelabelConfigTest(unittest.TestCase):
     def test_safe_servers_redacts_credentials(self):
         servers = [{"id": "remote", "name": "Remote", "host": "h", "port": 1, "user": "u", "password": "p"}]
         self.assertEqual(safe_cvat_servers({"cvat_servers": servers}), [
-            {"id": "remote", "name": "Remote", "host": "h", "port": 1}
+            {"id": "remote", "name": "Remote", "host": "h", "port": 1, "user": "u", "has_password": True}
         ])
 
-    def test_save_config_redacts_credentials(self):
+    def test_save_config_persists_credentials_for_local_deployment(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "prelabel_config.yaml"
             cfg = {
@@ -146,9 +146,9 @@ class PrelabelConfigTest(unittest.TestCase):
                 "name": "Remote",
                 "host": "127.0.0.1",
                 "port": 8080,
+                "user": "alice",
+                "password": "secret",
             }])
-            self.assertNotIn("user", saved["cvat_servers"][0])
-            self.assertNotIn("password", saved["cvat_servers"][0])
 
     def test_save_config_rejects_partial_config(self):
         with tempfile.TemporaryDirectory() as tmp:

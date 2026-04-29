@@ -29,6 +29,15 @@
               </label>
               <input v-model="server.host" class="small-input host-input" placeholder="host" :disabled="running" />
               <input v-model.number="server.port" class="small-input port-input" type="number" min="1" max="65535" :disabled="running" />
+              <input v-model.trim="server.user" class="small-input user-input" placeholder="CVAT 用户名" :disabled="running" />
+              <input
+                v-model="server.password"
+                class="small-input password-input"
+                type="password"
+                :placeholder="server.has_password ? '密码已保存' : 'CVAT 密码'"
+                autocomplete="new-password"
+                :disabled="running"
+              />
               <button class="prelabel-btn ghost" :disabled="serverSavingId === server.id || running" @click="saveServerSettings(server)">
                 {{ serverSavingId === server.id ? '保存中' : '保存' }}
               </button>
@@ -241,6 +250,9 @@ interface CvatServer {
   name: string
   host: string
   port: number
+  user?: string
+  password?: string
+  has_password?: boolean
 }
 
 interface CvatUser {
@@ -448,7 +460,7 @@ function ownerHeaders(): HeadersInit {
 async function loadCvatServers(): Promise<void> {
   try {
     const data = await apiJson<{ ok: boolean; servers: CvatServer[] }>('/prelabel/cvat-servers')
-    cvatServers.value = data.servers || []
+    cvatServers.value = (data.servers || []).map(server => ({ ...server, password: '' }))
     if (!selectedServerId.value && cvatServers.value.length) {
       selectedServerId.value = cvatServers.value[0].id
     }
@@ -476,13 +488,20 @@ async function loadCvatUsers(force = false): Promise<void> {
 async function saveServerSettings(server: CvatServer): Promise<void> {
   serverSavingId.value = server.id
   try {
+    const body: Record<string, string | number> = {
+      host: server.host,
+      port: Number(server.port),
+      user: server.user || '',
+    }
+    if (server.password) body.password = server.password
     const updated = await apiJson<{ ok: boolean; server: CvatServer }>(`/prelabel/settings/cvat-server/${encodeURIComponent(server.id)}`, {
       method: 'PATCH',
-      body: { host: server.host, port: Number(server.port) },
+      body,
     })
     const index = cvatServers.value.findIndex(item => item.id === server.id)
-    if (index >= 0) cvatServers.value[index] = updated.server
-    pushLog({ type: 'log', level: 'info', msg: `已保存 ${server.id} CVAT 地址` })
+    const saved = { ...updated.server, password: '' }
+    if (index >= 0) cvatServers.value[index] = saved
+    pushLog({ type: 'log', level: 'info', msg: `已保存 ${server.id} CVAT 配置` })
     await loadCvatUsers(true)
   } catch (error) {
     pushLog({ type: 'log', level: 'error', msg: `保存 CVAT 设置失败: ${messageOf(error)}` })
@@ -1025,6 +1044,11 @@ function findResultLink(result: unknown): string {
   width: 76px;
 }
 
+.user-input,
+.password-input {
+  width: 120px;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1497,7 +1521,9 @@ function findResultLink(result: unknown): string {
   }
 
   .host-input,
-  .port-input {
+  .port-input,
+  .user-input,
+  .password-input {
     width: 100%;
   }
 }

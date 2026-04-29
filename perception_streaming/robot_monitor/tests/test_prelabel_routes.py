@@ -259,11 +259,45 @@ class PrelabelRoutesTest(unittest.TestCase):
             routes.handle(handler, parsed("/prelabel/settings/cvat-server/local"))
 
         payload = self._json_payload(handler)
-        self.assertEqual(payload["server"], {"id": "local", "name": "Local", "host": "localhost", "port": 8081})
+        self.assertEqual(payload["server"], {
+            "id": "local",
+            "name": "Local",
+            "host": "localhost",
+            "port": 8081,
+            "user": "alice",
+            "has_password": True,
+        })
         self.assertNotIn("secret", json.dumps(payload, ensure_ascii=False))
         load_config.assert_called_once_with(expand_placeholders=False, require_credentials=False)
         save_config.assert_called_once()
         clear_cache.assert_called_once_with("local")
+
+    def test_settings_accepts_credentials_without_returning_password(self):
+        cfg = {
+            "cvat_servers": [{
+                "id": "remote",
+                "name": "Remote",
+                "host": "127.0.0.1",
+                "port": 8080,
+            }],
+            "docker": {"container": "MPformer"},
+            "model": {"min_area": 50},
+        }
+        body = json.dumps({"user": "alice", "password": "secret"}).encode("utf-8")
+        handler = FakeHandler(body=body, headers={"Content-Length": str(len(body))})
+
+        with patch.object(routes.config_manager, "load_config", return_value=cfg), \
+             patch.object(routes.config_manager, "save_config") as save_config, \
+             patch.object(routes.core, "clear_cvat_session_cache"):
+            routes.handle(handler, parsed("/prelabel/settings/cvat-server/remote"))
+
+        payload = self._json_payload(handler)
+        self.assertEqual(payload["server"]["user"], "alice")
+        self.assertTrue(payload["server"]["has_password"])
+        self.assertNotIn("secret", json.dumps(payload, ensure_ascii=False))
+        saved_cfg = save_config.call_args.args[0]
+        self.assertEqual(saved_cfg["cvat_servers"][0]["user"], "alice")
+        self.assertEqual(saved_cfg["cvat_servers"][0]["password"], "secret")
 
     def test_run_creates_background_thread_with_mocked_core(self):
         with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as upload_root:

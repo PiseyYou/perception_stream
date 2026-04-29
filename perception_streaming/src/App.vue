@@ -120,7 +120,7 @@
     </div>
 
     <!-- Prelabel Pipeline -->
-    <div v-show="activeTab === 'prelabel'" class="app-content bag-tab">
+    <div v-if="activeTab === 'prelabel'" class="app-content bag-tab">
       <PrelabelPipelinePanel />
     </div>
 

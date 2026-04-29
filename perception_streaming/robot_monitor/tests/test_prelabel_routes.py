@@ -141,6 +141,22 @@ class PrelabelRoutesTest(unittest.TestCase):
         self.assertIn("data: null", out)
         self.assertNotIn("owner_token", out)
 
+    def test_sse_stream_rejects_wrong_owner_token(self):
+        event = threading.Event()
+        event.set()
+        run_state.runs["abcdef123456"] = {
+            "status": "success",
+            "logs": [],
+            "event": event,
+            "done": True,
+            "owner_token": "owner",
+        }
+        handler = FakeHandler()
+
+        routes.handle(handler, parsed("/prelabel/stream/abcdef123456", "token=wrong"))
+
+        self.assertEqual(handler.status, 403)
+
     def test_upload_continuation_rejects_token_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             upload_dir = Path(tmp) / "upload_20260429_abcd"

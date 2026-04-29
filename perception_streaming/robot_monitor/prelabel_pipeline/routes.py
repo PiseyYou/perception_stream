@@ -39,7 +39,7 @@ def handle(handler, parsed) -> None:
             _handle_run(handler)
             return
         if method == "GET" and path.startswith("/prelabel/stream/"):
-            _handle_stream(handler, path.rsplit("/", 1)[-1])
+            _handle_stream(handler, path.rsplit("/", 1)[-1], query)
             return
         if method == "GET" and path == "/prelabel/runs":
             _handle_runs_list(handler)
@@ -462,7 +462,7 @@ def _clear_proc(run_id: str) -> None:
             run["proc"] = None
 
 
-def _handle_stream(handler, run_id: str) -> None:
+def _handle_stream(handler, run_id: str, query: dict | None = None) -> None:
     try:
         run_id = validate_run_id(run_id)
     except ValueError as exc:
@@ -472,6 +472,13 @@ def _handle_stream(handler, run_id: str) -> None:
         run = run_state.runs.get(run_id)
     if not run:
         _send_json(handler, {"ok": False, "error": "run not found"}, status=404)
+        return
+    expected = run.get("owner_token") or ""
+    token = _owner_token_from_header(handler)
+    if not token and query:
+        token = (query.get("token") or [""])[0]
+    if expected and token != expected:
+        _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
         return
 
     handler.send_response(200)

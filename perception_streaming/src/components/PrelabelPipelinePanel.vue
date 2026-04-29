@@ -11,7 +11,7 @@
         <button class="prelabel-btn ghost" :disabled="statusLoading" @click="loadContainerStatus">
           {{ statusLoading ? '刷新中' : '刷新' }}
         </button>
-        <button class="prelabel-btn warn" :disabled="restarting" @click="restartContainer">
+        <button class="prelabel-btn warn" :disabled="restarting || running" @click="restartContainer">
           {{ restarting ? '重启中' : '重启容器' }}
         </button>
       </div>
@@ -27,9 +27,9 @@
                 <input v-model="selectedServerId" type="radio" :value="server.id" />
                 <span>{{ server.name || server.id }}</span>
               </label>
-              <input v-model="server.host" class="small-input host-input" placeholder="host" />
-              <input v-model.number="server.port" class="small-input port-input" type="number" min="1" max="65535" />
-              <button class="prelabel-btn ghost" :disabled="serverSavingId === server.id" @click="saveServerSettings(server)">
+              <input v-model="server.host" class="small-input host-input" placeholder="host" :disabled="running" />
+              <input v-model.number="server.port" class="small-input port-input" type="number" min="1" max="65535" :disabled="running" />
+              <button class="prelabel-btn ghost" :disabled="serverSavingId === server.id || running" @click="saveServerSettings(server)">
                 {{ serverSavingId === server.id ? '保存中' : '保存' }}
               </button>
             </div>
@@ -38,14 +38,14 @@
           <div class="form-grid">
             <label>
               <span>分配用户</span>
-              <select v-model="assigneeId" class="select-input" :disabled="usersLoading">
+              <select v-model="assigneeId" class="select-input" :disabled="usersLoading || running">
                 <option value="">不分配</option>
                 <option v-for="user in cvatUsers" :key="user.id" :value="String(user.id)">
                   {{ userLabel(user) }}
                 </option>
               </select>
             </label>
-            <button class="prelabel-btn ghost grid-button" :disabled="usersLoading || !selectedServerId" @click="loadCvatUsers(true)">
+            <button class="prelabel-btn ghost grid-button" :disabled="usersLoading || !selectedServerId || running" @click="loadCvatUsers(true)">
               {{ usersLoading ? '加载中' : '刷新用户' }}
             </button>
           </div>
@@ -56,18 +56,18 @@
           <div class="form-grid">
             <label>
               <span>任务前缀</span>
-              <input v-model.trim="taskPrefix" class="text-input" placeholder="prelabel_0429" />
+              <input v-model.trim="taskPrefix" class="text-input" placeholder="prelabel_0429" :disabled="running" />
             </label>
             <label>
               <span>min_area</span>
-              <input v-model.number="minArea" class="text-input" type="number" min="0" />
+              <input v-model.number="minArea" class="text-input" type="number" min="0" :disabled="running" />
             </label>
             <label>
               <span>segment_size</span>
-              <input v-model.number="segmentSize" class="text-input" type="number" min="1" />
+              <input v-model.number="segmentSize" class="text-input" type="number" min="1" :disabled="running" />
             </label>
             <label class="check-row">
-              <input v-model="serialMode" type="checkbox" />
+              <input v-model="serialMode" type="checkbox" :disabled="running" />
               <span>串行执行</span>
             </label>
           </div>
@@ -76,18 +76,18 @@
         <div class="prelabel-band">
           <div class="band-title">来源</div>
           <div class="segmented">
-            <button :class="{ active: sourceMode === 'server' }" @click="sourceMode = 'server'">服务器目录</button>
-            <button :class="{ active: sourceMode === 'files' }" @click="sourceMode = 'files'">上传文件</button>
-            <button :class="{ active: sourceMode === 'folder' }" @click="sourceMode = 'folder'">上传文件夹</button>
+            <button :class="{ active: sourceMode === 'server' }" :disabled="running" @click="sourceMode = 'server'">服务器目录</button>
+            <button :class="{ active: sourceMode === 'files' }" :disabled="running" @click="sourceMode = 'files'">上传文件</button>
+            <button :class="{ active: sourceMode === 'folder' }" :disabled="running" @click="sourceMode = 'folder'">上传文件夹</button>
           </div>
 
           <div v-if="sourceMode === 'server'" class="source-block">
             <div v-for="(dir, index) in serverDirs" :key="index" class="dir-row">
-              <input v-model.trim="serverDirs[index]" class="path-input" placeholder="/media/sdc2/lhx/MPformer/..." />
-              <button class="prelabel-btn ghost" @click="openBrowser(index)">浏览</button>
-              <button class="icon-btn" :disabled="serverDirs.length <= 1" title="删除" @click="removeServerDir(index)">×</button>
+              <input v-model.trim="serverDirs[index]" class="path-input" placeholder="/media/sdc2/lhx/MPformer/..." :disabled="running" />
+              <button class="prelabel-btn ghost" :disabled="running" @click="openBrowser(index)">浏览</button>
+              <button class="icon-btn" :disabled="serverDirs.length <= 1 || running" title="删除" @click="removeServerDir(index)">×</button>
             </div>
-            <button class="prelabel-btn ghost" @click="addServerDir">添加目录</button>
+            <button class="prelabel-btn ghost" :disabled="running" @click="addServerDir">添加目录</button>
           </div>
 
           <div v-else class="source-block">
@@ -98,6 +98,7 @@
               multiple
               accept="image/*"
               class="file-input"
+              :disabled="running"
               @change="onFileChange"
             />
             <input
@@ -107,11 +108,12 @@
               multiple
               webkitdirectory
               class="file-input"
+              :disabled="running"
               @change="onFolderChange"
             />
             <div class="upload-line">
               <span class="upload-summary">{{ fileSummary }}</span>
-              <button class="prelabel-btn ghost" :disabled="!selectedFiles.length || uploading" @click="clearUploadSelection">清空</button>
+              <button class="prelabel-btn ghost" :disabled="!selectedFiles.length || uploading || running" @click="clearUploadSelection">清空</button>
               <button class="prelabel-btn" :disabled="!selectedFiles.length || uploading || running" @click="uploadSelectedFiles(true)">
                 {{ uploading ? '上传中' : '上传' }}
               </button>
@@ -124,10 +126,10 @@
 
           <div v-if="browserOpen" class="browser-panel">
             <div class="browser-bar">
-              <input v-model.trim="browsePath" class="path-input" placeholder="浏览路径" @keyup.enter="browseDirectory(browsePath)" />
-              <button class="prelabel-btn ghost" :disabled="browsing" @click="browseDirectory(parentPath(browsePath))">上级</button>
-              <button class="prelabel-btn ghost" :disabled="browsing" @click="browseDirectory(browsePath)">打开</button>
-              <button class="prelabel-btn" @click="applyBrowsePath">使用此路径</button>
+              <input v-model.trim="browsePath" class="path-input" placeholder="浏览路径" :disabled="running" @keyup.enter="browseDirectory(browsePath)" />
+              <button class="prelabel-btn ghost" :disabled="browsing || running" @click="browseDirectory(parentPath(browsePath))">上级</button>
+              <button class="prelabel-btn ghost" :disabled="browsing || running" @click="browseDirectory(browsePath)">打开</button>
+              <button class="prelabel-btn" :disabled="running" @click="applyBrowsePath">使用此路径</button>
             </div>
             <div class="browser-list">
               <button v-for="dir in browseDirs" :key="dir.path" class="browser-item" @click="browseDirectory(dir.path)">
@@ -145,7 +147,7 @@
           <button class="prelabel-btn" :disabled="!canStart" @click="startRun('uploadOnly')">
             仅上传到 CVAT
           </button>
-          <button v-if="activeRun && activeRun.owned_by_client && activeRun.status === 'running'" class="prelabel-btn danger" @click="cancelRun(activeRun)">
+          <button v-if="ownedRunningRun" class="prelabel-btn danger" @click="cancelRun(ownedRunningRun)">
             停止
           </button>
           <span class="run-state">{{ runStatus }}</span>
@@ -205,7 +207,7 @@
                     class="mini-btn danger"
                     @click.stop="cancelRun(run)"
                   >Stop</button>
-                  <button class="mini-btn" :disabled="run.status === 'running'" @click.stop="deleteRun(run)">Delete</button>
+                  <button class="mini-btn" :disabled="run.status === 'running' || !run.owned_by_client" @click.stop="deleteRun(run)">Delete</button>
                 </span>
               </div>
               <div v-if="!runs.length" class="inline-empty">暂无历史</div>
@@ -217,7 +219,7 @@
           <span>{{ selectedDetail.run_id }}</span>
           <span>{{ selectedDetail.status }}</span>
           <span>{{ selectedDetail.finished_at || selectedDetail.created_at }}</span>
-          <span v-if="resultLink">CVAT: {{ resultLink }}</span>
+          <a v-if="resultLink" :href="resultLink" target="_blank" rel="noopener">CVAT: {{ resultLink }}</a>
         </div>
       </section>
     </div>
@@ -354,7 +356,8 @@ let eventSource: EventSource | null = null
 let statusTimer: number | null = null
 
 const activeRun = computed(() => runs.value.find(run => run.run_id === activeRunId.value) || selectedDetail.value)
-const running = computed(() => Boolean(activeRun.value && activeRun.value.status === 'running'))
+const ownedRunningRun = computed(() => runs.value.find(run => run.owned_by_client && run.status === 'running') || null)
+const running = computed(() => Boolean(ownedRunningRun.value))
 const canStart = computed(() => !uploading.value && !starting.value && !running.value && Boolean(taskPrefix.value.trim()) && hasSource())
 const containerLabel = computed(() => {
   const name = containerStatus.value.container || 'container'
@@ -375,6 +378,10 @@ const resultLink = computed(() => findResultLink(selectedDetail.value?.result))
 watch(selectedServerId, () => {
   assigneeId.value = ''
   if (selectedServerId.value) loadCvatUsers()
+})
+
+watch(sourceMode, () => {
+  clearUploadSelection()
 })
 
 onMounted(async () => {
@@ -526,7 +533,9 @@ function applyBrowsePath(): void {
 function parentPath(path: string): string {
   const cleaned = path.replace(/\/+$/, '')
   const index = cleaned.lastIndexOf('/')
-  return index > 0 ? cleaned.slice(0, index) : cleaned
+  if (index > 0) return cleaned.slice(0, index)
+  if (cleaned.startsWith('/')) return '/'
+  return cleaned
 }
 
 function onFileChange(event: Event): void {
@@ -563,10 +572,7 @@ async function uploadSelectedFiles(reset = false): Promise<string> {
     for (let i = 0; i < selectedFiles.value.length; i += BATCH_SIZE) {
       const batch = selectedFiles.value.slice(i, i + BATCH_SIZE)
       const form = new FormData()
-      for (const file of batch) {
-        const relative = file.webkitRelativePath || file.name
-        form.append('files', file, relative)
-      }
+      for (const file of batch) form.append('files', file, file.name)
       form.append('owner_token', clientToken)
       form.append('folder_name', taskPrefix.value || 'prelabel_upload')
       if (uploadId.value) form.append('upload_id', uploadId.value)
@@ -641,7 +647,8 @@ async function startRun(mode: RunMode): Promise<void> {
 
 function connectStream(runId: string): void {
   closeStream()
-  eventSource = new EventSource(`/prelabel/stream/${runId}`)
+  const query = new URLSearchParams({ token: clientToken })
+  eventSource = new EventSource(`/prelabel/stream/${runId}?${query}`)
   eventSource.onmessage = event => {
     if (event.data === 'null') {
       closeStream()
@@ -701,9 +708,10 @@ function pushLog(item: StreamEvent): void {
 async function loadRuns(): Promise<void> {
   runsLoading.value = true
   try {
-    const data = await apiJson<RunRecord[]>('/prelabel/runs', { headers: ownerHeaders() })
-    runs.value = data || []
-    const ownedRunning = runs.value.find(run => run.owned_by_client && run.status === 'running')
+    const data = await apiJson<RunRecord[] | { error?: string }>('/prelabel/runs', { headers: ownerHeaders() })
+    if (!Array.isArray(data)) throw new Error(data.error || '历史响应格式错误')
+    runs.value = data
+    const ownedRunning = ownedRunningRun.value
     if (ownedRunning && !eventSource) {
       activeRunId.value = ownedRunning.run_id
       runStatus.value = `恢复连接: ${ownedRunning.run_id}`

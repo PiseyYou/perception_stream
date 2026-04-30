@@ -128,6 +128,24 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 
 ## 常见问题
 
+### 网页无法访问 (ERR_CONNECTION_REFUSED)
+
+如果访问 http://192.168.55.247:5173 时出现连接被拒绝错误，通常是文件监视器数量超限导致 Vite 服务器崩溃：
+
+**原因**：项目目录包含大量文件（如 `lib/`、`include/` 目录），超过系统 inotify 监视器限制。
+
+**解决方案**：
+1. 已在 `vite.config.ts` 中配置忽略 `lib/` 和 `include/` 目录
+2. 如果问题仍存在，可临时增加系统限制（需要 sudo 权限）：
+   ```bash
+   sudo sysctl fs.inotify.max_user_watches=524288
+   ```
+3. 永久修改（可选）：
+   ```bash
+   echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
+   sudo sysctl -p
+   ```
+
 ### Bridge 显示"未连接"
 
 如果 Bridge 一直显示"未连接"状态，通常是 websockets 库版本问题：

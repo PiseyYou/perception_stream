@@ -267,7 +267,7 @@ export default defineConfig({
     port: 5173,
     open: true,
     watch: {
-      ignored: ['**/data/**', '**/node_modules/**', '**/.git/**'],
+      ignored: ['**/data/**', '**/node_modules/**', '**/.git/**', '**/lib/**', '**/include/**'],
       usePolling: false,
     },
     hmr: {

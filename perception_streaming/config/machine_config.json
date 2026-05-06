@@ -4,7 +4,7 @@
       "name": "测试机1",
       "host": "120.25.121.3",
       "port": 10286,
-      "ssh_key": "../data/conf/bestmow_rsa_202604",
+      "ssh_key": "../data/conf/bestmow_rsa_202605",
       "user": "root",
       "log_base_path": "/userdata/log_dir/ros2_log",
       "image_base_path": "/userdata/bestmow_data/image_save_path"

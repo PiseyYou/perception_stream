@@ -15,6 +15,7 @@
 - **Bag包分析**：Camera bag 路径日志解析，多源日志关联
 - **日志分析**：SSH 日志获取与分析，支持多设备日志管理
 - **双目分析**：批量分析双目图像文件夹，支持端口映射上传路径，增强的进度跟踪和错误处理
+- **硬件模式支持**：支持白天/夜晚模式切换，自动调整感知参数
 
 ### 高级特性
 - 点云过滤优化（label=1 背景噪声过滤，保留 label=5 真实障碍物）
@@ -27,6 +28,8 @@
 - 双目离线测试工具（stereo_perception_multi2_offline_test）
 - 增强的离线服务器（支持多任务管理、进度跟踪、错误恢复）
 - Docker 容器化部署支持
+- 硬件模式切换（白天/夜晚模式，自动调整感知参数）
+- 双目匹配算法优化（支持多种匹配策略）
 
 ## 快速开始
 
@@ -68,7 +71,7 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 │   ├── components/                   # Vue 组件
 │   │   ├── BagOfflinePanel.vue       # 单目测试面板
 │   │   ├── LogAnalysis2Panel.vue     # Bag包分析面板
-│   │   ├── StereoAnalysis2Panel.vue  # 双目分析面板（增强版）
+│   │   ├── StereoAnalysis2Panel.vue  # 双目分析面板（增强版，支持硬件模式）
 │   │   ├── LogFetchPanel.vue         # 日志分析面板（多设备支持）
 │   │   ├── PointCloudPanel.vue       # 3D 点云渲染
 │   │   └── ObstacleMonitor.vue       # 避障监控
@@ -79,16 +82,19 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 ├── robot_monitor/                    # 后端服务
 │   ├── ssh_bridge.py                 # SSH + WebSocket 桥（8765）
 │   ├── offline_server.py             # 离线测试服务器（8769，增强版）
+│   ├── config_loader.py              # 配置加载器（支持硬件模式）
 │   ├── obstacle_monitor.py           # ROS2 避障监控节点
 │   ├── pcl_ws_bridge.py              # 点云 WebSocket 桥（8767）
 │   └── pcl_proxy.mjs                 # 点云代理（8766）
 ├── offline_perception_debug_src/     # 离线调试工具源码
 │   ├── bin/offline_perception_debug_432  # 单目离线测试可执行文件
+│   ├── include/                      # 头文件（包含硬件模式支持）
 │   └── src/                          # C++ 源码（双目匹配、点云生成）
 ├── stereo_perception_multi2_offline_test/  # 双目离线测试工具
-│   ├── include/                      # 头文件（配置、处理器、工具）
+│   ├── include/                      # 头文件（配置、处理器、工具、PCL封装）
 │   └── src/                          # C++ 源码（离线处理主程序）
 ├── Dockerfile.perception             # Docker 镜像构建文件
+├── build_offline_test_main_in_docker.sh  # Docker 构建脚本
 ├── start.sh                          # 一键启动脚本
 └── vite.config.ts                    # Vite 配置
 ```
@@ -197,3 +203,8 @@ systemctl start monitor_avoiding
 - [配置迁移指南](CONFIG_MIGRATION.md)
 - [离线测试设置](OFFLINE_TEST_SETUP.md)
 - [启动指南](START_GUIDE.md)
+- [硬件模式修复报告](HARDWARE_MODE_FIX_REPORT.md)
+- [Segfault 修复说明](SEGFAULT_FIX.md)
+- [任务完成报告](TASK_COMPLETION_REPORT.md)
+- [双目离线测试快速开始](stereo_perception_multi2_offline_test/QUICK_START.md)
+- [编译验证报告](stereo_perception_multi2_offline_test/COMPILATION_VERIFICATION_REPORT.md)

@@ -1,5 +1,7 @@
 // 在包含任何库之前，先定义宏阻止 PCL 包含 FLANN 头文件
+#ifndef PCL_NO_FLANN
 #define PCL_NO_FLANN
+#endif
 
 #include <iostream>
 #include <vector>
@@ -7,7 +9,11 @@
 #include <chrono>
 #include <math.h>
 
-// PCL 头文件必须在 OpenCV 之前包含，避免 detail 命名空间冲突
+// 先包含 OpenCV (包括 FLANN),确保 cv::flann 命名空间先被定义
+#include <opencv2/opencv.hpp>
+#include <opencv2/flann.hpp>
+
+// 然后包含 PCL 头文件
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 // #include <pcl/visualization/pcl_visualizer.h>  // 离线测试不需要可视化

@@ -13,17 +13,18 @@ void printUsage(const char* program_name) {
     std::cout << "\n========== Stereo Perception Offline Test Tool ==========" << std::endl;
     std::cout << "Version: v2.1.0" << std::endl;
     std::cout << "\nUsage:" << std::endl;
-    std::cout << "  " << program_name << " <input_dir> <output_dir> [hardware_mode]" << std::endl;
+    std::cout << "  " << program_name << " <input_dir> <output_dir> [infer_mode] [hardware_mode]" << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  input_dir      : Input directory containing images" << std::endl;
     std::cout << "  output_dir     : Output directory for results" << std::endl;
+    std::cout << "  infer_mode     : Inference mode (optional, 6=day/sub, 7=night/DSG)" << std::endl;
     std::cout << "  hardware_mode  : Hardware mode (optional)" << std::endl;
     std::cout << "                   - k100 or K100: K100 mode (default)" << std::endl;
     std::cout << "                   - bestmow or BESTMOW: bestmow mode" << std::endl;
     std::cout << "\nExamples:" << std::endl;
     std::cout << "  " << program_name << " /path/to/images /path/to/output" << std::endl;
-    std::cout << "  " << program_name << " /path/to/images /path/to/output k100" << std::endl;
-    std::cout << "  " << program_name << " /path/to/images /path/to/output bestmow" << std::endl;
+    std::cout << "  " << program_name << " /path/to/images /path/to/output 7 k100" << std::endl;
+    std::cout << "  " << program_name << " /path/to/images /path/to/output 6 bestmow" << std::endl;
     std::cout << "\nSupported image formats: .jpg, .jpeg, .png, .bmp" << std::endl;
     std::cout << "Stereo format: 1280x480 (auto-split to left/right)" << std::endl;
     std::cout << "========================================================\n" << std::endl;
@@ -34,6 +35,14 @@ int main(int argc, char** argv) {
     std::cout << "  Stereo Perception Offline Test Tool v2.1.0" << std::endl;
     std::cout << "  Based on stereo_perception_multi2 with K100/bestmow support" << std::endl;
     std::cout << "===========================================================" << std::endl;
+
+    if (argc >= 2) {
+        std::string arg1 = argv[1];
+        if (arg1 == "--help" || arg1 == "-h" || arg1 == "help") {
+            printUsage(argv[0]);
+            return 0;
+        }
+    }
 
     // ========== 从环境变量读取配置 ==========
     std::string input_dir;
@@ -126,7 +135,14 @@ int main(int argc, char** argv) {
     config.enable_dsg_detection_in_pointcloud = false;
 
     // 路径配置
-    config.model_dir = "../models/";        // 模型目录（相对于可执行文件）
+    // 优先使用环境变量中的模型目录，否则使用相对路径
+    const char* env_model_dir = std::getenv("MODEL_DIR");
+    if (env_model_dir != nullptr) {
+        config.model_dir = std::string(env_model_dir) + "/";
+        std::cout << "[Config] Model dir from env: " << config.model_dir << std::endl;
+    } else {
+        config.model_dir = "../models/";        // 模型目录（相对于可执行文件）
+    }
     config.input_dir = input_dir;
 
     // 如果指定了输出目录，使用指定的；否则自动生成
@@ -141,10 +157,10 @@ int main(int argc, char** argv) {
     // 否则留空，让 auto_configure() 自动生成带模式信息的目录名
 
     // 输出控制
-    config.save_segmentation = true;
+    config.save_segmentation = false;
     config.save_pointcloud = true;
-    config.save_detection = true;
-    config.save_depth = true;
+    config.save_detection = false;
+    config.save_depth = false;
     config.enable_debug_show = true;  // 启用合并可视化保存
 
     // 自动配置（根据硬件模式选择模型等）

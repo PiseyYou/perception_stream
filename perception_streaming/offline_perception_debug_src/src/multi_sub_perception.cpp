@@ -84,6 +84,16 @@ void multi_perception::prepare_tensor(hbDNNTensor *input_tensor, hbDNNTensor *ou
     for (int i = 0; i < input_count; i++) {
         int inTensor_ret = hbDNNGetInputTensorProperties(&input[i].properties, dnn_handle, i);
 
+        // 打印所有维度以调试
+        cout << "[DEBUG] Tensor dimensions: ";
+        for (int d = 0; d < 4; d++) {
+            cout << (input[i].properties).validShape.dimensionSize[d] << " ";
+        }
+        cout << endl;
+
+        // Model 6 input is NCHW: [batch, channels, height, width].
+        // Using dims 1/2 here makes scale_y huge in postprocess and can
+        // write img_label out of bounds.
         model_height = (input[i].properties).validShape.dimensionSize[2];
         model_width = (input[i].properties).validShape.dimensionSize[3];
         cout << "model_height/model_width: " << model_height << "/" << model_width << endl;
@@ -114,9 +124,19 @@ int multi_perception::read_image_2_tensor_as_nv12(Mat &bgr_mat,
     hbDNNTensorProperties Properties = input->properties;
 //    int tensor_id = 0;
 
-    // NCHW , the struct of mobilenetv1_224x224 shape is NCHW
+    // NCHW format: Batch, Channels, Height, Width
     int input_h = Properties.validShape.dimensionSize[2];
     int input_w = Properties.validShape.dimensionSize[3];
+
+    cout << "[DEBUG] read_image_2_tensor_as_nv12: bgr_mat size=" << bgr_mat.cols << "x" << bgr_mat.rows
+         << ", expected=" << input_w << "x" << input_h << endl;
+
+    // 检查输入图像尺寸是否匹配
+    if (bgr_mat.cols != input_w || bgr_mat.rows != input_h) {
+        cout << "[ERROR] Image size mismatch! Got " << bgr_mat.cols << "x" << bgr_mat.rows
+             << ", expected " << input_w << "x" << input_h << endl;
+        return -1;
+    }
 
     // 转换为 YUV420 格式
     if (input_h % 2 || input_w % 2) {
@@ -126,8 +146,20 @@ int multi_perception::read_image_2_tensor_as_nv12(Mat &bgr_mat,
     }
 
     cv::Mat yuv_mat;
-//    cv::cvtColor(cropped_mat, yuv_mat, cv::COLOR_BGR2YUV_I420);
-    cv::cvtColor(bgr_mat, yuv_mat, cv::COLOR_BGR2YUV_I420);
+    try {
+        cv::cvtColor(bgr_mat, yuv_mat, cv::COLOR_BGR2YUV_I420);
+        cout << "[DEBUG] YUV conversion successful, yuv_mat size=" << yuv_mat.cols << "x" << yuv_mat.rows
+             << ", total bytes=" << yuv_mat.total() * yuv_mat.elemSize() << endl;
+    } catch (const std::exception& e) {
+        cout << "[ERROR] cvtColor failed: " << e.what() << endl;
+        return -1;
+    }
+
+    // 验证 YUV 数据大小
+    int expected_yuv_size = input_h * input_w * 3 / 2;  // YUV420 格式
+    int actual_yuv_size = yuv_mat.total() * yuv_mat.elemSize();
+    cout << "[DEBUG] Expected YUV size=" << expected_yuv_size << ", actual=" << actual_yuv_size << endl;
+
     uint8_t *nv12_data = yuv_mat.ptr<uint8_t>();
 
     // 拷贝 Y 数据
@@ -535,7 +567,9 @@ Mat multi_perception::get_detect_result_no_argmax_mul(hbDNNTensor *output, float
             int orig_y = static_cast<int>(h * scale_y);  // 计算原图中的 y 坐标
 
             // 将类别信息存储到 mask_info 中
-            img_label.at<uint8_t>(orig_y, orig_x) = static_cast<uint8_t>(max_class);
+            if (orig_x >= 0 && orig_x < img_label.cols && orig_y >= 0 && orig_y < img_label.rows) {
+                img_label.at<uint8_t>(orig_y, orig_x) = static_cast<uint8_t>(max_class);
+            }
         }
     }
 
@@ -650,7 +684,9 @@ Mat multi_perception::get_detect_result_no_argmax(hbDNNTensor *output, float cls
             int orig_y = static_cast<int>(h * scale_y);  // 计算原图中的 y 坐标
 
             // 将类别信息存储到 mask_info 中
-            img_label.at<uint8_t>(orig_y, orig_x) = static_cast<uint8_t>(max_class);
+            if (orig_x >= 0 && orig_x < img_label.cols && orig_y >= 0 && orig_y < img_label.rows) {
+                img_label.at<uint8_t>(orig_y, orig_x) = static_cast<uint8_t>(max_class);
+            }
         }
     }
 

@@ -1,18 +1,14 @@
 #ifndef STEREO_POINT_CLOUD_RGBL_H
 #define STEREO_POINT_CLOUD_RGBL_H
 
-// 在包含任何库之前，先定义宏阻止 PCL 包含 FLANN 头文件
-#define PCL_NO_FLANN
+// 使用 PCL 包装器来避免 FLANN 冲突
+#include "pcl_wrapper.h"
 
 #include <iostream>
-#include <opencv2/opencv.hpp>
-#include <pcl/filters/passthrough.h>
-#include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
-// #include <pcl/visualization/pcl_visualizer.h>  // 离线测试不需要可视化
-#include <pcl/common/common.h>
-#include <pcl/console/parse.h>
+
+// 注意: statistical_outlier_removal 依赖 kdtree,会引入 FLANN
+// 如果需要使用,需要解决 FLANN 冲突
+// #include <pcl/filters/statistical_outlier_removal.h>
 
 using namespace std;
 using namespace cv;

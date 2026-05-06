@@ -77,7 +77,7 @@ struct OfflineConfig {
 
         if (output_dir.empty()) {
             if (infer_mode == 6) {
-                output_dir = input_dir + "/sub_6_205_432";
+                output_dir = input_dir + (use_k100_mode ? "/sub_6_205_432" : "/sub_6_205_384");
             } else if (infer_mode == 7) {
                 output_dir = input_dir + "/dsg_7_205_432";
             } else {
@@ -87,7 +87,7 @@ struct OfflineConfig {
 
         if (pointcloud_dir.empty()) {
             if (infer_mode == 6) {
-                pointcloud_dir = input_dir + "/pcd_6_205_432";
+                pointcloud_dir = input_dir + (use_k100_mode ? "/pcd_6_205_432" : "/pcd_6_205_384");
             } else if (infer_mode == 7) {
                 pointcloud_dir = input_dir + "/pcd_7_205_432";
             } else {

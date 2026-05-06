@@ -106,8 +106,9 @@ void cdt_perception::perception_init(const char *model_file_name){
     output_tensors.resize(output_count);
 
     hbDNNGetInputTensorProperties(&input_properties, dnn_handle, 0);
-    input_h = input_properties.validShape.dimensionSize[2];
-    input_w = input_properties.validShape.dimensionSize[3];
+    // NHWC format: Batch, Height, Width, Channels
+    input_h = input_properties.validShape.dimensionSize[1];
+    input_w = input_properties.validShape.dimensionSize[2];
     prepare_tensor(input_tensors.data(), output_tensors.data());
 }
 

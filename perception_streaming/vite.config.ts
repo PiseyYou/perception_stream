@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Use environment variable or fallback to system python3
 const PYTHON = process.env.PYTHON || 'python3'
 // Use SSH key from project data/conf directory
-const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202604')
+const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202605')
 const REMOTE_HOST = '120.25.121.3'
 const REMOTE_PORT = '10015'
 const LOCAL_PCL_PORT = 8768   // SSH tunnel local end (pcl_proxy.mjs connects here)
@@ -263,14 +263,17 @@ function bagDataPlugin() {
 export default defineConfig({
   plugins: [vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
   server: {
-    host: '0.0.0.0',
+    host: '192.168.55.247',
     port: 5173,
-    open: true,
+    open: 'http://192.168.55.247:5173/',
+    strictPort: true,
     watch: {
       ignored: ['**/data/**', '**/node_modules/**', '**/.git/**', '**/lib/**', '**/include/**'],
       usePolling: false,
     },
     hmr: {
+      host: '192.168.55.247',
+      port: 5173,
       overlay: false,
     },
     proxy: {

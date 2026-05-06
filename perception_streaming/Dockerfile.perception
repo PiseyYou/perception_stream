@@ -1,7 +1,7 @@
 # Perception Runtime Docker Image
-# 使用 Ubuntu 20.04 以匹配编译环境
+# 使用 Ubuntu 22.04 并创建PCL 1.10的符号链接
 
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Shanghai
@@ -19,10 +19,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
+# 创建PCL 1.10和OpenCV 4.2的符号链接（指向更新版本）
+RUN cd /usr/lib/x86_64-linux-gnu && \
+    # PCL 1.10 -> 1.12
+    for lib in libpcl_*.so.1.12; do \
+        base=$(echo $lib | sed 's/\.so\.1\.12$//'); \
+        ln -sf $lib ${base}.so.1.10 || true; \
+    done && \
+    # OpenCV 4.2 -> 4.5
+    for lib in libopencv_*.so.4.5*; do \
+        base=$(echo $lib | sed 's/\.so\.4\.5.*$//'); \
+        ln -sf $lib ${base}.so.4.2 || true; \
+    done
+
 # 复制程序和模型
 WORKDIR /app
 COPY lib/dnn_x86 /app/lib/dnn_x86
 COPY bin/offline_perception_debug_432 /app/bin/
+COPY bin/offline_test_main /app/bin/
 COPY night_offline_debug/build/run_cdt_dsg_fusion_dir /app/bin/
 COPY night_offline_debug/model /app/model/
 COPY models /app/models/
@@ -33,4 +47,4 @@ ENV OFFLINE_INPUT_DIR=/app/input
 ENV OFFLINE_OUTPUT_DIR=/app/output
 
 # 运行命令（可被覆盖）
-CMD ["python3", "-c", "import subprocess; print(subprocess.run(['ldd', '/app/bin/offline_perception_debug_432'], capture_output=True, text=True).stdout.decode())"]
+CMD ["python3", "-c", "import subprocess; print(subprocess.run(['ldd', '/app/bin/offline_test_main'], capture_output=True, text=True).stdout)"]

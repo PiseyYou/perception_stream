@@ -23,8 +23,13 @@ int det_perception::prepare_tensor(hbDNNTensor *input_tensor, hbDNNTensor *outpu
     this->input = input_tensor;
     for (int i = 0; i < input_count; i++) {
         int inTensor_ret = hbDNNGetInputTensorProperties(&input[i].properties, dnn_handle, i);
-        this->model_height = (input[i].properties).validShape.dimensionSize[2];
-        this->model_width = (input[i].properties).validShape.dimensionSize[3];
+        // Default NHWC format
+        this->model_height = (input[i].properties).validShape.dimensionSize[1];
+        this->model_width = (input[i].properties).validShape.dimensionSize[2];
+        if (input[i].properties.tensorLayout == HB_DNN_LAYOUT_NCHW) {
+            this->model_height = (input[i].properties).validShape.dimensionSize[2];
+            this->model_width = (input[i].properties).validShape.dimensionSize[3];
+        }
 //        cout << "model_height/model_width: " << model_height << "/" << model_width << endl;
 //        LOG_INFO("model_height/model_width: {}/{}", model_height, model_width);
         int input_memSize = input[i].properties.alignedByteSize;

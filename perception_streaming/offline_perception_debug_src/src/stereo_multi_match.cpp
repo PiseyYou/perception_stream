@@ -1,8 +1,9 @@
 #include "stereo_multi_match.h"
 #include <opencv2/highgui.hpp>
 #include <pcl/filters/passthrough.h>
-#include <pcl/filters/radius_outlier_removal.h>
-#include <pcl/filters/statistical_outlier_removal.h>
+// 暂时禁用这些 filters 以避免 FLANN 冲突
+// #include <pcl/filters/radius_outlier_removal.h>
+// #include <pcl/filters/statistical_outlier_removal.h>
 
 // #define VALID_HEIGHT 384
 #define VALID_HEIGHT 432
@@ -828,39 +829,12 @@ void StereoMultiMatch::stereo_point_ori_rgb_filter(
         std::cout << "[ROR Filter] 分离点云: Label 104=" << obstacle_cloud->size()
                   << " 点, 其他=" << other_cloud->size() << " 点" << std::endl;
 
-        // 对其他点云使用正常的离群点移除
-        pcl::RadiusOutlierRemoval<pcl::PointXYZRGBL> ror;
-        ror.setInputCloud(other_cloud);
-        ror.setRadiusSearch(0.08);      // 8cm搜索半径
-        ror.setMinNeighborsInRadius(6); // 至少6个邻居
-        pcl::PointCloud<pcl::PointXYZRGBL>::Ptr filtered_other(
-            new pcl::PointCloud<pcl::PointXYZRGBL>);
-        ror.filter(*filtered_other);
+        // 暂时禁用 RadiusOutlierRemoval 以避免 FLANN 冲突
+        // 直接使用降采样后的点云,跳过离群点移除
+        pcl::PointCloud<pcl::PointXYZRGBL>::Ptr filtered_other = other_cloud;
+        pcl::PointCloud<pcl::PointXYZRGBL>::Ptr filtered_obstacle = obstacle_cloud;
 
-        // 对小球点云使用更宽松的参数（或完全跳过过滤）
-        pcl::PointCloud<pcl::PointXYZRGBL>::Ptr filtered_obstacle(
-            new pcl::PointCloud<pcl::PointXYZRGBL>);
-        if (obstacle_cloud->size() > 0)
-        {
-            if (obstacle_cloud->size() >= 10)
-            {
-                // 如果小球点数足够多，使用宽松的离群点移除
-                pcl::RadiusOutlierRemoval<pcl::PointXYZRGBL> ror_obstacle;
-                ror_obstacle.setInputCloud(obstacle_cloud);
-                ror_obstacle.setRadiusSearch(0.15);      // 更大的搜索半径15cm
-                ror_obstacle.setMinNeighborsInRadius(3); // 更少的邻居要求
-                ror_obstacle.filter(*filtered_obstacle);
-                std::cout << "[ROR Filter] Label 104 使用宽松过滤: "
-                          << obstacle_cloud->size() << " -> " << filtered_obstacle->size() << " 点" << std::endl;
-            }
-            else
-            {
-                // 如果小球点数很少，完全跳过离群点移除
-                *filtered_obstacle = *obstacle_cloud;
-                std::cout << "[ROR Filter] Label 104 点数过少(" << obstacle_cloud->size()
-                          << ")，跳过离群点过滤" << std::endl;
-            }
-        }
+        std::cout << "[ROR Filter] 跳过离群点移除 (FLANN 冲突)" << std::endl;
 
         // 合并过滤后的点云
         *output_cloud = *filtered_other;

@@ -9,6 +9,11 @@
       <label>📁 白天双目文件目录:</label>
       <input v-model="dayFolderPath" class="sa2-path-input" placeholder="data/stereo_debug/0016/20260420" @keyup.enter="doScanDay" />
       <button class="sa2-dbg-btn" style="background:#fb923c;color:#000;margin-right:8px" :disabled="offlineRunning || !dayFolderPath.trim()" @click="runDayOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '☀️ 白天离线debug' }}</button>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;" title="K100硬件模式">
+        <input type="checkbox" v-model="useK100Mode" style="cursor:pointer;" />
+        <span>K100</span>
+      </label>
+      <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">{{ offlineRunning ? '停止中...' : '停止' }}</button>
       <label>标签:</label>
       <input v-model.number="filterLabel" type="number" class="sa2-label-input" />
       <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="() => doScan()">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
@@ -107,6 +112,7 @@ import {
 const folderPath = ref('data/stereo_debug/0115/20260421')
 const dayFolderPath = ref('data/stereo_debug/0016/20260420')
 const snLast4 = ref('0115')
+const useK100Mode = ref(true)  // K100复选框状态，默认选中
 const filterLabel = ref(0)
 const scanning = ref(false)
 const scanStatus = ref('')
@@ -130,6 +136,7 @@ const uploadDateEnd = ref(today)
 const uploadRunning = ref(false)
 const uploadStatus = ref('')
 const uploadError = ref(false)
+const UPLOAD_IMAGES_TIMEOUT_MS = 5 * 60 * 1000
 
 // 当输入SN末尾4位时，自动拼接路径和端口号
 function onSnInput() {
@@ -156,7 +163,7 @@ const resultPcdDir = ref('')
 const resultSelectedIdx = ref(-1)
 const resultPcdStatus = ref('')
 const resultDirLabel = ref('')
-const lastOfflineInferMode = ref(99)
+const lastOfflineInferMode = ref(7)
 let offlineEventSource: EventSource | null = null
 let offlineReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let offlineStatusPollTimer: ReturnType<typeof setInterval> | null = null
@@ -197,24 +204,28 @@ function resetResultState() {
   resultPcdStatus.value = ''
 }
 
-function expectedResultDir(mode: number, inputDir: string) {
+function dayResultSuffix(useK100 = useK100Mode.value) {
+  return useK100 ? '432' : '384'
+}
+
+function expectedResultDir(mode: number, inputDir: string, useK100 = useK100Mode.value) {
   const base = inputDir.replace(/\/+$/, '')
-  if (mode === 6) return `${base}/sub_6_205_432`
+  if (mode === 6) return `${base}/sub_6_205_${dayResultSuffix(useK100)}`
   if (mode === 99) return `${base}/dsg_7_205_432`
   if (mode === 7) return `${base}/dsg_7_205_432`
   return `${base}/output_${mode}_205`
 }
 
-function expectedResultPcdDir(mode: number, inputDir: string) {
+function expectedResultPcdDir(mode: number, inputDir: string, useK100 = useK100Mode.value) {
   const base = inputDir.replace(/\/+$/, '')
-  if (mode === 6) return `${base}/pcd_6_205_432`
+  if (mode === 6) return `${base}/pcd_6_205_${dayResultSuffix(useK100)}`
   if (mode === 99 || mode === 7) return `${base}/pcd_7_205_432`
   return `${base}/pcd_${mode}_205_432`
 }
 
-function applyInferredResultDirs(mode: number, inputDir: string) {
-  resultDir.value = expectedResultDir(mode, inputDir)
-  resultPcdDir.value = expectedResultPcdDir(mode, inputDir)
+function applyInferredResultDirs(mode: number, inputDir: string, useK100 = useK100Mode.value) {
+  resultDir.value = expectedResultDir(mode, inputDir, useK100)
+  resultPcdDir.value = expectedResultPcdDir(mode, inputDir, useK100)
   resultDirLabel.value = resultDir.value.split('/').pop() || ''
   console.log('[doScan] Inferred resultDir:', resultDir.value)
   console.log('[doScan] Inferred resultPcdDir:', resultPcdDir.value)
@@ -491,6 +502,7 @@ async function doScan(preferMode?: number) {
       const query = new URLSearchParams({ folder: folderPath.value })
       if (typeof preferMode === 'number') query.set('prefer_mode', String(preferMode))
       const mode = typeof preferMode === 'number' ? preferMode : lastOfflineInferMode.value
+      query.set('use_k100', String(useK100Mode.value))
       try {
         const checkRes = await fetch(`/offline/check_existing_result?${query.toString()}`)
         const checkData = await readJsonResponse<any>(checkRes, '检查已有结果')
@@ -506,11 +518,11 @@ async function doScan(preferMode?: number) {
           offlineStatus.value = `✓ 已加载现有结果 (${resultImages.value.length} 张)`
         } else {
           console.log('[doScan] No existing result found, will infer pcd_dir after processing')
-          applyInferredResultDirs(mode, folderPath.value)
+          applyInferredResultDirs(mode, folderPath.value, useK100Mode.value)
         }
       } catch (error) {
         console.warn('[doScan] check_existing_result failed, continuing with inferred result dirs:', error)
-        applyInferredResultDirs(mode, folderPath.value)
+        applyInferredResultDirs(mode, folderPath.value, useK100Mode.value)
       }
       await nextTick()
       if (resultPcdCanvasRef.value && !resultPcdCtx)
@@ -533,19 +545,19 @@ async function doScanDay() {
   }
   folderPath.value = dayFolderPath.value
   lastOfflineInferMode.value = 6
-  // 扫描时指定 preferMode=6，这样会查找 sub_6_205_432 和 pcd_6_205_432
+  // 扫描时指定 preferMode=6，并根据 K100 复选框查找 432/384 输出目录
   await doScan(6)
 }
 
 async function doScanNight() {
-  // 夜晚模式：扫描夜晚文件夹，使用 mode=99/7 (DSG)
+  // 夜晚模式：扫描夜晚文件夹，使用 mode=7 (DSG)
   if (!folderPath.value || !folderPath.value.trim()) {
     console.warn('[doScanNight] folderPath is empty')
     return
   }
-  lastOfflineInferMode.value = 99
-  // 扫描时指定 preferMode=99，这样会查找 dsg_7_205_432 和 pcd_7_205_432
-  await doScan(99)
+  lastOfflineInferMode.value = 7
+  // 扫描时指定 preferMode=7，这样会查找 dsg_7_205_432 和 pcd_7_205_432
+  await doScan(7)
 }
 
 function imgUrl(fname: string) {
@@ -603,14 +615,14 @@ async function doUploadImages() {
   uploadStatus.value = '正在连接...'
   uploadError.value = false
 
-  // 设置超时控制
   const controller = new AbortController()
+  let didTimeOut = false
   const timeoutId = setTimeout(() => {
+    didTimeOut = true
     controller.abort()
-    uploadStatus.value = '✗ 请求超时（60秒）'
+    uploadStatus.value = '✗ 请求超时（5分钟）'
     uploadError.value = true
-    uploadRunning.value = false
-  }, 60000) // 60秒超时
+  }, UPLOAD_IMAGES_TIMEOUT_MS)
 
   try {
     uploadStatus.value = '正在上传图片...'
@@ -624,8 +636,6 @@ async function doUploadImages() {
       }),
       signal: controller.signal,
     })
-
-    clearTimeout(timeoutId)
 
     if (!res.ok) {
       uploadStatus.value = `✗ 服务器错误 (HTTP ${res.status})`
@@ -655,16 +665,15 @@ async function doUploadImages() {
       uploadError.value = true
     }
   } catch (e: any) {
-    clearTimeout(timeoutId)
-    if (e.name === 'AbortError') {
-      console.log('[doUploadImages] 请求已超时')
-      // 超时消息已在 setTimeout 中设置
+    if (e.name === 'AbortError' && didTimeOut) {
+      console.log('[doUploadImages] 请求已超时（5分钟）')
     } else {
       console.error('[doUploadImages] 请求异常:', e)
       uploadStatus.value = `✗ 请求失败: ${e.message || '网络错误'}`
       uploadError.value = true
     }
   } finally {
+    clearTimeout(timeoutId)
     uploadRunning.value = false
   }
 }
@@ -672,7 +681,8 @@ async function doUploadImages() {
 async function runNightOfflineDebug() {
   console.log('[runNightOfflineDebug] Starting DSG Night mode processing')
   console.log('[runNightOfflineDebug] folderPath:', folderPath.value)
-  lastOfflineInferMode.value = 99
+  console.log('[runNightOfflineDebug] useK100Mode:', useK100Mode.value)
+  lastOfflineInferMode.value = 7
 
   // Mode 7: DSG Night recognition
   // - Uses adaptive stereo matching parameters for night scenes
@@ -681,12 +691,12 @@ async function runNightOfflineDebug() {
   // - Maps detection IDs to 100+ format
   // - Supports optional CDT (charge station detection)
   // - Performs depth computation and fusion at 432 resolution
-  await doRunOffline(folderPath.value, 99, 205, false)
+  await doRunOffline(folderPath.value, 7, 205, false, useK100Mode.value)
 }
 
 async function resumeOfflineDebug() {
   const resumeDir = lastOfflineInferMode.value === 6 ? dayFolderPath.value : folderPath.value
-  await doRunOffline(resumeDir, lastOfflineInferMode.value, 205, true)
+  await doRunOffline(resumeDir, lastOfflineInferMode.value, 205, true, useK100Mode.value)
 }
 
 async function runDayOfflineDebug() {
@@ -694,6 +704,7 @@ async function runDayOfflineDebug() {
   console.log('[runDayOfflineDebug] dayFolderPath:', dayFolderPath.value)
   console.log('[runDayOfflineDebug] folderPath:', folderPath.value)
   console.log('[runDayOfflineDebug] pairs.length:', pairs.value.length)
+  console.log('[runDayOfflineDebug] useK100Mode:', useK100Mode.value)
 
   try {
     lastOfflineInferMode.value = 6
@@ -725,7 +736,7 @@ async function runDayOfflineDebug() {
     console.log('[runDayOfflineDebug] Found', pairs.value.length, 'pairs')
 
     // 检查是否有已处理的结果，如果有则继续执行
-    const expectedDir = expectedResultDir(6, dayFolderPath.value)
+    const expectedDir = expectedResultDir(6, dayFolderPath.value, useK100Mode.value)
     const hasResults = resultImages.value.length > 0 && resultDir.value === expectedDir
     const resume = hasResults
     console.log('[runDayOfflineDebug] expectedDir:', expectedDir)
@@ -733,7 +744,7 @@ async function runDayOfflineDebug() {
 
     // Mode 6: CDT+Multi-Sub Day mode
     console.log('[runDayOfflineDebug] Calling doRunOffline with mode=6')
-    await doRunOffline(dayFolderPath.value, 6, 205, resume)
+    await doRunOffline(dayFolderPath.value, 6, 205, resume, useK100Mode.value)
     console.log('[runDayOfflineDebug] === END ===')
   } catch (error) {
     console.error('[runDayOfflineDebug] === ERROR ===', error)
@@ -746,11 +757,11 @@ async function runDayOfflineDebug() {
 async function resumeDayOfflineDebug() {
   // 继续执行白天模式
   lastOfflineInferMode.value = 6
-  await doRunOffline(dayFolderPath.value, 6, 205, true)
+  await doRunOffline(dayFolderPath.value, 6, 205, true, useK100Mode.value)
 }
 
-async function doRunOffline(inputDir: string, inferMode: number, erodePixel: number, resume: boolean = false) {
-  console.log('[doRunOffline] inputDir:', inputDir, 'inferMode:', inferMode, 'erodePixel:', erodePixel, 'resume:', resume)
+async function doRunOffline(inputDir: string, inferMode: number, erodePixel: number, resume: boolean = false, useK100: boolean = true) {
+  console.log('[doRunOffline] inputDir:', inputDir, 'inferMode:', inferMode, 'erodePixel:', erodePixel, 'resume:', resume, 'useK100:', useK100)
   if (!inputDir || offlineRunning.value) return
   offlineRunToken += 1
   const runToken = offlineRunToken
@@ -774,7 +785,7 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
     const res = await fetch('/offline/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input_dir: inputDir, infer_mode: inferMode, erode_pixel: erodePixel, resume }),
+      body: JSON.stringify({ input_dir: inputDir, infer_mode: inferMode, erode_pixel: erodePixel, resume, use_k100: useK100 }),
     })
     console.log('[doRunOffline] Response status:', res.status)
     const startData = await readJsonResponse<any>(res, '启动离线调试')
@@ -794,6 +805,30 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
   }
 }
 
+async function stopOfflineDebug() {
+  if (!offlineRunning.value) return
+  offlineStatus.value = '停止中...'
+  offlineError.value = false
+  try {
+    const res = await fetch('/offline/stop', { method: 'POST' })
+    const data = await readJsonResponse<any>(res, '停止离线调试')
+    if (!res.ok || !data.ok) {
+      offlineStatus.value = `✗ ${data.error || `HTTP ${res.status}`}`
+      offlineError.value = true
+      return
+    }
+    offlineRunToken += 1
+    closeOfflineEventStream()
+    clearOfflineReconnectTimer()
+    clearOfflineStatusPollTimer()
+    offlineRunning.value = false
+    offlineStatus.value = '已停止'
+  } catch (e) {
+    offlineStatus.value = `✗ 停止失败: ${e}`
+    offlineError.value = true
+  }
+}
+
 async function loadResultPcd(i: number) {
   if (!resultPcdCtx || !resultImages.value[i]) return
   resultSelectedIdx.value = i
@@ -806,6 +841,12 @@ async function loadResultPcd(i: number) {
     const text = await res.text()
     loadPcdIntoCtx(resultPcdCtx, text, resultPcdStatus)
   } catch (e) { resultPcdStatus.value = `❌ ${e}` }
+}
+
+function alternateDayPcdDir(dir: string) {
+  if (dir.endsWith('/pcd_6_205_384')) return dir.replace(/\/pcd_6_205_384$/, '/pcd_6_205_432')
+  if (dir.endsWith('/pcd_6_205_432')) return dir.replace(/\/pcd_6_205_432$/, '/pcd_6_205_384')
+  return ''
 }
 
 
@@ -949,7 +990,7 @@ async function selectPair(i: number) {
         return candidate === target || candidate.startsWith(target + '_') || candidate.includes(target + '_')
       })
 
-      const candidatePaths = matchedResultPcd
+      const primaryCandidatePaths = matchedResultPcd
         ? [resultPcdDir.value + '/' + matchedResultPcd]
         : [
             resultPcdDir.value + '/' + stem + '.pcd',
@@ -957,6 +998,16 @@ async function selectPair(i: number) {
             resultPcdDir.value + '/' + stem + '_rgbl.pcd',
             resultPcdDir.value + '/' + pcdName,
           ]
+      const altPcdDir = alternateDayPcdDir(resultPcdDir.value)
+      const alternateCandidatePaths = altPcdDir
+        ? [
+            altPcdDir + '/' + stem + '.pcd',
+            altPcdDir + '/' + stem + '_dsg.pcd',
+            altPcdDir + '/' + stem + '_rgbl.pcd',
+            altPcdDir + '/' + pcdName,
+          ]
+        : []
+      const candidatePaths = [...primaryCandidatePaths, ...alternateCandidatePaths]
 
       let res: Response | null = null
       let pcdPath = ''
@@ -1024,6 +1075,9 @@ onBeforeUnmount(() => {
 .sa2-dbg-btn { padding:4px 12px; background:#4a148c; border:1px solid #7b1fa2; border-radius:4px; color:#ce93d8; font-size:11px; cursor:pointer; white-space:nowrap; }
 .sa2-dbg-btn:hover:not(:disabled) { background:#6a1b9a; }
 .sa2-dbg-btn:disabled { opacity:.5; cursor:not-allowed; }
+.sa2-stop-btn { padding:4px 10px; background:#7f1d1d; border:1px solid #b91c1c; border-radius:4px; color:#fecaca; font-size:11px; cursor:pointer; white-space:nowrap; }
+.sa2-stop-btn:hover:not(:disabled) { background:#991b1b; }
+.sa2-stop-btn:disabled { opacity:.45; cursor:not-allowed; }
 .sa2-status { font-size:11px; color:#69f0ae; font-family:monospace; }
 .sa2-status.error { color:#ef5350; }
 .sa2-progress-container { width:180px; height:18px; background:#222; border-radius:9px; position:relative; overflow:hidden; border:1px solid #444; margin-left:8px; }

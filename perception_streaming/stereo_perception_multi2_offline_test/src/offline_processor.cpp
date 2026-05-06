@@ -612,19 +612,10 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
         cv::Mat final_compared;
         cv::vconcat(origin_seg, xyz_rgbl, final_compared);
 
-        // 5. 保存合并图像
-        std::string combined_path = config_.output_dir + "/combined/" + image_name + "_combined.jpg";
+        // 5. 保存合并图像到输出根目录
+        std::string combined_path = config_.output_dir + "/" + image_name + "_combined.jpg";
         cv::imwrite(combined_path, final_compared);
         std::cout << "[Save] Combined visualization saved: " << combined_path << std::endl;
-    }
-
-    // ========== 单独保存各项结果（可选） ==========
-    // 保存分割结果
-    if (config_.save_segmentation && !result.segmentation.empty()) {
-        cv::Mat seg_color = labelToColor(result.segmentation);
-        std::string seg_path = config_.output_dir + "/segmentation/" + image_name + "_seg.png";
-        cv::imwrite(seg_path, seg_color);
-        std::cout << "[Save] Segmentation saved: " << seg_path << std::endl;
     }
 
     // 保存点云
@@ -633,25 +624,27 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
             ? config_.output_dir + "/pointcloud"
             : config_.pointcloud_dir;
         std::string pcd_path = pointcloud_base + "/" + image_name + ".pcd";
-        pcl::io::savePCDFileBinary(pcd_path, result.pointcloud);
-        std::cout << "[Save] Point cloud saved: " << pcd_path << std::endl;
-    }
+        try {
+            fs::create_directories(pointcloud_base);
+            pcl::io::savePCDFileBinary(pcd_path, result.pointcloud);
+            std::cout << "[Save] Point cloud saved: " << pcd_path << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "[Warning] Failed to save point cloud to " << pcd_path
+                      << ": " << e.what() << std::endl;
 
-    // 保存检测结果（Model 6 或 K100 模式）
-    if (config_.save_detection && !result.detections.empty() &&
-        (config_.infer_mode == 6 || hardware_mode_.isK100Hardware())) {
-        cv::Mat det_img = result.cropped_img.clone();
-        drawDetections(det_img, result.detections);
-        std::string det_path = config_.output_dir + "/detection/" + image_name + "_det.png";
-        cv::imwrite(det_path, det_img);
-        std::cout << "[Save] Detection saved: " << det_path << std::endl;
-    }
-
-    // 保存深度图
-    if (config_.save_depth && !result.depth.empty()) {
-        cv::Mat depth_color = visualizeDepth(result.depth);
-        std::string depth_path = config_.output_dir + "/depth/" + image_name + "_depth.png";
-        cv::imwrite(depth_path, depth_color);
-        std::cout << "[Save] Depth saved: " << depth_path << std::endl;
+            const std::string fallback_base = config_.output_dir + "/pointcloud";
+            const std::string fallback_path = fallback_base + "/" + image_name + ".pcd";
+            if (fallback_base != pointcloud_base) {
+                try {
+                    fs::create_directories(fallback_base);
+                    pcl::io::savePCDFileBinary(fallback_path, result.pointcloud);
+                    std::cout << "[Save] Point cloud saved to fallback: "
+                              << fallback_path << std::endl;
+                } catch (const std::exception& fallback_error) {
+                    std::cerr << "[Warning] Failed to save fallback point cloud to "
+                              << fallback_path << ": " << fallback_error.what() << std::endl;
+                }
+            }
+        }
     }
 }

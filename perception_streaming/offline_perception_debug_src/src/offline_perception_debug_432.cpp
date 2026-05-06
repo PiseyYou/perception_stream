@@ -36,6 +36,7 @@
 #include "offline_utils.hpp"
 #include "qr_cs_perception.h"
 #include "seg_perception.h"
+#include "hardware_mode.hpp"
 
 namespace fs = std::filesystem;
 using namespace cv;
@@ -234,7 +235,7 @@ public:
   // 配置参数
   struct Config
   {
-    int infer_mode = 5;               // 推理模式 0-6
+    int infer_mode = 5;               // 推理模式 0-7
     // int erode_pixel = 205;            // 腐蚀像素
     int erode_pixel = 205;            // 腐蚀像素
     float area_threshold = 0.5;       // 区域阈值
@@ -245,6 +246,7 @@ public:
     int frq_cdt = 5;
     bool m_enable_debug_show = true;
     int depth_inpainting_strategy_ = 0; // 深度补全策略: 0=不补全, 1=按检测框, 2=按连通区域, 3=两者
+    bool use_k100_mode = true;        // 硬件模式: true=K100, false=bestmow
 
     string finalPicDir = ""; // 最终图片输出目录
     string finalPcdDir = ""; // 最终PCD输出目录
@@ -1067,6 +1069,15 @@ private:
       croppedImg = left;
       resizeImg = left.clone();
     }
+    else
+    {
+      // 处理其他尺寸的图像：直接resize到640x384
+      cout << "[Warning] Unexpected image height: " << left.rows
+           << ", resizing to 640x384" << endl;
+      resizeImg = cv::Mat::zeros(384, 640, left.type());
+      cv::resize(left, resizeImg, cv::Size(640, 384));
+      croppedImg = left.clone();
+    }
 
     cv::Mat dst_label(resizeImg.rows, resizeImg.cols, CV_8UC1);
     std::vector<Detection> detections, dect_dst;
@@ -1111,8 +1122,29 @@ private:
     {
       auto depth_start = chrono::high_resolution_clock::now();
 
+      // 裁剪或resize灰度图到 432 高度以匹配 croppedImg
+      Mat grayL_432, grayR_432;
+      if (grayImageL.rows == 480)
+      {
+        grayL_432 = grayImageL(cv::Rect(0, 0, grayImageL.cols, 432));
+        grayR_432 = grayImageR(cv::Rect(0, 0, grayImageR.cols, 432));
+      }
+      else if (grayImageL.rows == 432)
+      {
+        grayL_432 = grayImageL;
+        grayR_432 = grayImageR;
+      }
+      else
+      {
+        // 对于其他尺寸，resize到640x432
+        cout << "[Warning] Resizing gray images from " << grayImageL.cols << "x"
+             << grayImageL.rows << " to 640x432" << endl;
+        cv::resize(grayImageL, grayL_432, cv::Size(640, 432));
+        cv::resize(grayImageR, grayR_432, cv::Size(640, 432));
+      }
+
       Mat disparity =
-          stereo_multi_match.stereo_multi_process_depth(grayImageL, grayImageR);
+          stereo_multi_match.stereo_multi_process_depth(grayL_432, grayR_432);
 
       // label_map 从 640x432 pad 到 640x480，底部填充 2（背景标签）
       cv::Mat label_480 = cv::Mat::zeros(480, 640, result.label_map.type()) + 2;
@@ -1332,8 +1364,29 @@ private:
     {
       auto depth_start = chrono::high_resolution_clock::now();
 
+      // 裁剪或resize灰度图到 432 高度以匹配 croppedImg
+      Mat grayL_432, grayR_432;
+      if (grayImageL.rows == 480)
+      {
+        grayL_432 = grayImageL(cv::Rect(0, 0, grayImageL.cols, 432));
+        grayR_432 = grayImageR(cv::Rect(0, 0, grayImageR.cols, 432));
+      }
+      else if (grayImageL.rows == 432)
+      {
+        grayL_432 = grayImageL;
+        grayR_432 = grayImageR;
+      }
+      else
+      {
+        // 对于其他尺寸，resize到640x432
+        cout << "[Warning] Resizing gray images from " << grayImageL.cols << "x"
+             << grayImageL.rows << " to 640x432" << endl;
+        cv::resize(grayImageL, grayL_432, cv::Size(640, 432));
+        cv::resize(grayImageR, grayR_432, cv::Size(640, 432));
+      }
+
       Mat disparity =
-          stereo_multi_match.stereo_multi_process_depth(grayImageL, grayImageR);
+          stereo_multi_match.stereo_multi_process_depth(grayL_432, grayR_432);
 
       // label_map 从 640x432 pad 到 640x480，底部填充 1（DSG背景标签）
       cv::Mat label_480 = cv::Mat::ones(480, 640, result.label_map.type());
@@ -1430,6 +1483,8 @@ int main(int argc, char **argv)
   const char* env_mode  = std::getenv("OFFLINE_INFER_MODE");
   const char* env_erode = std::getenv("OFFLINE_ERODE_PIXEL");
   const char* env_dsg_model = std::getenv("DSG_MODEL_PATH");
+  const char* env_sub_model = std::getenv("SUB_MODEL_PATH");
+  const char* env_hardware = std::getenv("HARDWARE_MODE");
 
   string input_dir = env_input ? string(env_input) : "/home/youfeng/debug/03/claude_bag/suspi/";
   if (env_mode)  config.infer_mode   = std::stoi(env_mode);
@@ -1438,6 +1493,29 @@ int main(int argc, char **argv)
   if (env_dsg_model) {
     config.dsg_model = string(env_dsg_model);
     cout << "Using DSG model from environment: " << config.dsg_model << endl;
+  }
+  if (env_sub_model) {
+    config.sub_model = string(env_sub_model);
+    cout << "Using SUB model from environment: " << config.sub_model << endl;
+  }
+
+  // 读取硬件模式（K100 或 bestmow）
+  bool use_k100_mode = true;  // 默认K100模式
+  if (env_hardware) {
+    string hw_str = string(env_hardware);
+    std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
+    use_k100_mode = (hw_str == "k100");
+    cout << "Hardware mode from environment: " << (use_k100_mode ? "K100" : "bestmow") << endl;
+  }
+  config.use_k100_mode = use_k100_mode;
+
+  // 设置环境变量，让其他模块读取到正确的模式
+  if (use_k100_mode) {
+    setenv("HARDWARE_MODE", "K100", 1);
+    cout << "[Config] Set HARDWARE_MODE=K100" << endl;
+  } else {
+    setenv("HARDWARE_MODE", "bestmow", 1);
+    cout << "[Config] Set HARDWARE_MODE=bestmow" << endl;
   }
 
   cout << "\nInput directory: " << input_dir << endl;
@@ -1468,6 +1546,12 @@ int main(int argc, char **argv)
   }
 
   cout << "\n========== Configuration ==========" << endl;
+  cout << "Hardware mode: " << (config.use_k100_mode ? "K100" : "bestmow") << endl;
+  if (config.use_k100_mode) {
+    cout << "  - K100 mode: Full YOLO decoding, adaptive stereo params, label-aware filtering, morphology post-processing" << endl;
+  } else {
+    cout << "  - bestmow mode: Simplified label mapping, fixed stereo params, generic filtering, no morphology" << endl;
+  }
   cout << "Inference mode: " << config.infer_mode << endl;
   cout << "Erode pixel: " << config.erode_pixel << endl;
   cout << "Area threshold: " << config.area_threshold << endl;

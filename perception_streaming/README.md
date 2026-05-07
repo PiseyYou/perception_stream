@@ -38,6 +38,7 @@
 - SN 自动路径生成（输入 SN 末尾 4 位自动生成当日路径）
 - bestMow CDT 前方矩形框修正（非 K100 模式下可选启用）
 - 统一输出目录命名（根据硬件模式自动选择 432 或 384 后缀）
+- Vite 开发服务器看门狗（自动监控和重启，保证服务稳定性）
 
 ## 快速开始
 
@@ -197,12 +198,29 @@ pkill -f vite
 
 ## 守护服务部署
 
+### 避障监控守护服务
 ```bash
 # 安装避障监控守护服务（systemd）
 cp script/monitor_avoiding.service /etc/systemd/system/
 systemctl enable monitor_avoiding
 systemctl start monitor_avoiding
 ```
+
+### Vite 开发服务器看门狗
+自动监控 Vite 开发服务器状态，一旦检测到服务掉线，自动重启服务。
+
+```bash
+# 启动看门狗
+./start-watchdog.sh
+
+# 停止看门狗
+./stop-watchdog.sh
+
+# 查看日志
+tail -f /tmp/vite-watchdog.log
+```
+
+详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 
 ## 开发说明
 
@@ -223,3 +241,4 @@ systemctl start monitor_avoiding
 - [任务完成报告](TASK_COMPLETION_REPORT.md)
 - [双目离线测试快速开始](stereo_perception_multi2_offline_test/QUICK_START.md)
 - [编译验证报告](stereo_perception_multi2_offline_test/COMPILATION_VERIFICATION_REPORT.md)
+- [Vite 看门狗说明](WATCHDOG.md)

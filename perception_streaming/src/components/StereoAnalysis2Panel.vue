@@ -108,6 +108,7 @@ import {
   createThreeScene, attachOrbitControls, updateSphCamera,
   type SphState,
 } from '../composables/usePcdRenderer'
+import { parsePcdBuffer } from '../utils/pcdParser'
 
 const folderPath = ref('data/stereo_debug/0115/20260421')
 const dayFolderPath = ref('data/stereo_debug/0016/20260420')
@@ -838,8 +839,7 @@ async function loadResultPcd(i: number) {
   try {
     const res = await fetch(`/offline/local_file?path=${encodeURIComponent(pcdPath)}`)
     if (!res.ok) { resultPcdStatus.value = '❌ 无结果点云'; return }
-    const text = await res.text()
-    loadPcdIntoCtx(resultPcdCtx, text, resultPcdStatus)
+    loadPcdIntoCtx(resultPcdCtx, await res.arrayBuffer(), resultPcdStatus)
   } catch (e) { resultPcdStatus.value = `❌ ${e}` }
 }
 
@@ -850,20 +850,7 @@ function alternateDayPcdDir(dir: string) {
 }
 
 
-// ─── PCD renderer ───���────────────────────────────────────────
-const LA2_LABEL_COLOR: Record<number, [number, number, number]> = {
-  0: [0, 0, 200/255], 1: [0, 0, 200/255],
-  2: [100/255, 255/255, 102/255], 3: [118/255, 89/255, 0],
-  4: [1, 1, 0], 5: [1, 0, 0], 6: [1, 165/255, 0],
-  7: [1, 20/255, 147/255], 8: [0, 1, 1],
-  100: [1, 0, 0], 101: [1, 0, 0], 102: [1, 0, 0],
-  103: [1, 0, 1], 104: [1, 0, 0], 105: [1, 1, 0], 106: [0, 1, 1],
-}
-const PASSABLE_LABELS = new Set([2])
-function la2Color(label: number): [number, number, number] {
-  return LA2_LABEL_COLOR[label] ?? [0.5, 0.5, 0.5]
-}
-
+// ─── PCD renderer ───────────────────────────────────────────
 interface PcdCtx {
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera
   animId: number; points: THREE.Points | null; sph: SphState; orbitCleanup: (() => void) | null
@@ -887,43 +874,14 @@ function initViewer(canvas: HTMLCanvasElement): PcdCtx {
   return ctx
 }
 
-function parsePcd(text: string): { pos: Float32Array; col: Float32Array } {
-  const lines = text.split('\n')
-  let inData = false, labelCol = -1
-  const pos: number[] = [], col: number[] = []
-  for (const line of lines) {
-    if (!inData) {
-      if (line.startsWith('FIELDS')) {
-        const cols = line.trim().split(/\s+/).slice(1)
-        labelCol = cols.indexOf('label')
-      } else if (line.startsWith('DATA')) { inData = true }
-      continue
-    }
-    const parts = line.trim().split(/\s+/)
-    if (parts.length < 4) continue
-    const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
-    if (!isFinite(x) || !isFinite(y) || !isFinite(z)) continue
-    pos.push(x, z, -y)
-    let label = 0
-    if (labelCol >= 0 && labelCol < parts.length) {
-      label = parseInt(parts[labelCol])
-      if (!isFinite(label)) label = 0
-    }
-    const [r, g, b] = la2Color(label)
-    const dim = PASSABLE_LABELS.has(label) ? 0.35 : 1.0
-    col.push(r * dim, g * dim, b * dim)
-  }
-  return { pos: new Float32Array(pos), col: new Float32Array(col) }
-}
-
-function loadPcdIntoCtx(ctx: PcdCtx, text: string, statusRef: { value: string }) {
+function loadPcdIntoCtx(ctx: PcdCtx, buffer: ArrayBuffer, statusRef: { value: string }) {
   if (ctx.points) {
     ctx.scene.remove(ctx.points)
     ctx.points.geometry.dispose()
     ;(ctx.points.material as THREE.Material).dispose()
     ctx.points = null
   }
-  const { pos, col } = parsePcd(text)
+  const { pos, col, pointCount } = parsePcdBuffer(buffer)
   if (pos.length === 0) { statusRef.value = '无有效点'; return }
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
@@ -931,7 +889,7 @@ function loadPcdIntoCtx(ctx: PcdCtx, text: string, statusRef: { value: string })
   const mat = new THREE.PointsMaterial({ size: 0.06, vertexColors: true, sizeAttenuation: true })
   ctx.points = new THREE.Points(geo, mat)
   ctx.scene.add(ctx.points)
-  const n = pos.length / 3
+  const n = pointCount
   let cx = 0, cy = 0, cz = 0
   for (let i = 0; i < n; i++) { cx += pos[i*3]; cy += pos[i*3+1]; cz += pos[i*3+2] }
   updateSphCamera(ctx.cam, ctx.sph, new THREE.Vector3(cx/n, cy/n, cz/n))
@@ -960,7 +918,7 @@ async function selectPair(i: number) {
         res = await fetch(`/offline/local_file?path=${encodeURIComponent(pcdPath)}`)
       }
       if (!res.ok) { pcdStatus.value = '❌ 无原始点云' }
-      else { loadPcdIntoCtx(pcdCtx, await res.text(), pcdStatus) }
+      else { loadPcdIntoCtx(pcdCtx, await res.arrayBuffer(), pcdStatus) }
     } catch (e) { pcdStatus.value = `❌ ${e}` }
   } else if (canvas) {
     pcdStatus.value = '❌ 无原始点云'
@@ -1025,7 +983,7 @@ async function selectPair(i: number) {
       }
       else {
         console.log('[selectPair] Successfully loaded PCD from:', pcdPath)
-        loadPcdIntoCtx(resultPcdCtx, await res.text(), resultPcdStatus)
+        loadPcdIntoCtx(resultPcdCtx, await res.arrayBuffer(), resultPcdStatus)
       }
     } catch (e) {
       console.error('[selectPair] Error loading result PCD:', e)

@@ -7,27 +7,11 @@
 
 // Helper function to filter labels and detections
 static void filterLabelDect(cv::Mat &src_lab, std::vector<Detection> &dect_src,
-                     cv::Mat &lab_dst, std::vector<Detection> &dect_dst,
-                     bool enable_det, bool force_bottom_region = true)
+                            cv::Mat &lab_dst, std::vector<Detection> &dect_dst,
+                            bool enable_det)
 {
     // 先克隆，避免污染原图
     src_lab.copyTo(lab_dst);
-
-    cv::Mat mask_zero;
-    cv::compare(lab_dst, 0, mask_zero, cv::CMP_EQ);
-
-    // 将所有 label == 0 的像素设置为 label == 2
-    lab_dst.setTo(2, mask_zero);
-
-    // 只有在 force_bottom_region 为 true 时才强制设置底部区域
-    if (force_bottom_region) {
-        int shift_high = 370;
-        // 强制将指定区域 (x=0, y=370, x=640, y=384) 的 label 设置为 2
-        cv::Rect force_region(0, shift_high, 640,
-                              384 - shift_high); // 宽度为 640，高度为 14 (384 - 370)
-        lab_dst(force_region)
-            .setTo(cv::Scalar(2)); // 将该区域的所有像素设置为 label == 2
-    }
 
     for (size_t i = 0; i < dect_src.size(); i++)
     {
@@ -289,13 +273,20 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
 
     // ========== 图像裁剪和预处理 ==========
     cv::Mat cropped_img, resized_img;
-    cv::Mat lab_dst;
 
-    // Model 6 固定使用 640x432 裁剪，然后 resize 到 640x384
-    std::cout << "[Process] Crop to 640x432, then resize to 640x384" << std::endl;
-    cv::Rect crop_region(0, 0, 640, 432);
-    cropped_img = left_img(crop_region).clone();
-    cv::resize(cropped_img, resized_img, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
+    if (hardware_mode_.isK100Hardware()) {
+        // K100 模式：裁剪到 640x432，再 resize 到 640x384 参与推理/融合
+        std::cout << "[Process] K100 mode: Crop to 640x432, then resize to 640x384" << std::endl;
+        cv::Rect crop_region(0, 0, 640, 432);
+        cropped_img = left_img(crop_region).clone();
+        cv::resize(cropped_img, resized_img, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
+    } else {
+        // bestmow 模式：直接裁剪到 640x384，并保持 384 尺度
+        std::cout << "[Process] bestmow mode: Crop to 640x384" << std::endl;
+        cv::Rect crop_region(0, 0, 640, 384);
+        cropped_img = left_img(crop_region).clone();
+        resized_img = cropped_img.clone();
+    }
 
     // ========== 1. Multi-Sub 推理 ==========
     std::cout << "[Process] Running Multi-Sub inference..." << std::endl;
@@ -307,29 +298,16 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
     mul_sub_perception_.perception_process_bgr_no_argmax_erode(
         resized_img, detections, img_label384, lab_out, config_.erode_pixel);
 
-    // 过滤标签和检测框
-    // K100 模式：不强制设置底部区域，真实展示分割结果
-    // bestmow 模式：强制设置底部区域为 label==2
+    // 过滤标签和检测框，保留模型输出的原始标签分布
     cv::Mat dst_label384(384, 640, CV_8UC1);
-    bool force_bottom = !hardware_mode_.isK100Hardware();
     filterLabelDect(lab_out, detections, dst_label384, dst_detections,
-                    config_.enable_draw_detection_box, force_bottom);
-
-    // 将分割结果从 640x384 resize 回 640x432
-    cv::resize(dst_label384, lab_dst, cv::Size(640, 432), 0, 0, cv::INTER_NEAREST);
-
-    // 将检测框 y 坐标按 432/384 比例缩放
-    const float y_scale = 432.0f / 384.0f;
-    for (auto& det : dst_detections) {
-        det.bbox.ymin = static_cast<int>(det.bbox.ymin * y_scale);
-        det.bbox.ymax = static_cast<int>(det.bbox.ymax * y_scale);
-    }
+                    config_.enable_draw_detection_box);
 
     result.detections = dst_detections;
-    result.segmentation = lab_dst;
+    result.segmentation = dst_label384;
 
-    if (lab_dst.empty()) {
-        std::cerr << "[Error] lab_dst is empty after Multi-Sub inference!" << std::endl;
+    if (result.segmentation.empty()) {
+        std::cerr << "[Error] segmentation is empty after Multi-Sub inference!" << std::endl;
         return result;
     }
 
@@ -352,8 +330,19 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
 
         // 立体匹配
         cv::Mat disparity = stereo_matcher_.stereo_multi_process_depth(left_gray, right_gray);
-        result.depth = stereo_matcher_.stereo_multi_process_filter(
-            disparity, lab_dst, config_.enable_height_filter);
+        cv::Mat filtered_depth = stereo_matcher_.stereo_multi_process_filter(
+            disparity, result.segmentation, config_.enable_height_filter);
+
+        if (hardware_mode_.isK100Hardware()) {
+            // K100 模式：深度也从 432 视场归一到 384，用于融合
+            cv::Mat depth_432 = filtered_depth(cv::Rect(0, 0, 640, 432)).clone();
+            cv::resize(depth_432, result.depth, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
+            std::cout << "[Process] K100 mode: Model 6 depth cropped to 432, resized to 384" << std::endl;
+        } else {
+            // bestmow 模式：直接使用 384 视场深度
+            result.depth = filtered_depth(cv::Rect(0, 0, 640, 384)).clone();
+            std::cout << "[Process] bestmow mode: Model 6 depth cropped to 384" << std::endl;
+        }
 
         std::cout << "[Process] Depth map computed: " << result.depth.size() << std::endl;
     } else {
@@ -369,7 +358,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
 
         stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion(
             result.depth, result.segmentation, result.detections,
-            cropped_img,  // 使用 640x432 的原始裁剪图像
+            resized_img,  // 使用 640x384 的融合图像
             xyz_rgbl_cloud, out_xyz_rgbl_cloud);
 
         result.pointcloud = out_xyz_rgbl_cloud;
@@ -555,9 +544,16 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
 
         // 根据推理模式和硬件模式调整可视化图像尺寸
         if (config_.infer_mode == 6) {
-            // Model 6: 分割结果是 640x432，直接使用
-            vis_cropped_img = result.cropped_img;
-            vis_segmentation = result.segmentation;
+            if (hardware_mode_.isK100Hardware()) {
+                // K100 模式：融合时用 384，展示时再回放到 432
+                std::cout << "[Debug] K100 mode: Resizing Model 6 segmentation from 384 to 432 for visualization" << std::endl;
+                cv::resize(result.segmentation, vis_segmentation, cv::Size(640, 432), 0, 0, cv::INTER_NEAREST);
+                vis_cropped_img = result.cropped_img;
+            } else {
+                // bestmow 模式：直接使用 384 尺寸
+                vis_cropped_img = result.cropped_img;
+                vis_segmentation = result.segmentation;
+            }
         } else if (config_.infer_mode == 7) {
             // Model 7: 根据硬件模式调整
             if (hardware_mode_.isK100Hardware()) {
@@ -572,11 +568,20 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
             }
         }
 
+        std::vector<Detection> vis_detections = result.detections;
+        if (config_.infer_mode == 6 && hardware_mode_.isK100Hardware()) {
+            const float y_scale = 432.0f / 384.0f;
+            for (auto& det : vis_detections) {
+                det.bbox.ymin = static_cast<int>(det.bbox.ymin * y_scale);
+                det.bbox.ymax = static_cast<int>(det.bbox.ymax * y_scale);
+            }
+        }
+
         // 1. 绘制分割结果（纯色分割图 + 叠加图）
         // Model 6: 根据配置决定是否绘制检测框
         bool enable_draw_box = (config_.infer_mode == 6) && config_.enable_draw_detection_box;
         pure_seg_mat = drawResultOptimized(vis_cropped_img, vis_segmentation,
-                                          result.detections, img_seg_show, enable_draw_box);
+                                          vis_detections, img_seg_show, enable_draw_box);
 
         std::cout << "[Debug] pure_seg_mat: " << pure_seg_mat.size()
                   << ", img_seg_show: " << img_seg_show.size() << std::endl;

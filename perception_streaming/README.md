@@ -30,6 +30,8 @@
 - Docker 容器化部署支持
 - 硬件模式切换（白天/夜晚模式，自动调整感知参数）
 - 双目匹配算法优化（支持多种匹配策略）
+- K100/bestmow 硬件自适应（自动调整图像裁剪和分割策略）
+- 高性能 PCD 解析器（支持二进制格式，提升点云加载速度）
 
 ## 快速开始
 
@@ -75,10 +77,12 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 │   │   ├── LogFetchPanel.vue         # 日志分析面板（多设备支持）
 │   │   ├── PointCloudPanel.vue       # 3D 点云渲染
 │   │   └── ObstacleMonitor.vue       # 避障监控
-│   └── composables/                  # 组合式函数
-│       ├── useAgoraRTC.ts            # Agora RTC 封装
-│       ├── usePcdRenderer.ts         # 点云渲染工具
-│       └── useBagPcdViewers.ts       # Bag 点云查看器
+│   ├── composables/                  # 组合式函数
+│   │   ├── useAgoraRTC.ts            # Agora RTC 封装
+│   │   ├── usePcdRenderer.ts         # 点云渲染工具
+│   │   └── useBagPcdViewers.ts       # Bag 点云查看器
+│   └── utils/                        # 工具函数
+│       └── pcdParser.ts              # 高性能 PCD 解析器（支持二进制格式）
 ├── robot_monitor/                    # 后端服务
 │   ├── ssh_bridge.py                 # SSH + WebSocket 桥（8765）
 │   ├── offline_server.py             # 离线测试服务器（8769，增强版）
@@ -92,7 +96,12 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 │   └── src/                          # C++ 源码（双目匹配、点云生成）
 ├── stereo_perception_multi2_offline_test/  # 双目离线测试工具
 │   ├── include/                      # 头文件（配置、处理器、工具、PCL封装）
-│   └── src/                          # C++ 源码（离线处理主程序）
+│   └── src/                          # C++ 源码（离线处理主程序，支持 K100/bestmow 自适应）
+├── tests/                            # 测试文件
+│   ├── model6-hardware-size-contract.test.mjs  # Model 6 硬件尺寸契约测试
+│   ├── pcd-parser.test.mjs           # PCD 解析器测试
+│   ├── stereo-stop-button.test.mjs   # 双目停止按钮测试
+│   └── stereo-upload-timeout.test.mjs # 双目上传超时测试
 ├── Dockerfile.perception             # Docker 镜像构建文件
 ├── build_offline_test_main_in_docker.sh  # Docker 构建脚本
 ├── start.sh                          # 一键启动脚本

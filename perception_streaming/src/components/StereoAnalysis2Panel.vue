@@ -4,16 +4,16 @@
       <label>SN末尾4位:</label>
       <input v-model="snLast4" class="sa2-sn-input" placeholder="0015" maxlength="4" @input="onSnInput" />
       <label>📁 夜晚双目文件目录:</label>
-      <input v-model="folderPath" class="sa2-path-input" placeholder="含 images/ pointclouds/ 子目录的文件夹路径" @keyup.enter="doScanNight" />
-      <button class="sa2-dbg-btn" style="background:#4c1d95;margin-right:8px" :disabled="offlineRunning || !folderPath.trim() || pairs.length === 0" @click="() => { console.log('[Button Click] Night Debug clicked'); runNightOfflineDebug(); }">{{ offlineRunning ? '⏳ 运行中...' : '🌙 夜间离线debug' }}</button>
+      <input v-model="nightFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter="runNightOfflineDebug" />
+      <button class="sa2-dbg-btn" style="background:#4c1d95;margin-right:8px" :disabled="offlineRunning || !nightFolderPath.trim()" @click="() => { console.log('[Button Click] Night Debug clicked'); runNightOfflineDebug(); }">{{ offlineRunning ? '⏳ 运行中...' : '🌙 夜间离线debug' }}</button>
       <label>📁 白天双目文件目录:</label>
-      <input v-model="dayFolderPath" class="sa2-path-input" placeholder="data/stereo_debug/0016/20260420" @keyup.enter="doScanDay" />
+      <input v-model="dayFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter="runDayOfflineDebug" />
       <button class="sa2-dbg-btn" style="background:#fb923c;color:#000;margin-right:8px" :disabled="offlineRunning || !dayFolderPath.trim()" @click="runDayOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '☀️ 白天离线debug' }}</button>
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;" title="K100硬件模式">
         <input type="checkbox" v-model="useK100Mode" style="cursor:pointer;" />
         <span>K100</span>
       </label>
-      <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">{{ offlineRunning ? '停止中...' : '停止' }}</button>
+      <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">停止</button>
       <label>标签:</label>
       <input v-model.number="filterLabel" type="number" class="sa2-label-input" />
       <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="() => doScan()">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
@@ -24,7 +24,6 @@
       <button class="sa2-arch-btn" :disabled="selectedIdx < 0 || !archiveDir" @click="archiveFrame">📦 障碍物归档</button>
       <span v-if="archiveStatus" class="sa2-arch-status" :class="{ error: archiveError }">{{ archiveStatus }}</span>
       <span class="sa2-sep">|</span>
-      <button class="sa2-dbg-btn" style="background:#065f46;margin-left:4px" :disabled="offlineRunning || !folderPath" @click="resumeOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '▶ 继续执行' }}</button>
       <div v-if="offlineRunning && pairs.length > 0" class="sa2-progress-container">
         <div class="sa2-progress-bar" :style="{ width: progressPercent + '%' }"></div>
         <span class="sa2-progress-text">{{ progressPercent }}% ({{ progressCurrent }}/{{ progressTotal }})</span>
@@ -110,16 +109,15 @@ import {
 } from '../composables/usePcdRenderer'
 import { parsePcdBuffer } from '../utils/pcdParser'
 
-const folderPath = ref('data/stereo_debug/0115/20260421')
-const dayFolderPath = ref('data/stereo_debug/0016/20260420')
+const STEREO_DEBUG_PREFIX = 'data/stereo_debug'
+const nightFolderInput = ref('0115/20260421')
+const dayFolderInput = ref('0016/20260420')
 const snLast4 = ref('0115')
 const useK100Mode = ref(true)  // K100复选框状态，默认选中
 const filterLabel = ref(0)
 const scanning = ref(false)
 const scanStatus = ref('')
 const scanError = ref(false)
-const archiveDir = ref('')
-watch(folderPath, (p) => { if (p) archiveDir.value = p.replace(/\/+$/, '') + '/select' })
 const archiveStatus = ref('')
 const archiveError = ref(false)
 const offlineRunning = ref(false)
@@ -139,12 +137,50 @@ const uploadStatus = ref('')
 const uploadError = ref(false)
 const UPLOAD_IMAGES_TIMEOUT_MS = 5 * 60 * 1000
 
-// 当输入SN末尾4位时，自动拼接路径和端口号
+function normalizeStereoDebugSuffix(value: string) {
+  const normalized = value.trim().replace(/\\/g, '/').replace(/^\/+/, '')
+  if (normalized === STEREO_DEBUG_PREFIX) return ''
+  if (normalized.startsWith(`${STEREO_DEBUG_PREFIX}/`)) {
+    return normalized.slice(STEREO_DEBUG_PREFIX.length + 1).replace(/^\/+/, '')
+  }
+  return normalized
+}
+
+function composeStereoDebugPath(value: string) {
+  const suffix = normalizeStereoDebugSuffix(value)
+  return suffix ? `${STEREO_DEBUG_PREFIX}/${suffix}` : ''
+}
+
+const nightFolderSuffix = computed({
+  get: () => normalizeStereoDebugSuffix(nightFolderInput.value),
+  set: (value: string) => { nightFolderInput.value = normalizeStereoDebugSuffix(value) },
+})
+
+const dayFolderSuffix = computed({
+  get: () => normalizeStereoDebugSuffix(dayFolderInput.value),
+  set: (value: string) => { dayFolderInput.value = normalizeStereoDebugSuffix(value) },
+})
+
+const nightFolderPath = computed({
+  get: () => composeStereoDebugPath(nightFolderInput.value),
+  set: (value: string) => { nightFolderInput.value = normalizeStereoDebugSuffix(value) },
+})
+
+const dayFolderPath = computed({
+  get: () => composeStereoDebugPath(dayFolderInput.value),
+  set: (value: string) => { dayFolderInput.value = normalizeStereoDebugSuffix(value) },
+})
+
+const folderPath = ref(nightFolderPath.value)
+const archiveDir = ref('')
+watch(folderPath, (p) => { if (p) archiveDir.value = p.replace(/\/+$/, '') + '/select' })
+
+// 当输入SN末尾4位时，自动拼接夜晚路径尾段和端口号
 function onSnInput() {
   const sn = snLast4.value.trim()
   if (sn.length === 4 && /^\d{4}$/.test(sn)) {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    folderPath.value = `data/stereo_debug/${sn}/${today}`
+    nightFolderInput.value = `${sn}/${today}`
     uploadPort.value = parseInt('1' + sn)
   }
 }
@@ -552,10 +588,11 @@ async function doScanDay() {
 
 async function doScanNight() {
   // 夜晚模式：扫描夜晚文件夹，使用 mode=7 (DSG)
-  if (!folderPath.value || !folderPath.value.trim()) {
+  if (!nightFolderPath.value || !nightFolderPath.value.trim()) {
     console.warn('[doScanNight] folderPath is empty')
     return
   }
+  folderPath.value = nightFolderPath.value
   lastOfflineInferMode.value = 7
   // 扫描时指定 preferMode=7，这样会查找 dsg_7_205_432 和 pcd_7_205_432
   await doScan(7)
@@ -681,9 +718,8 @@ async function doUploadImages() {
 
 async function runNightOfflineDebug() {
   console.log('[runNightOfflineDebug] Starting DSG Night mode processing')
-  console.log('[runNightOfflineDebug] folderPath:', folderPath.value)
+  console.log('[runNightOfflineDebug] folderPath:', nightFolderPath.value)
   console.log('[runNightOfflineDebug] useK100Mode:', useK100Mode.value)
-  lastOfflineInferMode.value = 7
 
   // Mode 7: DSG Night recognition
   // - Uses adaptive stereo matching parameters for night scenes
@@ -692,12 +728,7 @@ async function runNightOfflineDebug() {
   // - Maps detection IDs to 100+ format
   // - Supports optional CDT (charge station detection)
   // - Performs depth computation and fusion at 432 resolution
-  await doRunOffline(folderPath.value, 7, 205, false, useK100Mode.value)
-}
-
-async function resumeOfflineDebug() {
-  const resumeDir = lastOfflineInferMode.value === 6 ? dayFolderPath.value : folderPath.value
-  await doRunOffline(resumeDir, lastOfflineInferMode.value, 205, true, useK100Mode.value)
+  await runOfflineDebugWithResume(nightFolderPath.value, 7, '夜晚')
 }
 
 async function runDayOfflineDebug() {
@@ -708,44 +739,7 @@ async function runDayOfflineDebug() {
   console.log('[runDayOfflineDebug] useK100Mode:', useK100Mode.value)
 
   try {
-    lastOfflineInferMode.value = 6
-
-    if (!dayFolderPath.value || !dayFolderPath.value.trim()) {
-      console.error('[runDayOfflineDebug] dayFolderPath is empty')
-      offlineStatus.value = '✗ 请输入白天文件夹路径'
-      offlineError.value = true
-      return
-    }
-
-    // 先扫描白天文件夹，确保 pairs 有数据
-    if (pairs.value.length === 0 || folderPath.value !== dayFolderPath.value) {
-      console.log('[runDayOfflineDebug] Need to scan first')
-      folderPath.value = dayFolderPath.value
-      console.log('[runDayOfflineDebug] Calling doScan(6)...')
-      await doScan(6)
-      console.log('[runDayOfflineDebug] doScan completed, pairs.length:', pairs.value.length)
-
-      // 等待扫描完成
-      if (pairs.value.length === 0) {
-        console.error('[runDayOfflineDebug] No image pairs found after scanning')
-        offlineStatus.value = '✗ 未找到图片或点云'
-        offlineError.value = true
-        return
-      }
-    }
-
-    console.log('[runDayOfflineDebug] Found', pairs.value.length, 'pairs')
-
-    // 检查是否有已处理的结果，如果有则继续执行
-    const expectedDir = expectedResultDir(6, dayFolderPath.value, useK100Mode.value)
-    const hasResults = resultImages.value.length > 0 && resultDir.value === expectedDir
-    const resume = hasResults
-    console.log('[runDayOfflineDebug] expectedDir:', expectedDir)
-    console.log('[runDayOfflineDebug] hasResults:', hasResults, 'resume:', resume)
-
-    // Mode 6: CDT+Multi-Sub Day mode
-    console.log('[runDayOfflineDebug] Calling doRunOffline with mode=6')
-    await doRunOffline(dayFolderPath.value, 6, 205, resume, useK100Mode.value)
+    await runOfflineDebugWithResume(dayFolderPath.value, 6, '白天')
     console.log('[runDayOfflineDebug] === END ===')
   } catch (error) {
     console.error('[runDayOfflineDebug] === ERROR ===', error)
@@ -755,10 +749,29 @@ async function runDayOfflineDebug() {
   }
 }
 
-async function resumeDayOfflineDebug() {
-  // 继续执行白天模式
-  lastOfflineInferMode.value = 6
-  await doRunOffline(dayFolderPath.value, 6, 205, true, useK100Mode.value)
+async function runOfflineDebugWithResume(inputDir: string, inferMode: number, modeLabel: string) {
+  if (!inputDir || !inputDir.trim()) {
+    offlineStatus.value = `✗ 请输入${modeLabel}文件夹路径`
+    offlineError.value = true
+    return
+  }
+
+  lastOfflineInferMode.value = inferMode
+  folderPath.value = inputDir
+  await doScan(inferMode)
+  if (pairs.value.length === 0) {
+    offlineStatus.value = '✗ 未找到图片或点云'
+    offlineError.value = true
+    return
+  }
+
+  const expectedDir = expectedResultDir(inferMode, inputDir, useK100Mode.value)
+  const existingCount = resultDir.value === expectedDir ? resultImages.value.length : 0
+  const resume = existingCount > 0
+  console.log('[runOfflineDebugWithResume] mode:', inferMode)
+  console.log('[runOfflineDebugWithResume] expectedDir:', expectedDir)
+  console.log('[runOfflineDebugWithResume] existingCount:', existingCount, 'total:', pairs.value.length, 'resume:', resume)
+  await doRunOffline(inputDir, inferMode, 205, resume, useK100Mode.value)
 }
 
 async function doRunOffline(inputDir: string, inferMode: number, erodePixel: number, resume: boolean = false, useK100: boolean = true) {
@@ -808,7 +821,7 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
 
 async function stopOfflineDebug() {
   if (!offlineRunning.value) return
-  offlineStatus.value = '停止中...'
+  offlineStatus.value = '正在请求停止...'
   offlineError.value = false
   try {
     const res = await fetch('/offline/stop', { method: 'POST' })
@@ -1019,6 +1032,8 @@ onBeforeUnmount(() => {
 .sa2-input-bar label { font-size:11px; color:#888; white-space:nowrap; }
 .sa2-path-input { flex:1; min-width:260px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 8px; color:#e0e0e0; font-size:11px; font-family:monospace; }
 .sa2-path-input:focus { outline:none; border-color:#4fc3f7; }
+.sa2-path-tail-input { width:150px; min-width:150px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 8px; color:#e0e0e0; font-size:11px; font-family:monospace; }
+.sa2-path-tail-input:focus { outline:none; border-color:#4fc3f7; }
 .sa2-sn-input { width:60px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 8px; color:#e0e0e0; font-size:11px; font-family:monospace; text-align:center; }
 .sa2-sn-input:focus { outline:none; border-color:#4fc3f7; }
 .sa2-path-input-sm { width:200px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 8px; color:#e0e0e0; font-size:11px; font-family:monospace; }

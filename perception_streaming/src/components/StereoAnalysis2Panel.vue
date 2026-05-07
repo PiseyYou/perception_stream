@@ -4,16 +4,18 @@
       <label>SN末尾4位:</label>
       <input v-model="snLast4" class="sa2-sn-input" placeholder="0015" maxlength="4" @input="onSnInput" />
       <label>📁 夜晚双目文件目录:</label>
-      <input v-model="nightFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter="runNightOfflineDebug" />
+      <input v-model="nightFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter.prevent="doScanNight" />
       <button class="sa2-dbg-btn" style="background:#4c1d95;margin-right:8px" :disabled="offlineRunning || !nightFolderPath.trim()" @click="() => { console.log('[Button Click] Night Debug clicked'); runNightOfflineDebug(); }">{{ offlineRunning ? '⏳ 运行中...' : '🌙 夜间离线debug' }}</button>
       <label>📁 白天双目文件目录:</label>
-      <input v-model="dayFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter="runDayOfflineDebug" />
+      <input v-model="dayFolderSuffix" class="sa2-path-tail-input" placeholder="7958/20260504" @keyup.enter.prevent="doScanDay" />
       <button class="sa2-dbg-btn" style="background:#fb923c;color:#000;margin-right:8px" :disabled="offlineRunning || !dayFolderPath.trim()" @click="runDayOfflineDebug">{{ offlineRunning ? '⏳ 运行中...' : '☀️ 白天离线debug' }}</button>
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;" title="K100硬件模式">
         <input type="checkbox" v-model="useK100Mode" style="cursor:pointer;" />
         <span>K100</span>
       </label>
       <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">停止</button>
+      <button class="sa2-filter-size-btn" :disabled="offlineRunning || filterSizeRunning || !nightFolderPath.trim() || !dayFolderPath.trim()" @click="doFilterStereoImages">{{ filterSizeRunning ? '筛选中...' : '筛选双目图片' }}</button>
+      <span v-if="filterSizeStatus" class="sa2-filter-size-status" :class="{ error: filterSizeError }">{{ filterSizeStatus }}</span>
       <label>标签:</label>
       <input v-model.number="filterLabel" type="number" class="sa2-label-input" />
       <button class="sa2-scan-btn" :disabled="scanning || !folderPath" @click="() => doScan()">{{ scanning ? '⏳ 扫描中...' : '🔍 扫描障碍帧' }}</button>
@@ -123,6 +125,9 @@ const archiveError = ref(false)
 const offlineRunning = ref(false)
 const offlineStatus = ref('')
 const offlineError = ref(false)
+const filterSizeRunning = ref(false)
+const filterSizeStatus = ref('')
+const filterSizeError = ref(false)
 const progressCurrent = ref(0)
 const progressTotal = ref(0)
 const progressPercent = computed(() => progressTotal.value > 0 ? Math.round((progressCurrent.value / progressTotal.value) * 100) : 0)
@@ -204,6 +209,7 @@ const lastOfflineInferMode = ref(7)
 let offlineEventSource: EventSource | null = null
 let offlineReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let offlineStatusPollTimer: ReturnType<typeof setInterval> | null = null
+let offlineCompletionCheckTimer: ReturnType<typeof setTimeout> | null = null
 let offlineRunToken = 0
 
 async function readJsonResponse<T>(res: Response, action: string): Promise<T> {
@@ -241,22 +247,21 @@ function resetResultState() {
   resultPcdStatus.value = ''
 }
 
-function dayResultSuffix(useK100 = useK100Mode.value) {
+function stereoResultSuffix(useK100 = useK100Mode.value) {
   return useK100 ? '432' : '384'
 }
 
 function expectedResultDir(mode: number, inputDir: string, useK100 = useK100Mode.value) {
   const base = inputDir.replace(/\/+$/, '')
-  if (mode === 6) return `${base}/sub_6_205_${dayResultSuffix(useK100)}`
-  if (mode === 99) return `${base}/dsg_7_205_432`
-  if (mode === 7) return `${base}/dsg_7_205_432`
+  if (mode === 6) return `${base}/sub_6_205_${stereoResultSuffix(useK100)}`
+  if (mode === 99 || mode === 7) return `${base}/dsg_7_205_${stereoResultSuffix(useK100)}`
   return `${base}/output_${mode}_205`
 }
 
 function expectedResultPcdDir(mode: number, inputDir: string, useK100 = useK100Mode.value) {
   const base = inputDir.replace(/\/+$/, '')
-  if (mode === 6) return `${base}/pcd_6_205_${dayResultSuffix(useK100)}`
-  if (mode === 99 || mode === 7) return `${base}/pcd_7_205_432`
+  if (mode === 6) return `${base}/pcd_6_205_${stereoResultSuffix(useK100)}`
+  if (mode === 99 || mode === 7) return `${base}/pcd_7_205_${stereoResultSuffix(useK100)}`
   return `${base}/pcd_${mode}_205_432`
 }
 
@@ -290,11 +295,22 @@ function clearOfflineStatusPollTimer() {
   }
 }
 
+function clearOfflineCompletionCheckTimer() {
+  if (offlineCompletionCheckTimer) {
+    clearTimeout(offlineCompletionCheckTimer)
+    offlineCompletionCheckTimer = null
+  }
+}
+
 function closeOfflineEventStream() {
   if (offlineEventSource) {
     offlineEventSource.close()
     offlineEventSource = null
   }
+}
+
+function isOfflineProgressComplete() {
+  return progressTotal.value > 0 && progressCurrent.value >= progressTotal.value
 }
 
 function applyOfflineCompletion(payload: {
@@ -308,6 +324,7 @@ function applyOfflineCompletion(payload: {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
   clearOfflineStatusPollTimer()
+  clearOfflineCompletionCheckTimer()
   offlineRunning.value = false
   progressCurrent.value = progressTotal.value || pairs.value.length
 
@@ -336,6 +353,7 @@ function applyOfflineFailure(message: string) {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
   clearOfflineStatusPollTimer()
+  clearOfflineCompletionCheckTimer()
   offlineRunning.value = false
   offlineStatus.value = `✗ ${message}`
   offlineError.value = true
@@ -370,6 +388,16 @@ function scheduleOfflineEventReconnect(runToken: number, inputDir: string, delay
   }, delayMs)
 }
 
+function scheduleOfflineCompletionCheck(runToken: number, inputDir: string, delayMs = 800) {
+  if (!isOfflineProgressComplete()) return
+  clearOfflineCompletionCheckTimer()
+  offlineCompletionCheckTimer = setTimeout(() => {
+    offlineCompletionCheckTimer = null
+    if (runToken !== offlineRunToken || !offlineRunning.value || !isOfflineProgressComplete()) return
+    void reconcileOfflineRunState(runToken, inputDir)
+  }, delayMs)
+}
+
 async function reconcileOfflineRunState(runToken: number, inputDir: string) {
   if (runToken !== offlineRunToken) return
   try {
@@ -382,6 +410,9 @@ async function reconcileOfflineRunState(runToken: number, inputDir: string) {
     if (data.running) {
       offlineRunning.value = true
       offlineError.value = false
+      if (isOfflineProgressComplete()) {
+        offlineStatus.value = '等待后端结束确认...'
+      }
       if (!offlineStatus.value) {
         offlineStatus.value = progressCurrent.value > 0
           ? `正在运行第 ${progressCurrent.value}/${progressTotal.value || pairs.value.length} 张`
@@ -451,13 +482,16 @@ function connectOfflineEventStream(runToken: number, inputDir: string) {
         progressCurrent.value = parseInt(matchProgress[1])
         progressTotal.value = parseInt(matchProgress[2])
         offlineStatus.value = `正在运行第 ${progressCurrent.value}/${progressTotal.value} 张`
+        scheduleOfflineCompletionCheck(runToken, inputDir)
       } else if (matchSeq) {
         progressCurrent.value = parseInt(matchSeq[1]) + 1
         offlineStatus.value = `正在运行第 ${progressCurrent.value}/${pairs.value.length} 张`
+        scheduleOfflineCompletionCheck(runToken, inputDir)
       } else if (matchSkip || matchSkipNight) {
         if (progressCurrent.value < progressTotal.value) progressCurrent.value++
         const skippedFile = matchSkip ? matchSkip[1] : matchSkipNight[1]
         offlineStatus.value = `跳过已存在: ${skippedFile.split('/').pop()}`
+        scheduleOfflineCompletionCheck(runToken, inputDir)
       } else if (matchProcessing) {
         const parts = msg.text.match(/Processing\s+(\d+)\/(\d+)/)
         if (parts) {
@@ -465,10 +499,12 @@ function connectOfflineEventStream(runToken: number, inputDir: string) {
           progressTotal.value = parseInt(parts[2])
         }
         offlineStatus.value = `正在处理: ${matchProcessing[1].split('/').pop()}`
+        scheduleOfflineCompletionCheck(runToken, inputDir)
       } else if (matchAnyProgress) {
         progressCurrent.value = parseInt(matchAnyProgress[1])
         progressTotal.value = parseInt(matchAnyProgress[2])
         offlineStatus.value = `运行中 ${progressCurrent.value}/${progressTotal.value}`
+        scheduleOfflineCompletionCheck(runToken, inputDir)
       } else {
         offlineStatus.value = msg.text.length > 30 ? msg.text.slice(-30) : msg.text
       }
@@ -476,6 +512,8 @@ function connectOfflineEventStream(runToken: number, inputDir: string) {
       applyOfflineCompletion(msg)
     } else if (msg.type === 'error') {
       applyOfflineFailure(msg.text)
+    } else if (msg.type === 'stopped') {
+      applyOfflineFailure(msg.text || '已停止离线程序')
     } else if (msg.type === 'hello') {
       syncProgressFromStatus(msg.progress)
     }
@@ -544,7 +582,15 @@ async function doScan(preferMode?: number) {
         const checkRes = await fetch(`/offline/check_existing_result?${query.toString()}`)
         const checkData = await readJsonResponse<any>(checkRes, '检查已有结果')
         console.log('[doScan] check_existing_result response:', checkData)
-        if (checkData.ok && checkData.output_dir) {
+        const expectedDir = expectedResultDir(mode, folderPath.value, useK100Mode.value)
+        const expectedPcdDir = expectedResultPcdDir(mode, folderPath.value, useK100Mode.value)
+        const requiresRequestedResult = typeof preferMode === 'number'
+        const matchesRequestedResult = !requiresRequestedResult || (
+          checkData.infer_mode === mode &&
+          checkData.output_dir === expectedDir &&
+          checkData.pcd_dir === expectedPcdDir
+        )
+        if (checkData.ok && checkData.output_dir && matchesRequestedResult) {
           resultDir.value = checkData.output_dir
           resultImages.value = checkData.images || []
           resultDirLabel.value = checkData.output_dir.split('/').pop() || ''
@@ -554,7 +600,7 @@ async function doScan(preferMode?: number) {
           console.log('[doScan] resultImages count:', resultImages.value.length)
           offlineStatus.value = `✓ 已加载现有结果 (${resultImages.value.length} 张)`
         } else {
-          console.log('[doScan] No existing result found, will infer pcd_dir after processing')
+          console.log('[doScan] No matching existing result found, will infer requested result dirs')
           applyInferredResultDirs(mode, folderPath.value, useK100Mode.value)
         }
       } catch (error) {
@@ -594,7 +640,7 @@ async function doScanNight() {
   }
   folderPath.value = nightFolderPath.value
   lastOfflineInferMode.value = 7
-  // 扫描时指定 preferMode=7，这样会查找 dsg_7_205_432 和 pcd_7_205_432
+  // 扫描时指定 preferMode=7，并根据 K100 复选框查找 432/384 输出目录
   await doScan(7)
 }
 
@@ -782,6 +828,7 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
   clearOfflineStatusPollTimer()
+  clearOfflineCompletionCheckTimer()
   lastOfflineInferMode.value = inferMode
   offlineRunning.value = true
   offlineStatus.value = '启动中...'
@@ -816,6 +863,7 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
     closeOfflineEventStream()
     clearOfflineReconnectTimer()
     clearOfflineStatusPollTimer()
+    clearOfflineCompletionCheckTimer()
   }
 }
 
@@ -827,6 +875,16 @@ async function stopOfflineDebug() {
     const res = await fetch('/offline/stop', { method: 'POST' })
     const data = await readJsonResponse<any>(res, '停止离线调试')
     if (!res.ok || !data.ok) {
+      if (data.error === 'not running') {
+        offlineRunToken += 1
+        closeOfflineEventStream()
+        clearOfflineReconnectTimer()
+        clearOfflineStatusPollTimer()
+        clearOfflineCompletionCheckTimer()
+        offlineRunning.value = false
+        offlineStatus.value = isOfflineProgressComplete() ? '运行已结束' : '已停止'
+        return
+      }
       offlineStatus.value = `✗ ${data.error || `HTTP ${res.status}`}`
       offlineError.value = true
       return
@@ -835,11 +893,62 @@ async function stopOfflineDebug() {
     closeOfflineEventStream()
     clearOfflineReconnectTimer()
     clearOfflineStatusPollTimer()
+    clearOfflineCompletionCheckTimer()
     offlineRunning.value = false
     offlineStatus.value = '已停止'
   } catch (e) {
+    if (isOfflineProgressComplete()) {
+      offlineRunToken += 1
+      closeOfflineEventStream()
+      clearOfflineReconnectTimer()
+      clearOfflineStatusPollTimer()
+      clearOfflineCompletionCheckTimer()
+      offlineRunning.value = false
+      offlineStatus.value = '运行已结束'
+      return
+    }
     offlineStatus.value = `✗ 停止失败: ${e}`
     offlineError.value = true
+  }
+}
+
+async function doFilterStereoImages() {
+  if (filterSizeRunning.value) return
+  filterSizeRunning.value = true
+  filterSizeStatus.value = '正在筛选...'
+  filterSizeError.value = false
+  try {
+    const res = await fetch('/offline/filter_stereo_image_size', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folders: [
+          { role: 'night', folder: nightFolderPath.value },
+          { role: 'day', folder: dayFolderPath.value },
+        ],
+      }),
+    })
+    const data = await readJsonResponse<any>(res, '筛选双目图片')
+    const totalMoved = data.total_moved ?? 0
+    const totalScanned = data.total_scanned ?? 0
+    if (!res.ok || !data.ok) {
+      const errors = Array.isArray(data.errors) && data.errors.length
+        ? data.errors.join('; ')
+        : data.error || `HTTP ${res.status}`
+      filterSizeStatus.value = `✗ 筛选失败: ${errors}`
+      filterSizeError.value = true
+      return
+    }
+    filterSizeStatus.value = `✓ 筛选完成，扫描 ${totalScanned} 张，移动 ${totalMoved} 张`
+  } catch (e: any) {
+    const message = String(e?.message || e)
+    const hint = message.includes('返回空响应')
+      ? '后端接口未加载，请重启离线服务后再试'
+      : message
+    filterSizeStatus.value = `✗ 筛选失败: ${hint}`
+    filterSizeError.value = true
+  } finally {
+    filterSizeRunning.value = false
   }
 }
 
@@ -1022,6 +1131,7 @@ onBeforeUnmount(() => {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
   clearOfflineStatusPollTimer()
+  clearOfflineCompletionCheckTimer()
   if (pcdCtx) { disposeCtx(pcdCtx); pcdCtx = null }
   if (resultPcdCtx) { disposeCtx(resultPcdCtx); resultPcdCtx = null }
 })
@@ -1051,6 +1161,11 @@ onBeforeUnmount(() => {
 .sa2-stop-btn { padding:4px 10px; background:#7f1d1d; border:1px solid #b91c1c; border-radius:4px; color:#fecaca; font-size:11px; cursor:pointer; white-space:nowrap; }
 .sa2-stop-btn:hover:not(:disabled) { background:#991b1b; }
 .sa2-stop-btn:disabled { opacity:.45; cursor:not-allowed; }
+.sa2-filter-size-btn { padding:4px 12px; background:#0f3f46; border:1px solid #167985; border-radius:4px; color:#9de7ef; font-size:11px; cursor:pointer; white-space:nowrap; }
+.sa2-filter-size-btn:hover:not(:disabled) { background:#155866; }
+.sa2-filter-size-btn:disabled { opacity:.5; cursor:not-allowed; }
+.sa2-filter-size-status { font-size:11px; color:#9de7ef; font-family:monospace; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.sa2-filter-size-status.error { color:#ef5350; }
 .sa2-status { font-size:11px; color:#69f0ae; font-family:monospace; }
 .sa2-status.error { color:#ef5350; }
 .sa2-progress-container { width:180px; height:18px; background:#222; border-radius:9px; position:relative; overflow:hidden; border:1px solid #444; margin-left:8px; }

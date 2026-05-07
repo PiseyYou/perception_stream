@@ -194,11 +194,12 @@ void dsg_perception::perception_process(Mat &mat) {
 
 
 void dsg_perception::perception_postprocess_match(Mat& lab_out) {
-    hbSysFlushMem(&(output_tensors[0].sysMem[0]), HB_SYS_MEM_CACHE_INVALIDATE);
+    int seg_idx = (output_count > 1) ? 1 : 0;
+    hbSysFlushMem(&(output_tensors[seg_idx].sysMem[0]), HB_SYS_MEM_CACHE_INVALIDATE);
 
     // Simplified version: directly get result and draw
     // Mat result = argmax_and_draw(mat, count);
-    lab_match(output_tensors.data(), lab_out);
+    lab_match(output_tensors.data() + seg_idx, lab_out);
 }
 
 void dsg_perception::process_infer_match(Mat &mat, Mat& lab_out)
@@ -222,7 +223,9 @@ void dsg_perception::lab_match(hbDNNTensor *output_tensors, Mat& lab_out) {
     // cout << "tensorLayout: " << tensors[0].properties.tensorLayout << " (NCHW=2, NHWC=0)" << endl;
 
     // Create result Mat (single channel, CV_8UC1)
-    // cv::Mat lab_out(height, width, CV_8UC1);
+    if (lab_out.empty() || lab_out.rows != height || lab_out.cols != width || lab_out.type() != CV_8UC1) {
+        lab_out.create(height, width, CV_8UC1);
+    }
     uint8_t *result_ptr = lab_out.ptr<uint8_t>();
 
     int8_t *data = reinterpret_cast<int8_t *>(tensors[0].sysMem[0].virAddr);

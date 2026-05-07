@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
     // K100 专用配置
     config.enable_dsg_hsv_dark_filter = false;
     config.enable_dsg_detection_in_pointcloud = false;
+    config.enable_bestmow_cdt = !use_k100_mode;
 
     // 路径配置
     // 优先使用环境变量中的模型目录，否则使用相对路径

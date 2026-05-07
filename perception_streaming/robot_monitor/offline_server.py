@@ -278,6 +278,10 @@ def _day_output_suffix(use_k100: bool = True) -> str:
     return "432" if use_k100 else "384"
 
 
+def _stereo_output_suffix(use_k100: bool = True) -> str:
+    return "432" if use_k100 else "384"
+
+
 def _parse_bool(value, default: bool = True) -> bool:
     if value is None:
         return default
@@ -297,13 +301,13 @@ def _parse_bool(value, default: bool = True) -> bool:
 def build_output_dir(input_dir: str, infer_mode: int, erode_pixel: int = 205, use_k100: bool = True) -> str:
     mode_suffix = f"{infer_mode}_{erode_pixel}"
     if infer_mode == 99:
-        return os.path.join(input_dir, "dsg_7_205_432")
+        return os.path.join(input_dir, f"dsg_7_205_{_stereo_output_suffix(use_k100)}")
     if infer_mode == 6:
         return os.path.join(input_dir, f"sub_6_205_{_day_output_suffix(use_k100)}")
     if infer_mode == 5:
         return os.path.join(input_dir, f"cdt_mul_{mode_suffix}_0303_update_432")
     elif infer_mode == 7:
-        return os.path.join(input_dir, f"dsg_7_205_432")
+        return os.path.join(input_dir, f"dsg_7_205_{_stereo_output_suffix(use_k100)}")
     else:
         return os.path.join(input_dir, f"output_{mode_suffix}")
 
@@ -312,11 +316,12 @@ def build_pointcloud_dir(input_dir: str, infer_mode: int, erode_pixel: int = 205
     if infer_mode == 6:
         return os.path.join(input_dir, f"pcd_6_205_{_day_output_suffix(use_k100)}")
     if infer_mode in (7, 99):
-        return os.path.join(input_dir, "pcd_7_205_432")
+        return os.path.join(input_dir, f"pcd_7_205_{_stereo_output_suffix(use_k100)}")
     return os.path.join(input_dir, f"pcd_{infer_mode}_{erode_pixel}_432")
 
 
 _LEGACY_IMAGE_SUBDIRS = ("segmentation", "detection", "depth", "combined")
+_STEREO_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
 
 
 def _unique_backup_path(path: str) -> str:
@@ -332,6 +337,71 @@ def _unique_backup_path(path: str) -> str:
 
 def _has_legacy_image_layout(path: str) -> bool:
     return any(os.path.isdir(os.path.join(path, name)) for name in _LEGACY_IMAGE_SUBDIRS)
+
+
+def _resolve_project_path(path: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.abspath(os.path.join(PROJECT_ROOT, path))
+
+
+def _unique_move_destination(dest_dir: str, filename: str) -> str:
+    stem, ext = os.path.splitext(filename)
+    candidate = os.path.join(dest_dir, filename)
+    idx = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(dest_dir, f"{stem}_{idx}{ext}")
+        idx += 1
+    return candidate
+
+
+def _filter_stereo_image_size(folder: str, expected_size: tuple[int, int] = (1280, 480)) -> dict:
+    folder = _resolve_project_path(folder)
+    result = {
+        "folder": folder,
+        "scanned_count": 0,
+        "moved_count": 0,
+        "kept_count": 0,
+        "moved": [],
+        "errors": [],
+    }
+
+    if not os.path.isdir(folder):
+        result["errors"].append(f"目录不存在: {folder}")
+        return result
+    if not PIL_AVAILABLE:
+        result["errors"].append("PIL 不可用，无法读取图片分辨率")
+        return result
+
+    other_size_dir = os.path.join(folder, "other_size")
+    image_files = sorted(
+        fname for fname in os.listdir(folder)
+        if os.path.isfile(os.path.join(folder, fname)) and fname.lower().endswith(_STEREO_IMAGE_EXTS)
+    )
+    result["scanned_count"] = len(image_files)
+
+    for fname in image_files:
+        src = os.path.join(folder, fname)
+        try:
+            with Image.open(src) as img:
+                size = img.size
+            if size == expected_size:
+                result["kept_count"] += 1
+                continue
+
+            os.makedirs(other_size_dir, exist_ok=True)
+            dst = _unique_move_destination(other_size_dir, fname)
+            shutil.move(src, dst)
+            result["moved_count"] += 1
+            result["moved"].append({
+                "file": fname,
+                "size": [size[0], size[1]],
+                "to": dst,
+            })
+        except Exception as e:
+            result["errors"].append(f"{fname}: {e}")
+
+    return result
 
 
 def _ensure_writable_output_dir(path: str, backup_legacy_layout: bool = False) -> list[tuple[str, str]]:
@@ -428,6 +498,7 @@ def _find_result_pcd_dir(folder: str, output_dir: str, infer_mode: int, erode_pi
     if infer_mode in (7, 99):
         candidates.extend([
             os.path.join(folder, "pcd_7_205_432"),
+            os.path.join(folder, "pcd_7_205_384"),
             os.path.join(folder, "pcd_99_205_432"),
         ])
 
@@ -3115,6 +3186,53 @@ class OfflineHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             else:
                 self._json({"ok": False, "error": "not running"})
+            return
+
+        if path == "/offline/filter_stereo_image_size":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            folders = body.get("folders", [])
+            if not isinstance(folders, list) or not folders:
+                self._json({"ok": False, "error": "folders required"}, 400)
+                return
+
+            results = []
+            seen = set()
+            for item in folders:
+                role = ""
+                folder = ""
+                if isinstance(item, dict):
+                    role = str(item.get("role", ""))
+                    folder = str(item.get("folder", ""))
+                elif isinstance(item, str):
+                    folder = item
+                if not folder:
+                    results.append({"role": role, "folder": "", "scanned_count": 0,
+                                    "moved_count": 0, "kept_count": 0, "moved": [],
+                                    "errors": ["folder required"]})
+                    continue
+                resolved = _resolve_project_path(folder)
+                if resolved in seen:
+                    results.append({"role": role, "folder": resolved, "scanned_count": 0,
+                                    "moved_count": 0, "kept_count": 0, "moved": [],
+                                    "skipped": True, "errors": []})
+                    continue
+                seen.add(resolved)
+                item_result = _filter_stereo_image_size(resolved)
+                item_result["role"] = role
+                results.append(item_result)
+
+            total_scanned = sum(r.get("scanned_count", 0) for r in results)
+            total_moved = sum(r.get("moved_count", 0) for r in results)
+            errors = [err for r in results for err in r.get("errors", [])]
+            self._json({
+                "ok": len(errors) == 0,
+                "expected_size": [1280, 480],
+                "total_scanned": total_scanned,
+                "total_moved": total_moved,
+                "results": results,
+                "errors": errors,
+            })
             return
 
         if path == "/offline/check_result":

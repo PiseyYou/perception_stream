@@ -10,6 +10,7 @@
 // 引入感知模块
 #include "dsg_perception.h"
 #include "multi_sub_perception.h"
+#include "cdt_perception.h"
 #include "stereo_multi_match.h"
 #include "perception_common.h"
 
@@ -82,15 +83,19 @@ private:
     // 感知模块
     multi_perception mul_sub_perception_;  // Model 6
     dsg_perception dsg_perception_;        // Model 7
+    cdt_perception cdt_perception_;        // bestMow CDT front-rectangle detector
     StereoMultiMatch stereo_matcher_;
 
     // 初始化标志
     bool initialized_ = false;
+    bool cdt_initialized_ = false;
 
     // 辅助函数
     bool initMulSubPerception();
     bool initDSGPerception();
+    bool initBestMowCDT();
     bool initStereoMatcher();
+    void applyBestMowCDT(cv::Mat& label_map, cv::Mat& cdt_input);
 
     // 模型处理函数
     ProcessResult processModel6(const cv::Mat& left_img,

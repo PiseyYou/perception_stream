@@ -108,6 +108,30 @@ static void filterLabelDect(cv::Mat &src_lab, std::vector<Detection> &dect_src,
     }
 }
 
+static cv::Rect bestMowCdtRect(const std::vector<Detection>& detections,
+                               const cv::Size& label_size)
+{
+    if (detections.size() != 1 || label_size.empty()) {
+        return cv::Rect();
+    }
+
+    const Bbox& bbox = detections[0].bbox;
+    const int xmin = std::max(static_cast<int>(std::lround(bbox.xmin)), 0);
+    const int ymin = std::max(static_cast<int>(std::lround(bbox.ymin)), 0);
+    const int xmax = std::min(static_cast<int>(std::lround(bbox.xmax)), label_size.width);
+
+    if (xmin >= xmax || ymin >= label_size.height) {
+        return cv::Rect();
+    }
+
+    return cv::Rect(xmin, ymin, xmax - xmin, label_size.height - ymin);
+}
+
+static uint8_t bestMowCdtLabelForMode(int infer_mode)
+{
+    return infer_mode == 7 ? 3 : 2;
+}
+
 OfflineProcessor::OfflineProcessor(const OfflineConfig& config)
     : config_(config),
       hardware_mode_(config.use_k100_mode) {
@@ -119,6 +143,9 @@ OfflineProcessor::~OfflineProcessor() {
             mul_sub_perception_.perception_release();
         } else if (config_.infer_mode == 7) {
             dsg_perception_.perception_release();
+        }
+        if (cdt_initialized_) {
+            cdt_perception_.perception_release();
         }
     }
 }
@@ -150,6 +177,15 @@ bool OfflineProcessor::init() {
     if (!initStereoMatcher()) {
         std::cerr << "[Error] Failed to initialize stereo matcher" << std::endl;
         return false;
+    }
+
+    if (config_.enable_bestmow_cdt && !hardware_mode_.isK100Hardware()) {
+        if (!initBestMowCDT()) {
+            std::cerr << "[Error] Failed to initialize bestMow CDT detector" << std::endl;
+            return false;
+        }
+    } else if (config_.enable_bestmow_cdt && hardware_mode_.isK100Hardware()) {
+        std::cout << "[Init] CDT requested but skipped for K100 mode" << std::endl;
     }
 
     initialized_ = true;
@@ -219,6 +255,45 @@ bool OfflineProcessor::initDSGPerception() {
     }
 }
 
+bool OfflineProcessor::initBestMowCDT() {
+    std::string model_path = config_.model_dir + config_.cdt_model_name;
+    std::cout << "[Init] Loading bestMow CDT model: " << model_path << std::endl;
+
+    if (config_.cdt_model_name.empty()) {
+        std::cerr << "[Error] CDT model name is empty" << std::endl;
+        return false;
+    }
+
+    if (!std::filesystem::exists(model_path)) {
+        const std::vector<std::string> fallback_paths = {
+            "models/" + config_.cdt_model_name,
+            "../models/" + config_.cdt_model_name,
+            "../../models/" + config_.cdt_model_name,
+        };
+        for (const auto& fallback_path : fallback_paths) {
+            if (std::filesystem::exists(fallback_path)) {
+                model_path = fallback_path;
+                std::cout << "[Init] CDT model found via fallback: " << model_path << std::endl;
+                break;
+            }
+        }
+        if (!std::filesystem::exists(model_path)) {
+            std::cerr << "[Error] CDT model file does not exist: " << model_path << std::endl;
+            return false;
+        }
+    }
+
+    try {
+        cdt_perception_.perception_init(model_path.c_str());
+        cdt_initialized_ = true;
+        std::cout << "[Init] bestMow CDT model loaded successfully" << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[Error] bestMow CDT model loading failed: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 bool OfflineProcessor::initStereoMatcher() {
     std::cout << "[Init] Initializing stereo matcher..." << std::endl;
 
@@ -231,6 +306,30 @@ bool OfflineProcessor::initStereoMatcher() {
     std::cout << "[Init] Stereo matcher initialized" << std::endl;
 
     return true;
+}
+
+void OfflineProcessor::applyBestMowCDT(cv::Mat& label_map, cv::Mat& cdt_input) {
+    if (!config_.enable_bestmow_cdt || hardware_mode_.isK100Hardware()) {
+        return;
+    }
+    if (!cdt_initialized_ || label_map.empty() || cdt_input.empty()) {
+        return;
+    }
+
+    std::vector<Detection> cdt_detections;
+    cdt_perception_.perception_process_bgr(cdt_input, cdt_detections);
+    const cv::Rect cdt_rect = bestMowCdtRect(cdt_detections, label_map.size());
+
+    std::cout << "[CDT] detections: " << cdt_detections.size()
+              << ", rect: " << cdt_rect
+              << ", area: " << cdt_rect.area() << std::endl;
+
+    if (cdt_rect.area() > 0) {
+        const uint8_t cdt_label = bestMowCdtLabelForMode(config_.infer_mode);
+        label_map(cdt_rect).setTo(cdt_label);
+        std::cout << "[CDT] Applied bestMow front-rectangle label override to "
+                  << static_cast<int>(cdt_label) << std::endl;
+    }
 }
 
 OfflineProcessor::ProcessResult OfflineProcessor::process(
@@ -302,6 +401,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
     cv::Mat dst_label384(384, 640, CV_8UC1);
     filterLabelDect(lab_out, detections, dst_label384, dst_detections,
                     config_.enable_draw_detection_box);
+    applyBestMowCDT(dst_label384, resized_img);
 
     result.detections = dst_detections;
     result.segmentation = dst_label384;
@@ -380,7 +480,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
 
     // ========== 图像裁剪和预处理 ==========
     cv::Mat cropped_img, resized_img;
-    cv::Mat lab_dst;
+    cv::Mat lab_dst(384, 640, CV_8UC1, cv::Scalar(1));
 
     // 根据硬件模式选择裁剪尺寸
     if (hardware_mode_.isK100Hardware()) {
@@ -456,6 +556,9 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
 
         std::cout << "[Process] HSV dark filter applied" << std::endl;
     }
+
+    applyBestMowCDT(lab_dst, resized_img);
+    result.segmentation = lab_dst;
 
     // ========== 2. 立体匹配 ==========
     if (!right_img.empty()) {

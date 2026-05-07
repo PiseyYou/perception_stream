@@ -44,6 +44,9 @@ void cdt_perception::prepare_tensor(hbDNNTensor *input_tensor, hbDNNTensor *outp
     };
 
     for (int i = 0; i < 6; i++) {
+        order[i] = -1;
+    }
+    for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 6; j++) {
             hbDNNTensorProperties output_properties;
             hbDNNGetOutputTensorProperties(&output_properties, dnn_handle, j);
@@ -54,6 +57,11 @@ void cdt_perception::prepare_tensor(hbDNNTensor *input_tensor, hbDNNTensor *outp
                 order[i] = j;
                 break;
             }
+        }
+        if (order[i] < 0) {
+            cout << "[CDT][Error] Failed to match output tensor for shape "
+                 << order_we_want[i][0] << "x" << order_we_want[i][1]
+                 << "x" << order_we_want[i][2] << endl;
         }
     }
 }
@@ -106,9 +114,10 @@ void cdt_perception::perception_init(const char *model_file_name){
     output_tensors.resize(output_count);
 
     hbDNNGetInputTensorProperties(&input_properties, dnn_handle, 0);
-    // NHWC format: Batch, Height, Width, Channels
-    input_h = input_properties.validShape.dimensionSize[1];
-    input_w = input_properties.validShape.dimensionSize[2];
+    // CDT 640x384 model input is NCHW: Batch, Channels, Height, Width.
+    input_h = input_properties.validShape.dimensionSize[2];
+    input_w = input_properties.validShape.dimensionSize[3];
+    cout << "[CDT] input size: " << input_w << "x" << input_h << endl;
     prepare_tensor(input_tensors.data(), output_tensors.data());
 }
 
@@ -384,6 +393,18 @@ std::vector<Detection> cdt_perception::post_fix_size(hbDNNTensor* out_tensor){
     // 初始化存储检测结果的容器
     std::vector<std::vector<Bbox>> bboxes(classes_num);
     std::vector<std::vector<float>> scores(classes_num);
+
+    if (output_count < 6) {
+        cout << "[CDT][Error] Unexpected output tensor count: " << output_count << endl;
+        return {};
+    }
+    for (int i = 0; i < 6; i++) {
+        if (order[i] < 0 || order[i] >= output_count) {
+            cout << "[CDT][Error] Invalid output tensor order[" << i << "]: "
+                 << order[i] << endl;
+            return {};
+        }
+    }
 
     // 处理三个尺度的特征图
     int32_t H_8 = static_cast<int32_t>(input_h / 8);

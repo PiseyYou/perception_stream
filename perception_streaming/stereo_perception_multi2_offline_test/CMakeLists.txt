@@ -92,12 +92,17 @@ set(SOURCES
     # 从对应的 perception 模块复用源文件
     ${PERCEPTION_SRC_DIR}/src/dsg_perception.cpp
     ${PERCEPTION_SRC_DIR}/src/multi_sub_perception.cpp
+    ${PERCEPTION_SRC_DIR}/src/cdt_perception.cpp
     ${PERCEPTION_SRC_DIR}/src/stereo_multi_match.cpp
     ${PERCEPTION_SRC_DIR}/src/multiscale_filter.cpp
 )
 
 # 可执行文件
 add_executable(offline_test_main ${SOURCES})
+target_compile_definitions(offline_test_main PRIVATE
+    HB_DNN_QUANTI_TYPE_NONE=NONE
+    HB_DNN_QUANTI_TYPE_SCALE=SCALE
+)
 
 # 如果使用真实 DNN 库，需要链接 conda 的 libstdc++
 if(USE_REAL_DNN)

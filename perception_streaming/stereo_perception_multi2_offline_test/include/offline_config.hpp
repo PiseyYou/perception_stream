@@ -29,6 +29,9 @@ struct OfflineConfig {
     bool enable_dsg_detection_in_pointcloud = false;   // 点云中显示检测框
     bool enable_dsg_outlier_removal = false;           // 点云融合时启用离群点移除
 
+    // ========== bestMow CDT 前方矩形框配置 ==========
+    bool enable_bestmow_cdt = false;                   // bestMow 模式下启用 CDT 前方矩形框修正
+
     // ========== 路径配置 ==========
     std::string model_dir = "/app/models/";  // Docker 容器中的模型路径
     std::string input_dir = "";
@@ -38,6 +41,7 @@ struct OfflineConfig {
     // 模型文件名（根据推理模式和硬件模式自动选择）
     std::string mul_sub_model_name = "";  // Model 6
     std::string dsg_model_name = "";      // Model 7
+    std::string cdt_model_name = "";      // bestMow CDT
 
     // ========== 输出控制 ==========
     bool save_segmentation = true;   // 保存分割结果
@@ -61,6 +65,9 @@ struct OfflineConfig {
                 dsg_model_name = "dsg_multi_20260407_640x384.bin";
             }
         }
+        if (!use_k100_mode && enable_bestmow_cdt) {
+            cdt_model_name = "cdt_20251125_640x384.bin";
+        }
 
         // 构造输出目录
         std::string mode_name;
@@ -79,7 +86,7 @@ struct OfflineConfig {
             if (infer_mode == 6) {
                 output_dir = input_dir + (use_k100_mode ? "/sub_6_205_432" : "/sub_6_205_384");
             } else if (infer_mode == 7) {
-                output_dir = input_dir + "/dsg_7_205_432";
+                output_dir = input_dir + (use_k100_mode ? "/dsg_7_205_432" : "/dsg_7_205_384");
             } else {
                 output_dir = input_dir + "/output_" + mode_name + "_" + hw_suffix + erode_suffix + "/";
             }
@@ -89,7 +96,7 @@ struct OfflineConfig {
             if (infer_mode == 6) {
                 pointcloud_dir = input_dir + (use_k100_mode ? "/pcd_6_205_432" : "/pcd_6_205_384");
             } else if (infer_mode == 7) {
-                pointcloud_dir = input_dir + "/pcd_7_205_432";
+                pointcloud_dir = input_dir + (use_k100_mode ? "/pcd_7_205_432" : "/pcd_7_205_384");
             } else {
                 pointcloud_dir = output_dir + "/pointcloud";
             }
@@ -117,6 +124,12 @@ struct OfflineConfig {
         std::cout << "Erode pixel: " << erode_pixel << std::endl;
         std::cout << "Detection threshold: " << detection_threshold << std::endl;
         std::cout << "Area threshold: " << area_threshold << std::endl;
+        std::cout << "bestMow CDT: "
+                  << ((!use_k100_mode && enable_bestmow_cdt) ? "enabled" : "disabled")
+                  << std::endl;
+        if (!cdt_model_name.empty()) {
+            std::cout << "CDT Model: " << cdt_model_name << std::endl;
+        }
         std::cout << "\nInput dir: " << input_dir << std::endl;
         std::cout << "Output dir: " << output_dir << std::endl;
         std::cout << "Pointcloud dir: " << pointcloud_dir << std::endl;

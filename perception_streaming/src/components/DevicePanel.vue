@@ -17,6 +17,7 @@
             <select :value="modelValue.sn" @change="update('sn', ($event.target as HTMLSelectElement).value)">
               <option value="LK-MR2P1US000015">LK-MR2P1US000015</option>
               <option value="LK-MR2P1US000016">LK-MR2P1US000016</option>
+              <option value="LK-MR2P1US000017">LK-MR2P1US000017</option>
               <option value="LK-MR2P1US000113">LK-MR2P1US000113</option>
               <option value="LK-MR2P1US000115">LK-MR2P1US000115</option>
               <option value="LK-MR6P1US000123">LK-MR6P1US000123</option>

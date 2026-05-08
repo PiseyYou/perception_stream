@@ -5,8 +5,9 @@ export const sshPort = ref(10111)
 
 // SN to SSH port mapping
 export const SN_PORT_MAP: Record<string, number> = {
-  'LK-MR2P1US000015': 10115,
-  'LK-MR2P1US000016': 10116,
+  'LK-MR2P1US000015': 10015,
+  'LK-MR2P1US000016': 10016,
+  'LK-MR2P1US000017': 10017,
   'LK-MR2P1US000113': 10113,
   'LK-MR2P1US000115': 10115,
   'LK-MR6P1US000123': 10123,

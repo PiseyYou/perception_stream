@@ -26,7 +26,7 @@
 - 批量上传完整性校验
 - 避障监控守护服务（systemd 自动拉起）
 - 异常触发自动录包
-- 支持多设备 SN（LK-MR2P1US000015/16/113/115, LK-MR6P1US000123/124/286）
+- 支持多设备 SN（LK-MR2P1US000015/16/17/113/115, LK-MR6P1US000123/124/286）
 - 双目离线测试工具（stereo_perception_multi2_offline_test）
 - 增强的离线服务器（支持多任务管理、进度跟踪、错误恢复）
 - Docker 容器化部署支持
@@ -187,14 +187,37 @@ pkill -f vite
 
 ### SSH 端口自动更新
 
-选择不同设备 SN 时，SSH 端口会自动更新：
-- LK-MR2P1US000015 → 10115
-- LK-MR2P1US000016 → 10116
+选择不同设备 SN 时，SSH 端口会自动更新（规则：10 + SN后4位）：
+- LK-MR2P1US000015 → 10015
+- LK-MR2P1US000016 → 10016
+- LK-MR2P1US000017 → 10017
 - LK-MR2P1US000113 → 10113
 - LK-MR2P1US000115 → 10115
 - LK-MR6P1US000123 → 10123
 - LK-MR6P1US000124 → 10124
 - LK-MR6P1US000286 → 10286
+
+### SSH 密钥配置
+
+系统使用 `data/conf/ssh_config.json` 配置SSH连接参数：
+
+```json
+{
+  "ssh_key_path": "bestmow_rsa_202605",
+  "ssh_host": "120.25.121.3",
+  "ssh_user": "root",
+  "default_ports": {
+    "realtime_monitor": 10015,
+    "log_fetch": 10016,
+    "stereo_analysis": 10115
+  }
+}
+```
+
+- `ssh_key_path`: SSH私钥文件名（相对于 `data/conf/` 目录）
+- `ssh_host`: 远程主机地址
+- `ssh_user`: SSH用户名
+- `default_ports`: 各服务的默认端口配置
 
 ## 守护服务部署
 

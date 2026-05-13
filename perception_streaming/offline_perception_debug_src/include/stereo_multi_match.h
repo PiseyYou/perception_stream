@@ -49,6 +49,7 @@ public:
     cv::Mat disparity_;
 
     void stereo_multi_param_init();
+    void stereo_multi_param_init_6m_adaptive();
 
     cv::Mat stereo_multi_process_depth(cv::Mat &rectifyL, cv::Mat &rectifyR);
     cv::Mat stereo_multi_process_filter(cv::Mat &disparity_, cv::Mat lab_dst, bool enable_height_filter_);
@@ -67,6 +68,11 @@ public:
     void stereo_process_pci_depth_rgb_seg_det_fusion(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
+    void stereo_process_pci_depth_rgb_seg_det_fusion_dsg(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
+                                                                       pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
+                                                                       pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud,
+                                                                       bool enable_detection = false,
+                                                                       bool enable_outlier_removal = false);
     void det_pc_rgb_label(Detection& det, const cv::Point& pt, pcl::PointXYZRGBL& pci);
     bool in_range(const cv::Point& top_left, const cv::Point& bottom_right, const cv::Point& pt_2d);
 

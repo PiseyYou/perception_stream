@@ -13,7 +13,7 @@
         <input type="checkbox" v-model="useK100Mode" style="cursor:pointer;" />
         <span>K100</span>
       </label>
-      <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">停止</button>
+      <button class="sa2-stop-btn" :disabled="!offlineRunning" @click="stopOfflineDebug">{{ offlineRunning ? '停止中...' : '停止' }}</button>
       <button class="sa2-filter-size-btn" :disabled="offlineRunning || filterSizeRunning || !nightFolderPath.trim() || !dayFolderPath.trim()" @click="doFilterStereoImages">{{ filterSizeRunning ? '筛选中...' : '筛选双目图片' }}</button>
       <span v-if="filterSizeStatus" class="sa2-filter-size-status" :class="{ error: filterSizeError }">{{ filterSizeStatus }}</span>
       <label>标签:</label>
@@ -43,7 +43,9 @@
       <label>截止:</label>
       <input v-model="uploadDateEnd" class="sa2-date-input" placeholder="20260331" maxlength="8" />
       <button class="sa2-upload-btn" :disabled="uploadRunning || !uploadDateStart || !uploadDateEnd || !uploadPort" @click="doUploadImages">{{ uploadRunning ? '⏳ 上传中...' : '📤 上传图片' }}</button>
+      <button class="sa2-download-btn" :disabled="downloadRunning || !uploadDateStart || !uploadDateEnd || !uploadPort" @click="doDownloadToLocal">{{ downloadRunning ? '⏳ 转存中...' : '💾 转存本地' }}</button>
       <span v-if="uploadStatus" class="sa2-upload-status" :class="{ error: uploadError }">{{ uploadStatus }}</span>
+      <span v-if="downloadStatus" class="sa2-download-status" :class="{ error: downloadError }">{{ downloadStatus }}</span>
     </div>
     <div v-if="pairs.length" class="sa2-legend">
       <span class="sa2-li"><span class="sa2-dot" style="background:#6464ff"></span>bg</span>
@@ -140,6 +142,9 @@ const uploadDateEnd = ref(today)
 const uploadRunning = ref(false)
 const uploadStatus = ref('')
 const uploadError = ref(false)
+const downloadRunning = ref(false)
+const downloadStatus = ref('')
+const downloadError = ref(false)
 const UPLOAD_IMAGES_TIMEOUT_MS = 5 * 60 * 1000
 
 function normalizeStereoDebugSuffix(value: string) {
@@ -762,6 +767,74 @@ async function doUploadImages() {
   }
 }
 
+async function doDownloadToLocal() {
+  if (!uploadDateStart.value || !uploadDateEnd.value || !uploadPort.value || downloadRunning.value) return
+  downloadRunning.value = true
+  downloadStatus.value = '正在连接...'
+  downloadError.value = false
+
+  const controller = new AbortController()
+  let didTimeOut = false
+  const timeoutId = setTimeout(() => {
+    didTimeOut = true
+    controller.abort()
+    downloadStatus.value = '✗ 请求超时（5分钟）'
+    downloadError.value = true
+  }, UPLOAD_IMAGES_TIMEOUT_MS)
+
+  try {
+    downloadStatus.value = '正在转存网页图片...'
+    const res = await fetch('/offline/download_to_local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        port: uploadPort.value,
+        date_start: uploadDateStart.value,
+        date_end: uploadDateEnd.value,
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      downloadStatus.value = `✗ 服务器错误 (HTTP ${res.status})`
+      downloadError.value = true
+      return
+    }
+
+    const data = await res.json()
+    console.log('[doDownloadToLocal] 响应数据:', data)
+
+    if (data.ok) {
+      if (data.folder_count > 0 || data.file_count > 0) {
+        downloadStatus.value = `✓ 已转存 ${data.folder_count} 个文件夹，${data.file_count} 个文件到 ${data.local_path || '/home/youfeng/debug/boluo/'}`
+        if (data.errors && data.errors.length > 0) {
+          downloadStatus.value += ` (${data.errors.length} 个错误)`
+          console.error('[Download Errors]', data.errors)
+        }
+      } else {
+        downloadStatus.value = `✗ 转存失败: ${data.errors && data.errors.length > 0 ? data.errors.join('; ') : '未找到匹配文件夹或下载失败'}`
+        downloadError.value = true
+      }
+    } else {
+      downloadStatus.value = `✗ ${data.error || '未知错误'}`
+      if (data.debug_info) {
+        downloadStatus.value += ` (${data.debug_info})`
+      }
+      downloadError.value = true
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError' && didTimeOut) {
+      console.log('[doDownloadToLocal] 请求已超时（5分钟）')
+    } else {
+      console.error('[doDownloadToLocal] 请求异常:', e)
+      downloadStatus.value = `✗ 请求失败: ${e.message || '网络错误'}`
+      downloadError.value = true
+    }
+  } finally {
+    clearTimeout(timeoutId)
+    downloadRunning.value = false
+  }
+}
+
 async function runNightOfflineDebug() {
   console.log('[runNightOfflineDebug] Starting DSG Night mode processing')
   console.log('[runNightOfflineDebug] folderPath:', nightFolderPath.value)
@@ -1218,6 +1291,11 @@ onBeforeUnmount(() => {
 .sa2-upload-btn { padding:4px 12px; background:#1a3a1a; border:1px solid #2e7d32; border-radius:4px; color:#a5d6a7; font-size:11px; cursor:pointer; white-space:nowrap; }
 .sa2-upload-btn:hover:not(:disabled) { background:#2e5a2e; }
 .sa2-upload-btn:disabled { opacity:.5; cursor:not-allowed; }
+.sa2-download-btn { padding:4px 12px; background:#1a2a3a; border:1px solid #2e5d7d; border-radius:4px; color:#a5c6d7; font-size:11px; cursor:pointer; white-space:nowrap; }
+.sa2-download-btn:hover:not(:disabled) { background:#2e4a5e; }
+.sa2-download-btn:disabled { opacity:.5; cursor:not-allowed; }
 .sa2-upload-status { font-size:11px; color:#69f0ae; font-family:monospace; white-space:nowrap; }
 .sa2-upload-status.error { color:#ef5350; }
+.sa2-download-status { font-size:11px; color:#69d0ee; font-family:monospace; white-space:nowrap; }
+.sa2-download-status.error { color:#ef5350; }
 </style>

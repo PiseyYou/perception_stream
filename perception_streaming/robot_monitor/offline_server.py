@@ -10,6 +10,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import struct
@@ -1820,6 +1821,11 @@ def extract_left_pcl_bag(nav_bag_path: str, log_cb, bag_type: str = 'nav') -> bo
 # ─── 图片下载基础路径：使用项目内 data/stereo_debug ───────────────
 LOCAL_IMAGE_BASE = os.path.join(PROJECT_ROOT, "data/stereo_debug")
 ROBOT_IMAGE_BASE = "/userdata/bestmow_data/image_perception_debug"
+BOLUO_TRANSFER_HOST = os.environ.get("BOLUO_TRANSFER_HOST", "192.168.55.239")
+BOLUO_TRANSFER_USER = os.environ.get("BOLUO_TRANSFER_USER", "youfeng")
+BOLUO_TRANSFER_PASSWORD = os.environ.get("BOLUO_TRANSFER_PASSWORD", "")
+BOLUO_TRANSFER_BASE = os.environ.get("BOLUO_TRANSFER_BASE", "/home/youfeng/debug/boluo")
+TRANSFER_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
 
 def upload_images_from_robot(port: int, date_str: str) -> dict:
@@ -2009,6 +2015,159 @@ def upload_images_range_from_robot(port: int, date_start: str, date_end: str) ->
         "errors": errors,
     }
 
+
+# ─── 图片转存：将网页缓存图片复制到指定调试电脑 ───────────────
+
+def _date_key_from_folder(folder: str) -> str | None:
+    match = re.search(r'(\d{8})', folder)
+    if match:
+        return match.group(1)
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', folder):
+        return folder.replace("-", "")
+    return folder if re.fullmatch(r'\d{8}', folder) else None
+
+
+def _count_image_files(root: str) -> int:
+    total = 0
+    for _, _, files in os.walk(root):
+        total += sum(1 for name in files if name.lower().endswith(TRANSFER_IMAGE_EXTENSIONS))
+    return total
+
+
+def _boluo_ssh_env() -> dict:
+    env = os.environ.copy()
+    env["SSHPASS"] = BOLUO_TRANSFER_PASSWORD
+    return env
+
+
+def _remote_transfer_dir(port_suffix: str, folder: str) -> str:
+    return f"{BOLUO_TRANSFER_BASE.rstrip('/')}/{port_suffix}/{folder}"
+
+
+def download_to_local(port: int, date_start: str, date_end: str) -> dict:
+    """将网页端已缓存的图片转存到 192.168.55.239:/home/youfeng/debug/boluo/。"""
+    if not date_start or not date_end:
+        return {"ok": False, "error": "未提供起止日期"}
+    if not re.fullmatch(r'\d{8}', date_start) or not re.fullmatch(r'\d{8}', date_end):
+        return {"ok": False, "error": "日期格式必须为 YYYYMMDD"}
+    if date_start > date_end:
+        return {"ok": False, "error": "开始日期不能晚于截止日期"}
+
+    sshpass = shutil.which("sshpass")
+    rsync = shutil.which("rsync")
+    if not BOLUO_TRANSFER_PASSWORD:
+        return {"ok": False, "error": "未配置 BOLUO_TRANSFER_PASSWORD，无法使用密码转存"}
+    if not sshpass:
+        return {"ok": False, "error": "缺少 sshpass，无法使用密码转存"}
+    if not rsync:
+        return {"ok": False, "error": "缺少 rsync，无法转存图片"}
+
+    port_suffix = str(port)[-4:]
+    source_base = os.path.join(LOCAL_IMAGE_BASE, port_suffix)
+    if not os.path.isdir(source_base):
+        return {"ok": False, "error": f"源目录不存在: {source_base}，请先上传图片"}
+
+    try:
+        all_folders = sorted(
+            d for d in os.listdir(source_base)
+            if os.path.isdir(os.path.join(source_base, d))
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"读取源目录失败: {e}"}
+
+    matched_folders = []
+    for folder in all_folders:
+        folder_date = _date_key_from_folder(folder)
+        if folder_date and date_start <= folder_date <= date_end:
+            matched_folders.append(folder)
+
+    if not matched_folders:
+        return {
+            "ok": False,
+            "error": f"未找到 {date_start}~{date_end} 范围内的文件夹",
+            "debug_info": f"本地共有 {len(all_folders)} 个文件夹: {', '.join(all_folders[:10])}",
+        }
+
+    ssh_env = _boluo_ssh_env()
+    ssh_options = [
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ConnectTimeout=15",
+        "-o", "ServerAliveInterval=10",
+        "-o", "ServerAliveCountMax=3",
+        "-o", "PreferredAuthentications=password",
+    ]
+    ssh_target = f"{BOLUO_TRANSFER_USER}@{BOLUO_TRANSFER_HOST}"
+    base_dir = f"{BOLUO_TRANSFER_BASE.rstrip('/')}/{port_suffix}"
+
+    try:
+        mkdir_base = [
+            sshpass, "-e", "ssh",
+            *ssh_options,
+            ssh_target,
+            f"mkdir -p -- {shlex.quote(base_dir)}",
+        ]
+        subprocess.run(mkdir_base, capture_output=True, text=True, timeout=30, check=True, env=ssh_env)
+    except subprocess.CalledProcessError as e:
+        error = e.stderr.strip() or e.stdout.strip() or str(e)
+        return {"ok": False, "error": f"无法创建远程目录: {error}"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "创建远程目录超时"}
+    except Exception as e:
+        return {"ok": False, "error": f"无法创建远程目录: {e}"}
+
+    total_files = 0
+    successful_folders = 0
+    errors = []
+
+    for folder in matched_folders:
+        source_dir = os.path.join(source_base, folder)
+        image_count = _count_image_files(source_dir)
+        if image_count == 0:
+            errors.append(f"{folder}: 未找到图片文件")
+            continue
+
+        remote_dir = _remote_transfer_dir(port_suffix, folder)
+        try:
+            mkdir_folder = [
+                sshpass, "-e", "ssh",
+                *ssh_options,
+                ssh_target,
+                f"mkdir -p -- {shlex.quote(remote_dir)}",
+            ]
+            subprocess.run(mkdir_folder, capture_output=True, text=True, timeout=30, check=True, env=ssh_env)
+
+            rsync_cmd = [
+                sshpass, "-e", rsync,
+                "-avz", "--partial", "--timeout=60",
+                "--include=*/",
+                "--include=*.jpg", "--include=*.jpeg", "--include=*.png", "--include=*.bmp", "--include=*.webp",
+                "--include=*.JPG", "--include=*.JPEG", "--include=*.PNG", "--include=*.BMP", "--include=*.WEBP",
+                "--exclude=*",
+                "-e", "ssh " + " ".join(shlex.quote(opt) for opt in ssh_options),
+                source_dir + "/",
+                f"{ssh_target}:{shlex.quote(remote_dir)}/",
+            ]
+            rc = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=600, env=ssh_env)
+            if rc.returncode == 0:
+                successful_folders += 1
+                total_files += image_count
+            else:
+                errors.append(f"{folder}: {rc.stderr.strip() or rc.stdout.strip() or 'rsync 失败'}")
+        except subprocess.CalledProcessError as e:
+            errors.append(f"{folder}: {e.stderr.strip() or e.stdout.strip() or e}")
+        except subprocess.TimeoutExpired:
+            errors.append(f"{folder}: 转存超时")
+        except Exception as e:
+            errors.append(f"{folder}: {e}")
+
+    return {
+        "ok": True,
+        "local_path": f"{ssh_target}:{base_dir}/",
+        "folder_count": successful_folders,
+        "file_count": total_files,
+        "matched_folders": matched_folders,
+        "errors": errors,
+    }
 
 # ─── 日志拉取基础路径：使用项目内 data/uploads ───────────────
 LOCAL_LOG_PULL_BASE = os.path.join(PROJECT_ROOT, "data/uploads")
@@ -3545,6 +3704,16 @@ class OfflineHandler(BaseHTTPRequestHandler):
             date_start = body.get("date_start", "")  # YYYYMMDD
             date_end = body.get("date_end", "")      # YYYYMMDD
             result = upload_images_range_from_robot(port, date_start, date_end)
+            self._json(result)
+            return
+
+        if path == "/offline/download_to_local":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            port = int(body.get("port", 10111))
+            date_start = body.get("date_start", "")  # YYYYMMDD
+            date_end = body.get("date_end", "")      # YYYYMMDD
+            result = download_to_local(port, date_start, date_end)
             self._json(result)
             return
 

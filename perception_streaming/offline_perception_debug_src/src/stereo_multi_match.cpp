@@ -10,21 +10,10 @@
 
 void StereoMultiMatch::stereo_base_param_init()
 {
-    // Pl = (cv::Mat_<double>(3, 4) << 244.9567633, 0., 321.05016538, 0.,
-    //       0.000000000000000, 244.9567633, 234.44410892, 0., 0.0, 0.0, 1.0, 0.0);
-    // Pr = (cv::Mat_<double>(3, 4) << 244.9567633, 0., 321.05016538, -19.57480185,
-    //       0.000000000000000, 244.9567633, 234.44410892, 0., 0.0, 0.0, 1.0, 0.0);
-
-    // Pl = (cv::Mat_<double>(3, 4) << 344.4122655162, 0.0000000000, 343.8732070923, 0.0000000000,
-    //       0.000000000000000, 303.8931754555, 238.2414806590, 0.0000000000, 0.0, 0.0, 1.0, 0.0);
-    // Pr = (cv::Mat_<double>(3, 4) << 344.4122655162, 0.0000000000, 343.8732070923, -27.2907172705,
-    //       0.000000000000000, 303.8931754555, 238.2414806590, 0.0000000000, 0.0, 0.0, 1.0, 0.0);
-
-    Pl = (cv::Mat_<double>(3, 4) << 245.1634049359, 0.0000000000, 317.9649264254, 0.0000000000,
-      0.0000000000, 245.1634049359, 242.8759116226, 0.0000000000, 0.0, 0.0, 1.0, 0.0);
-    Pr = (cv::Mat_<double>(3, 4) << 245.1634049359, 0.0000000000, 317.9649264254, -19.5959393417,
-          0.0000000000, 245.1634049359, 242.8759116226, 0.0000000000, 0.0, 0.0, 1.0, 0.0);
-
+    Pl = (cv::Mat_<double>(3, 4) << 244.9567633, 0., 321.05016538, 0.,
+          0.000000000000000, 244.9567633, 234.44410892, 0., 0.0, 0.0, 1.0, 0.0);
+    Pr = (cv::Mat_<double>(3, 4) << 244.9567633, 0., 321.05016538, -19.57480185,
+          0.000000000000000, 244.9567633, 234.44410892, 0., 0.0, 0.0, 1.0, 0.0);
 
     cx = Pl.at<double>(0, 2); // Principal point x
     cy = Pl.at<double>(1, 2); // Principal point y
@@ -97,6 +86,46 @@ void StereoMultiMatch::stereo_multi_param_init()
     if (use_multiscale_filter_)
     {
         half_top_stereo_block_matcher_init();
+        half_bottom_stereo_block_matcher_init();
+    }
+
+    orig_param_ = MultiScaleFilterParams(1.5, 4, 3, 1, 15);
+    half_param_ = MultiScaleFilterParams(2.5, 8, 7, 3, 25);
+}
+
+void StereoMultiMatch::stereo_multi_param_init_6m_adaptive()
+{
+    stereo_dis_init();
+    stereo_base_param_init();
+
+    stereo_block_matcher_ = cv::StereoBM::create();
+    stereo_block_matcher_->setMinDisparity(0);
+    stereo_block_matcher_->setNumDisparities(48);
+    stereo_block_matcher_->setBlockSize(13);
+    stereo_block_matcher_->setSpeckleWindowSize(64);
+    stereo_block_matcher_->setSpeckleRange(16);
+    stereo_block_matcher_->setDisp12MaxDiff(0);
+    stereo_block_matcher_->setPreFilterType(1);
+    stereo_block_matcher_->setPreFilterSize(15);
+    stereo_block_matcher_->setPreFilterCap(31);
+    stereo_block_matcher_->setTextureThreshold(5);
+    stereo_block_matcher_->setUniquenessRatio(4);
+
+    if (use_multiscale_filter_)
+    {
+        half_top_stereo_block_matcher_ = cv::StereoBM::create();
+        half_top_stereo_block_matcher_->setMinDisparity(0);
+        half_top_stereo_block_matcher_->setNumDisparities(32);
+        half_top_stereo_block_matcher_->setBlockSize(13);
+        half_top_stereo_block_matcher_->setSpeckleWindowSize(80);
+        half_top_stereo_block_matcher_->setSpeckleRange(2);
+        half_top_stereo_block_matcher_->setDisp12MaxDiff(0);
+        half_top_stereo_block_matcher_->setPreFilterType(1);
+        half_top_stereo_block_matcher_->setPreFilterSize(15);
+        half_top_stereo_block_matcher_->setPreFilterCap(31);
+        half_top_stereo_block_matcher_->setTextureThreshold(10);
+        half_top_stereo_block_matcher_->setUniquenessRatio(10);
+
         half_bottom_stereo_block_matcher_init();
     }
 
@@ -729,6 +758,122 @@ void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_det_fusion(
     {
         std::cout << "[Dense sampling] 障碍物区域额外添加 " << obstacle_points_added
                   << " 个点 (总点数: " << total_points_added << ")" << std::endl;
+    }
+
+    stereo_point_ori_rgb_filter(xyz_rgbl_cloud, out_xyz_rgbl_cloud);
+
+    out_xyz_rgbl_cloud.height = 1;
+    out_xyz_rgbl_cloud.width = out_xyz_rgbl_cloud.points.size();
+    out_xyz_rgbl_cloud.points.resize(out_xyz_rgbl_cloud.width *
+                                     out_xyz_rgbl_cloud.height);
+}
+
+void StereoMultiMatch::stereo_process_pci_depth_rgb_seg_det_fusion_dsg(
+    const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &,
+    cv::Mat &ori_mat, pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
+    pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud,
+    bool, bool)
+{
+    if (depth.empty() || lab.empty() || ori_mat.empty())
+    {
+        xyz_rgbl_cloud.clear();
+        out_xyz_rgbl_cloud.clear();
+        return;
+    }
+
+    int safe_rows = std::min({VALID_HEIGHT, depth.rows, lab.rows, ori_mat.rows});
+    int safe_cols = std::min({depth.cols, lab.cols, ori_mat.cols});
+
+    // DSG 的模型输出里 label=1 是背景。参考工程在点云生成时只保留
+    // 远端且邻域稳定的背景点，避免夜间把大面积背景投成前方障碍点。
+    const int edge_threshold_y = safe_rows * 4 / 5;
+    const int edge_denominator = safe_rows * 2 / 5;
+
+    xyz_rgbl_cloud.points.reserve(4000);
+
+    for (int y = 0; y < safe_rows; y += 4)
+    {
+        const float *depth_row = depth.ptr<float>(y);
+        const uint8_t *lab_row = lab.ptr<uint8_t>(y);
+        const cv::Vec3b *color_row = ori_mat.ptr<cv::Vec3b>(y);
+
+        for (int x = 0; x < safe_cols; x += 4)
+        {
+            uint8_t current_label = lab_row[x];
+            float d = depth_row[x];
+            if (d <= 0 || d >= 6.0f)
+                continue;
+
+            pcl::PointXYZRGBL pc_rgbl;
+            pc_rgbl.x = (x - cx) * d / fx;
+            pc_rgbl.y = (y - cy) * d / fy;
+            pc_rgbl.z = d;
+
+            if (pc_rgbl.y < -3.0f || pc_rgbl.y > 0.5f)
+                continue;
+            if (pc_rgbl.z < 0.0f || pc_rgbl.z > 5.0f)
+                continue;
+
+            const cv::Vec3b &color = color_row[x];
+            uint32_t rgb_packed =
+                ((uint32_t)color[2] << 16 | (uint32_t)color[1] << 8 | (uint32_t)color[0]);
+            pc_rgbl.rgb = *reinterpret_cast<float *>(&rgb_packed);
+            pc_rgbl.label = current_label;
+
+            if ((pc_rgbl.label == 2 || pc_rgbl.label == 3) && y > edge_threshold_y)
+            {
+                int edge_w = 48 + (y - edge_threshold_y) * 120 / edge_denominator;
+                if (x < edge_w || x > safe_cols - edge_w)
+                    continue;
+            }
+
+            if (pc_rgbl.label <= 0 || pc_rgbl.label > 200)
+                continue;
+
+            if (pc_rgbl.label == 1)
+            {
+                if (d < 1.5f)
+                    continue;
+
+                if (pc_rgbl.y > -0.2f || pc_rgbl.y < -0.8f)
+                    continue;
+
+                int valid_neighbors = 0;
+                const int offsets[4][2] = {{-4, 0}, {4, 0}, {0, -4}, {0, 4}};
+
+                for (int i = 0; i < 4; i++)
+                {
+                    int ny = y + offsets[i][0];
+                    int nx = x + offsets[i][1];
+
+                    if (ny < 0 || ny >= safe_rows || nx < 0 || nx >= safe_cols)
+                        continue;
+
+                    const uint8_t *neighbor_lab_row = lab.ptr<uint8_t>(ny);
+                    const float *neighbor_depth_row = depth.ptr<float>(ny);
+
+                    uint8_t neighbor_label = neighbor_lab_row[nx];
+                    float neighbor_depth = neighbor_depth_row[nx];
+
+                    if (neighbor_label == 1 &&
+                        neighbor_depth > 0 && neighbor_depth < 6.0f &&
+                        std::abs(neighbor_depth - d) < 0.5f)
+                    {
+                        valid_neighbors++;
+                        if (valid_neighbors >= 2)
+                            break;
+                    }
+                }
+
+                if (valid_neighbors < 2)
+                    continue;
+            }
+
+            if (pc_rgbl.z < 0.3f && (pc_rgbl.label == 2 || pc_rgbl.label == 3))
+                continue;
+
+            xyz_rgbl_cloud.push_back(pc_rgbl);
+        }
     }
 
     stereo_point_ori_rgb_filter(xyz_rgbl_cloud, out_xyz_rgbl_cloud);

@@ -3,6 +3,8 @@
 #include "stereo_point_cloud_rgbl.h"
 #include "hardware_detector.hpp"
 #include <pcl/io/pcd_io.h>
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 
 // Helper function to filter labels and detections
@@ -130,6 +132,18 @@ static cv::Rect bestMowCdtRect(const std::vector<Detection>& detections,
 static uint8_t bestMowCdtLabelForMode(int infer_mode)
 {
     return infer_mode == 7 ? 3 : 2;
+}
+
+static std::vector<Detection> scaleDetectionsY(const std::vector<Detection>& detections,
+                                               float y_scale,
+                                               int max_height)
+{
+    std::vector<Detection> scaled = detections;
+    for (auto& det : scaled) {
+        det.bbox.ymin = std::max(0, static_cast<int>(std::lround(det.bbox.ymin * y_scale)));
+        det.bbox.ymax = std::min(max_height, static_cast<int>(std::lround(det.bbox.ymax * y_scale)));
+    }
+    return scaled;
 }
 
 OfflineProcessor::OfflineProcessor(const OfflineConfig& config)
@@ -301,9 +315,13 @@ bool OfflineProcessor::initStereoMatcher() {
     cv::ocl::setUseOpenCL(false);
     std::cout << "[Init] OpenCL disabled for stereo matcher" << std::endl;
 
-    // 初始化立体匹配器参数
-    stereo_matcher_.stereo_multi_param_init();
-    std::cout << "[Init] Stereo matcher initialized" << std::endl;
+    if (config_.infer_mode == 7 && hardware_mode_.isK100Hardware()) {
+        stereo_matcher_.stereo_multi_param_init_6m_adaptive();
+        std::cout << "[Init] Stereo matcher initialized (K100 adaptive parameters for night mode)" << std::endl;
+    } else {
+        stereo_matcher_.stereo_multi_param_init();
+        std::cout << "[Init] Stereo matcher initialized (original parameters)" << std::endl;
+    }
 
     return true;
 }
@@ -480,6 +498,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
 
     // ========== 图像裁剪和预处理 ==========
     cv::Mat cropped_img, resized_img;
+    cv::Mat dsg_fusion_img;
     cv::Mat lab_dst(384, 640, CV_8UC1, cv::Scalar(1));
 
     // 根据硬件模式选择裁剪尺寸
@@ -488,6 +507,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
         std::cout << "[Process] K100 mode: Crop to 640x432, then resize to 640x384" << std::endl;
         cv::Rect crop_region(0, 0, 640, 432);
         cropped_img = left_img(crop_region).clone();
+        dsg_fusion_img = cropped_img.clone();
         cv::resize(cropped_img, resized_img, cv::Size(640, 384));
     } else {
         // bestmow 模式：直接裁剪到 640x384
@@ -495,12 +515,12 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
         cv::Rect crop_region(0, 0, 640, 384);
         cropped_img = left_img(crop_region).clone();
         resized_img = cropped_img.clone();
+        dsg_fusion_img = resized_img;
     }
 
     // ========== 1. DSG 推理 ==========
     std::cout << "[Process] Running DSG inference..." << std::endl;
 
-    // 使用简化的推理接口
     dsg_perception_.process_infer_match(resized_img, lab_dst);
 
     std::cout << "[Debug] After inference - lab_dst stats:" << std::endl;
@@ -559,6 +579,8 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
 
     applyBestMowCDT(lab_dst, resized_img);
     result.segmentation = lab_dst;
+    cv::Mat fusion_label = lab_dst;
+    std::vector<Detection> fusion_detections = result.detections;
 
     // ========== 2. 立体匹配 ==========
     if (!right_img.empty()) {
@@ -584,19 +606,32 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
             right_gray,
             false);  // DSG 模式固定不启用 height filter
 
+        if (hardware_mode_.isK100Hardware()) {
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+            cv::Mat opened_depth, closed_depth;
+            cv::morphologyEx(depth_480, opened_depth, cv::MORPH_OPEN, kernel);
+            cv::morphologyEx(opened_depth, closed_depth, cv::MORPH_CLOSE, kernel);
+            depth_480 = closed_depth;
+        }
+
         std::cout << "[Process] Depth map computed: " << depth_480.size() << std::endl;
 
-        // 根据硬件模式裁剪深度图
+        const int fusion_height = hardware_mode_.isK100Hardware() ? 432 : 384;
+        fusion_label = lab_dst;
+        fusion_detections = result.detections;
+
         if (hardware_mode_.isK100Hardware()) {
-            // K100 模式：裁剪到 640x432，然后 resize 到 640x384 用于融合
-            cv::Mat depth_432 = depth_480(cv::Rect(0, 0, 640, 432)).clone();
-            cv::resize(depth_432, result.depth, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
-            std::cout << "[Process] K100 mode: Depth cropped to 432, resized to 384" << std::endl;
+            cv::resize(lab_dst, fusion_label, cv::Size(640, fusion_height), 0, 0, cv::INTER_NEAREST);
+            fusion_detections = scaleDetectionsY(result.detections, 432.0f / 384.0f, fusion_height);
         } else {
-            // bestmow 模式：直接裁剪到 640x384
-            result.depth = depth_480(cv::Rect(0, 0, 640, 384)).clone();
-            std::cout << "[Process] bestmow mode: Depth cropped to 384" << std::endl;
+            dsg_fusion_img = resized_img;
         }
+
+        result.depth = depth_480(cv::Rect(0, 0, 640, fusion_height)).clone();
+        std::cout << "[Process] "
+                  << (hardware_mode_.isK100Hardware() ? "K100" : "bestmow")
+                  << " mode: Depth cropped to " << fusion_height
+                  << " for fusion" << std::endl;
     } else {
         std::cout << "[Process] No right image, skipping stereo matching" << std::endl;
     }
@@ -605,17 +640,18 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
     if (!result.depth.empty()) {
         std::cout << "[Process] Generating point cloud..." << std::endl;
         std::cout << "[Debug] depth size: " << result.depth.size()
-                  << ", segmentation size: " << result.segmentation.size()
-                  << ", resized_img size: " << resized_img.size() << std::endl;
+                  << ", fusion label size: " << fusion_label.size()
+                  << ", fusion image size: " << dsg_fusion_img.size() << std::endl;
 
         pcl::PointCloud<pcl::PointXYZRGBL> xyz_rgbl_cloud;
         pcl::PointCloud<pcl::PointXYZRGBL> out_xyz_rgbl_cloud;
 
-        // 使用 640x384 的 resized_img 进行融合（无论哪种模式，融合都在 384 尺度）
-        stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion(
-            result.depth, result.segmentation, result.detections,
-            resized_img,  // 使用 640x384 的 resized 图像
-            xyz_rgbl_cloud, out_xyz_rgbl_cloud);
+        stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion_dsg(
+            result.depth, fusion_label, fusion_detections,
+            dsg_fusion_img,
+            xyz_rgbl_cloud, out_xyz_rgbl_cloud,
+            config_.enable_dsg_detection_in_pointcloud,
+            config_.enable_dsg_outlier_removal);
 
         result.pointcloud = out_xyz_rgbl_cloud;
         result.cropped_img = cropped_img;  // 保存原始裁剪图像（K100: 432, bestmow: 384）

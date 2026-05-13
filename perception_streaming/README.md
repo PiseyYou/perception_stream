@@ -14,10 +14,11 @@
 - **单目测试**：本地可执行文件推理，SSE 实时进度推送，支持断点续传
 - **Bag包分析**：Camera bag 路径日志解析，多源日志关联
 - **日志分析**：SSH 日志获取与分析，支持多设备日志管理
-- **双目分析**：批量分析双目图像文件夹，支持端口映射上传路径，增强的进度跟踪和错误处理
+- **双目分析**：批量分析双目图像文件夹，支持端口映射上传路径、网页缓存图片转存到本地调试机，增强的进度跟踪和错误处理
 - **硬件模式支持**：支持白天/夜晚模式切换，自动调整感知参数
 - **智能路径管理**：自动路径前缀处理，简化文件夹输入（支持相对路径和绝对路径）
 - **图像尺寸筛选**：自动筛选和移除非标准尺寸的双目图像（1280x480）
+- **K100 夜间优化**：Model 7 夜间模式支持 6m 自适应双目参数、DSG 点云融合和背景点过滤
 
 ### 高级特性
 - 点云过滤优化（label=1 背景噪声过滤，保留 label=5 真实障碍物）
@@ -31,14 +32,15 @@
 - 增强的离线服务器（支持多任务管理、进度跟踪、错误恢复）
 - Docker 容器化部署支持
 - 硬件模式切换（白天/夜晚模式，自动调整感知参数）
-- 双目匹配算法优化（支持多种匹配策略）
-- K100/bestmow 硬件自适应（自动调整图像裁剪和分割策略）
+- 双目匹配算法优化（支持多种匹配策略和 6m 自适应参数）
+- K100/bestmow 硬件自适应（自动调整图像裁剪、分割策略和 DSG 点云融合高度）
 - 高性能 PCD 解析器（支持二进制格式，提升点云加载速度）
 - 统一的离线调试流程（自动扫描、断点续传、智能路径处理）
 - SN 自动路径生成（输入 SN 末尾 4 位自动生成当日路径）
 - bestMow CDT 前方矩形框修正（非 K100 模式下可选启用）
 - 统一输出目录命名（根据硬件模式自动选择 432 或 384 后缀）
 - Vite 开发服务器看门狗（自动监控和重启，保证服务稳定性）
+- 双目图片转存（将网页已缓存图片按端口后4位转存到调试电脑目录）
 
 ## 快速开始
 
@@ -107,6 +109,7 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 ├── tests/                            # 测试文件
 │   ├── model6-hardware-size-contract.test.mjs  # Model 6 硬件尺寸契约测试
 │   ├── pcd-parser.test.mjs           # PCD 解析器测试
+│   ├── stereo-download-to-local.test.mjs # 双目图片转存到调试电脑测试
 │   ├── stereo-stop-button.test.mjs   # 双目停止按钮测试
 │   └── stereo-upload-timeout.test.mjs # 双目上传超时测试
 ├── Dockerfile.perception             # Docker 镜像构建文件
@@ -218,6 +221,25 @@ pkill -f vite
 - `ssh_host`: 远程主机地址
 - `ssh_user`: SSH用户名
 - `default_ports`: 各服务的默认端口配置
+
+### 双目图片转存到调试电脑
+
+双目分析面板的“转存本地”按钮会把网页端已缓存的图片，从 `data/stereo_debug/<端口后4位>/` 复制到调试电脑，默认目标为：
+
+```text
+youfeng@192.168.55.239:/home/youfeng/debug/boluo/<端口后4位>/<日期文件夹>/
+```
+
+可通过环境变量覆盖目标配置：
+
+```bash
+export BOLUO_TRANSFER_HOST=192.168.55.239
+export BOLUO_TRANSFER_USER=youfeng
+export BOLUO_TRANSFER_PASSWORD=<调试电脑密码>
+export BOLUO_TRANSFER_BASE=/home/youfeng/debug/boluo
+```
+
+该功能依赖 `sshpass` 和 `rsync`，会按起止日期筛选本地缓存文件夹，并只转存常见图片格式（jpg/jpeg/png/bmp/webp）。
 
 ## 守护服务部署
 

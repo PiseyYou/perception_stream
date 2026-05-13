@@ -239,16 +239,18 @@ void dsg_perception::lab_match(hbDNNTensor *output_tensors, Mat& lab_out) {
                 // int top_index = data[h * width + w];
                 int8_t *top_index = data+ (h * width + w)*4;
                 uint8_t match_label;
-                // 映射表：根据 top_index[0] 的值设置 match_label
+                // DSG argmax output uses raw labels where 0/1 are background,
+                // 2 is static obstacle, and 3 is road/passable.
                 if (top_index[0] == 0) {
                     match_label = 1;
                 } else if (top_index[0] == 1) {
-                    match_label = 5;
+                    match_label = 1;
                 } else if (top_index[0] == 2) {
+                    match_label = 5;
+                } else if (top_index[0] == 3) {
                     match_label = 3;
                 } else {
-                    // 默认值，可根据需要调整
-                    match_label = top_index[0];
+                    match_label = static_cast<uint8_t>(top_index[0]);
                 }
                 result_ptr[h * width + w] = match_label;
                 // result_ptr[h * width + w] = match_label;

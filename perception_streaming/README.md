@@ -39,7 +39,9 @@
 - SN 自动路径生成（输入 SN 末尾 4 位自动生成当日路径）
 - bestMow CDT 前方矩形框修正（非 K100 模式下可选启用）
 - 统一输出目录命名（根据硬件模式自动选择 432 或 384 后缀）
-- Vite 开发服务器看门狗（自动监控和重启，保证服务稳定性）
+- Vite HTTPS 开发服务器看门狗（自动监控和重启，保证服务稳定性）
+- HTTPS/WSS 代理访问（`/bridge-ws`、`/pcl-ws`、`/offline`），支持 Agora 安全上下文
+- MQTT Broker 预设与本地凭据持久化（账号密码通过环境变量注入，不写入代码）
 - 双目图片转存（将网页已缓存图片按端口后4位转存到调试电脑目录）
 
 ## 快速开始
@@ -56,23 +58,39 @@
 # 1. 安装前端依赖
 npm install
 
-# 2. 升级 Python websockets 库（必需）
-# 如果遇到 "loop parameter was removed from Lock()" 错误，执行：
-wget https://files.pythonhosted.org/packages/py3/w/websockets/websockets-12.0-py3-none-any.whl -O /tmp/websockets.whl
-python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
+# 2. 安装 Python 依赖（推荐使用项目虚拟环境）
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 
-# 3. 一键启动（前端 + 所有后端服务）
+# 3. 配置默认 MQTT 凭据（可选，不要写入代码）
+export VITE_DEFAULT_MQTT_USERNAME=<mqtt 用户名>
+export VITE_DEFAULT_MQTT_PASSWORD=<mqtt 密码>
+
+# 4. 一键启动（前端 + 所有后端服务）
 ./start.sh
 ```
 
-启动后访问 http://localhost:5173
+启动后访问 `https://<本机局域网 IP>:5173`。开发证书为自签名证书，浏览器首次访问需要手动信任；如需指定打开地址，可设置 `VITE_DEV_SERVER_HOST`。
 
-`start.sh` 会依次启动：
-- `ssh_bridge.py`（端口 8765）- ROS2 日志 WebSocket 桥
+`npm run dev` 会通过 Vite 插件启动并代理：
+- `ssh_bridge.py`（端口 8765，默认监听 `0.0.0.0`，可用 `BRIDGE_WS_HOST` 覆盖）- ROS2 日志 WebSocket 桥
 - SSH 隧道（本地 8768 → 远端 8767）- 点云数据转发
 - `pcl_proxy.mjs`（端口 8766）- 点云代理
 - `offline_server.py`（端口 8769）- 离线测试服务器
-- Vite 开发服务器（端口 5173）- 前端界面
+- Vite HTTPS 开发服务器（端口 5173）- 前端界面
+
+浏览器侧默认通过当前页面域名访问后端代理：
+- `/bridge-ws` → `ws://localhost:8765`
+- `/pcl-ws` → `ws://localhost:8766`
+- `/offline` → `http://localhost:8769`
+
+如需绕过代理，可设置：
+
+```bash
+export VITE_BRIDGE_WS_URL=wss://your-host/bridge-ws
+export VITE_PCL_WS_URL=wss://your-host/pcl-ws
+```
 
 ## 项目结构
 
@@ -123,13 +141,13 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 ```
 机器人 (ROS2)
     ├─ obstacle_monitor.py  →  MQTT Broker         →  Web UI（避障状态 + AVOIDING 日志）
-    ├─ ssh_bridge.py        →  WebSocket 8765      →  Web UI（实时日志 + SSH 日志关联）
-    └─ pcl_ws_bridge.py     →  pcl_proxy.mjs 8766  →  Web UI（点云）
+    ├─ ssh_bridge.py        →  WebSocket 8765      →  Vite /bridge-ws → Web UI（实时日志 + SSH 日志关联）
+    └─ pcl_ws_bridge.py     →  pcl_proxy.mjs 8766  →  Vite /pcl-ws    → Web UI（点云）
 
 离线分析
-    └─ offline_server.py    →  HTTP/SSE 8769       →  Web UI（离线感知测试进度 + 部署管理）
+    └─ offline_server.py    →  HTTP/SSE 8769       →  Vite /offline   → Web UI（离线感知测试进度 + 部署管理）
 
-视频流：Agora RTC（独立通道）
+视频流：Agora RTC（需要 HTTPS 安全上下文）
 ```
 
 ## 技术栈
@@ -155,7 +173,7 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 
 ### 网页无法访问 (ERR_CONNECTION_REFUSED)
 
-如果访问 http://192.168.55.247:5173 时出现连接被拒绝错误，通常是文件监视器数量超限导致 Vite 服务器崩溃：
+如果访问 `https://<本机局域网 IP>:5173` 时出现连接被拒绝错误，通常是文件监视器数量超限导致 Vite 服务器崩溃：
 
 **原因**：项目目录包含大量文件（如 `lib/`、`include/` 目录），超过系统 inotify 监视器限制。
 
@@ -173,20 +191,22 @@ python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
 
 ### Bridge 显示"未连接"
 
-如果 Bridge 一直显示"未连接"状态，通常是 websockets 库版本问题：
+如果 Bridge 一直显示"未连接"状态，通常是 Python 依赖未安装、服务未启动或 WebSocket 地址配置不一致：
 
 ```bash
-# 检查 websockets 版本
-python3 -c "import websockets; print(websockets.__version__)"
+# 检查依赖版本
+. .venv/bin/activate
+python -c "import websockets, paramiko; print(websockets.__version__, paramiko.__version__)"
 
-# 如果版本是 9.1，需要升级到 12.0+
-wget https://files.pythonhosted.org/packages/py3/w/websockets/websockets-12.0-py3-none-any.whl -O /tmp/websockets.whl
-python3 -m zipfile -e /tmp/websockets.whl ~/.local/lib/python3.10/site-packages/
+# 安装/更新依赖
+pip install -r requirements.txt
 
 # 重启服务
 pkill -f vite
-./start.sh
+npm run dev
 ```
+
+默认情况下前端会根据当前页面协议连接 `/bridge-ws`，Vite 再代理到 `ws://localhost:8765`。如果需要直连其他地址，设置 `VITE_BRIDGE_WS_URL`。
 
 ### SSH 端口自动更新
 
@@ -199,6 +219,17 @@ pkill -f vite
 - LK-MR6P1US000123 → 10123
 - LK-MR6P1US000124 → 10124
 - LK-MR6P1US000286 → 10286
+
+### MQTT 连接配置
+
+默认 Broker 为 `mqtt-us.yjserver.com`，连接面板会提供 Broker 预设并将用户输入的账号密码保存到浏览器本地缓存。默认账号密码通过环境变量注入：
+
+```bash
+export VITE_DEFAULT_MQTT_USERNAME=<mqtt 用户名>
+export VITE_DEFAULT_MQTT_PASSWORD=<mqtt 密码>
+```
+
+不要把真实 MQTT 密码提交到代码或 README 中。
 
 ### SSH 密钥配置
 
@@ -252,7 +283,7 @@ systemctl start monitor_avoiding
 ```
 
 ### Vite 开发服务器看门狗
-自动监控 Vite 开发服务器状态，一旦检测到服务掉线，自动重启服务。
+自动监控 Vite HTTPS 开发服务器状态，一旦检测到服务掉线，自动重启服务。
 
 ```bash
 # 启动看门狗
@@ -265,6 +296,8 @@ systemctl start monitor_avoiding
 tail -f /tmp/vite-watchdog.log
 ```
 
+看门狗默认检查 `https://127.0.0.1:5173/`，开发证书为自签名证书，脚本会使用 `curl -k` 检查。可通过 `VITE_WATCHDOG_URL` 覆盖检测地址。
+
 详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 
 ## 开发说明
@@ -272,6 +305,7 @@ tail -f /tmp/vite-watchdog.log
 - 前端开发：`npm run dev`
 - 构建生产版本：`npm run build`
 - 预览生产版本：`npm run preview`
+- 后端服务独立重启：`./restart_services.sh`（优先使用 `.venv/bin/python`，也可通过 `PYTHON=/path/to/python` 覆盖）
 - 后端服务独立启动：参考 `start.sh` 中的命令
 
 ## 相关文档

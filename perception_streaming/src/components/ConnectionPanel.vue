@@ -21,10 +21,20 @@
             <option value="ws">ws://</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group broker-field">
           <label>Broker 地址</label>
-          <input :value="modelValue.broker" @input="update('broker', ($event.target as HTMLInputElement).value)"
-                 placeholder="mqtt-test.yjserver.com" />
+          <div class="broker-input-wrap">
+            <input :value="modelValue.broker" @focus="brokerMenuOpen = true"
+                   @input="updateBroker(($event.target as HTMLInputElement).value)"
+                   placeholder="mqtt-us.yjserver.com" />
+            <button type="button" class="broker-menu-btn" @mousedown.prevent="brokerMenuOpen = !brokerMenuOpen">▾</button>
+          </div>
+          <div v-if="brokerMenuOpen" class="broker-menu">
+            <button v-for="preset in brokerPresets" :key="preset.broker" type="button"
+                    class="broker-option" @mousedown.prevent="selectBrokerPreset(preset)">
+              {{ preset.broker }}
+            </button>
+          </div>
         </div>
         <div class="form-group">
           <label>端口</label>
@@ -83,7 +93,18 @@ const emit = defineEmits<{
   'update:modelValue': [value: ConnectionForm]
 }>()
 
+const brokerPresets = [
+  {
+    broker: 'mqtt-us.yjserver.com',
+    username: import.meta.env.VITE_DEFAULT_MQTT_USERNAME || '',
+    password: import.meta.env.VITE_DEFAULT_MQTT_PASSWORD || '',
+  },
+]
+
+type BrokerPreset = (typeof brokerPresets)[number]
+
 const isCollapsed = ref(false)
+const brokerMenuOpen = ref(false)
 
 // Auto-collapse when connected
 watch(() => props.connected, (val) => {
@@ -109,6 +130,25 @@ onMounted(async () => {
 function update(key: keyof ConnectionForm, value: any) {
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
+
+function updateBroker(broker: string) {
+  const preset = brokerPresets.find((entry) => entry.broker === broker)
+  if (preset) {
+    selectBrokerPreset(preset)
+    return
+  }
+  emit('update:modelValue', { ...props.modelValue, broker })
+}
+
+function selectBrokerPreset(preset: BrokerPreset) {
+  brokerMenuOpen.value = false
+  emit('update:modelValue', {
+    ...props.modelValue,
+    broker: preset.broker,
+    username: preset.username,
+    password: preset.password,
+  })
+}
 </script>
 
 <style scoped>
@@ -121,5 +161,63 @@ function update(key: keyof ConnectionForm, value: any) {
 }
 .collapsed .chevron {
   transform: rotate(-90deg);
+}
+
+.broker-field {
+  position: relative;
+}
+
+.broker-input-wrap {
+  position: relative;
+}
+
+.broker-input-wrap input {
+  padding-right: 36px;
+}
+
+.broker-menu-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 34px;
+  border: 1px solid var(--color-border);
+  border-left: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.broker-menu-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.broker-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.broker-option {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.broker-option:hover {
+  background: var(--color-surface-hover);
 }
 </style>

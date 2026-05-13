@@ -14,12 +14,14 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 *.egg-info/
 
 # Node
 node_modules/
 dist/
 .cache/
+.cert/
 
 # IDE
 .vscode/

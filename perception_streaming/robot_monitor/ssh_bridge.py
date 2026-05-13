@@ -21,6 +21,7 @@ from config_loader import get_ssh_key_path, get_ssh_host, get_ssh_user, get_defa
 SSH_KEY = get_ssh_key_path()
 SSH_HOST = get_ssh_host()
 SSH_USER = get_ssh_user()
+WS_HOST = os.environ.get("BRIDGE_WS_HOST", "0.0.0.0")
 WS_PORT = 8765
 
 # 项目根目录
@@ -1494,9 +1495,9 @@ class BridgeServer:
 
 async def main():
     server = BridgeServer()
-    print(f"SSH Bridge WebSocket server starting on ws://localhost:{WS_PORT}")
+    print(f"SSH Bridge WebSocket server starting on ws://{WS_HOST}:{WS_PORT}")
 
-    async with websockets.serve(server.handle_client, "localhost", WS_PORT):
+    async with websockets.serve(server.handle_client, WS_HOST, WS_PORT):
         await asyncio.Future()  # run forever
 
 

@@ -9,6 +9,7 @@ const remoteMap = new Map<number | string, any>()
 
 const isConnected = ref(false)
 const connectionState = ref<string>('DISCONNECTED')
+const remoteUserCount = ref(0)
 
 // ─── Event Handlers ──────────────────────────────────
 
@@ -26,18 +27,28 @@ async function doSubscribe(user: any, mediaType: 'audio' | 'video') {
     if (!agoraClient) return
     const uid = user.uid
     await agoraClient.subscribe(user, mediaType)
+    console.log(`[Agora] subscribed ${mediaType}:`, uid)
 
     const rec = remoteMap.get(uid) || { user, containerId: VIDEO_CONTAINER_ID }
 
-    if (mediaType === 'video') {
+    if (mediaType === 'video' && user.videoTrack) {
         user.videoTrack.play(rec.containerId)
         rec.videoTrack = user.videoTrack
     }
-    if (mediaType === 'audio') {
+    if (mediaType === 'audio' && user.audioTrack) {
         user.audioTrack.play()
         rec.audioTrack = user.audioTrack
     }
     remoteMap.set(uid, rec)
+    remoteUserCount.value = remoteMap.size
+}
+
+async function subscribeExistingRemoteUsers() {
+    if (!agoraClient) return
+    for (const user of agoraClient.remoteUsers) {
+        if (user.hasVideo) await doSubscribe(user, 'video')
+        if (user.hasAudio) await doSubscribe(user, 'audio')
+    }
 }
 
 function cleanupRemote(uid: number | string) {
@@ -46,6 +57,7 @@ function cleanupRemote(uid: number | string) {
     try { rec.videoTrack?.stop() } catch { /* ignore */ }
     try { rec.audioTrack?.stop() } catch { /* ignore */ }
     remoteMap.delete(uid)
+    remoteUserCount.value = remoteMap.size
 }
 
 // ─── Public API ──────────────────────────────────────
@@ -67,7 +79,8 @@ export async function joinChannel(appid: string, channel: string) {
     await agoraClient.join(appid, channel, null, null)
     joined = true
     isConnected.value = true
-    console.log(`Joined Agora channel: ${channel}`)
+    await subscribeExistingRemoteUsers()
+    console.log(`Joined Agora channel: ${channel}, remote users: ${agoraClient.remoteUsers.length}`)
 }
 
 export async function leaveChannel() {
@@ -90,6 +103,7 @@ export async function leaveChannel() {
             }
         }
         remoteMap.clear()
+        remoteUserCount.value = 0
 
         agoraClient.removeAllListeners()
 
@@ -107,6 +121,7 @@ export function useAgoraRTC() {
     return {
         isConnected,
         connectionState,
+        remoteUserCount,
         joinChannel,
         leaveChannel,
     }

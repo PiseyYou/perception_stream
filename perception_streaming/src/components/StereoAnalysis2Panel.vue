@@ -213,7 +213,6 @@ const resultDirLabel = ref('')
 const lastOfflineInferMode = ref(7)
 let offlineEventSource: EventSource | null = null
 let offlineReconnectTimer: ReturnType<typeof setTimeout> | null = null
-let offlineStatusPollTimer: ReturnType<typeof setInterval> | null = null
 let offlineCompletionCheckTimer: ReturnType<typeof setTimeout> | null = null
 let offlineRunToken = 0
 
@@ -293,13 +292,6 @@ function clearOfflineReconnectTimer() {
   }
 }
 
-function clearOfflineStatusPollTimer() {
-  if (offlineStatusPollTimer) {
-    clearInterval(offlineStatusPollTimer)
-    offlineStatusPollTimer = null
-  }
-}
-
 function clearOfflineCompletionCheckTimer() {
   if (offlineCompletionCheckTimer) {
     clearTimeout(offlineCompletionCheckTimer)
@@ -328,7 +320,6 @@ function applyOfflineCompletion(payload: {
 }) {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
-  clearOfflineStatusPollTimer()
   clearOfflineCompletionCheckTimer()
   offlineRunning.value = false
   progressCurrent.value = progressTotal.value || pairs.value.length
@@ -357,7 +348,6 @@ function applyOfflineCompletion(payload: {
 function applyOfflineFailure(message: string) {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
-  clearOfflineStatusPollTimer()
   clearOfflineCompletionCheckTimer()
   offlineRunning.value = false
   offlineStatus.value = `✗ ${message}`
@@ -451,17 +441,6 @@ async function reconcileOfflineRunState(runToken: number, inputDir: string) {
     offlineStatus.value = '连接重试中...'
     scheduleOfflineEventReconnect(runToken, inputDir, 1200)
   }
-}
-
-function startOfflineStatusPolling(runToken: number, inputDir: string) {
-  clearOfflineStatusPollTimer()
-  offlineStatusPollTimer = setInterval(() => {
-    if (runToken !== offlineRunToken || !offlineRunning.value) {
-      clearOfflineStatusPollTimer()
-      return
-    }
-    void reconcileOfflineRunState(runToken, inputDir)
-  }, 1000)
 }
 
 function connectOfflineEventStream(runToken: number, inputDir: string) {
@@ -900,7 +879,6 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
   const runToken = offlineRunToken
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
-  clearOfflineStatusPollTimer()
   clearOfflineCompletionCheckTimer()
   lastOfflineInferMode.value = inferMode
   offlineRunning.value = true
@@ -928,14 +906,12 @@ async function doRunOffline(inputDir: string, inferMode: number, erodePixel: num
       offlineStatus.value = `✗ ${startData.error}`; offlineError.value = true
       offlineRunning.value = false; return
     }
-    startOfflineStatusPolling(runToken, inputDir)
     connectOfflineEventStream(runToken, inputDir)
   } catch (e) {
     offlineStatus.value = `✗ 请求失败`; offlineError.value = true
     offlineRunning.value = false
     closeOfflineEventStream()
     clearOfflineReconnectTimer()
-    clearOfflineStatusPollTimer()
     clearOfflineCompletionCheckTimer()
   }
 }
@@ -952,7 +928,6 @@ async function stopOfflineDebug() {
         offlineRunToken += 1
         closeOfflineEventStream()
         clearOfflineReconnectTimer()
-        clearOfflineStatusPollTimer()
         clearOfflineCompletionCheckTimer()
         offlineRunning.value = false
         offlineStatus.value = isOfflineProgressComplete() ? '运行已结束' : '已停止'
@@ -965,7 +940,6 @@ async function stopOfflineDebug() {
     offlineRunToken += 1
     closeOfflineEventStream()
     clearOfflineReconnectTimer()
-    clearOfflineStatusPollTimer()
     clearOfflineCompletionCheckTimer()
     offlineRunning.value = false
     offlineStatus.value = '已停止'
@@ -974,7 +948,6 @@ async function stopOfflineDebug() {
       offlineRunToken += 1
       closeOfflineEventStream()
       clearOfflineReconnectTimer()
-      clearOfflineStatusPollTimer()
       clearOfflineCompletionCheckTimer()
       offlineRunning.value = false
       offlineStatus.value = '运行已结束'
@@ -1203,7 +1176,6 @@ function disposeCtx(ctx: PcdCtx) {
 onBeforeUnmount(() => {
   closeOfflineEventStream()
   clearOfflineReconnectTimer()
-  clearOfflineStatusPollTimer()
   clearOfflineCompletionCheckTimer()
   if (pcdCtx) { disposeCtx(pcdCtx); pcdCtx = null }
   if (resultPcdCtx) { disposeCtx(resultPcdCtx); resultPcdCtx = null }

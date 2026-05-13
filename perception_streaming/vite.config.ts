@@ -1,15 +1,16 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { spawn, execSync, type ChildProcess } from 'child_process'
+import { spawn, execSync, execFileSync, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
+import { isIP } from 'net'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Use environment variable or fallback to system python3
-const PYTHON = process.env.PYTHON || 'python3'
-// Use SSH key from project data/conf directory
+const VENV_PYTHON = path.resolve(__dirname, '.venv/bin/python')
+const PYTHON = process.env.PYTHON || (fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3')
 const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202605')
 const REMOTE_HOST = '120.25.121.3'
 const REMOTE_PORT = '10015'
@@ -17,13 +18,90 @@ const LOCAL_PCL_PORT = 8768   // SSH tunnel local end (pcl_proxy.mjs connects he
 const REMOTE_PCL_PORT = 8767  // pcl_ws_bridge.py port
 
 const SSH_BASE = ['-i', SSH_KEY, `root@${REMOTE_HOST}`, '-p', REMOTE_PORT, '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=5']
+const DEV_SERVER_HOST = process.env.VITE_DEV_SERVER_HOST || '192.168.55.247'
+const DEV_CERT_DIR = path.resolve(__dirname, '.cert')
+const DEV_CERT_KEY = path.join(DEV_CERT_DIR, 'localhost-key.pem')
+const DEV_CERT_CERT = path.join(DEV_CERT_DIR, 'localhost-cert.pem')
+const DEV_CERT_SAN = path.join(DEV_CERT_DIR, 'subject-alt-name.txt')
+
+function getDevCertificateSubjectAltName() {
+  const hosts = new Set([DEV_SERVER_HOST, 'localhost', '127.0.0.1', '::1'])
+  for (const iface of Object.values(os.networkInterfaces())) {
+    for (const addr of iface ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) hosts.add(addr.address)
+    }
+  }
+  return [...hosts].map(host => isIP(host) ? `IP:${host}` : `DNS:${host}`).join(',')
+}
+
+function ensureDevCertificate() {
+  const san = getDevCertificateSubjectAltName()
+  const shouldCreate = !fs.existsSync(DEV_CERT_KEY)
+    || !fs.existsSync(DEV_CERT_CERT)
+    || !fs.existsSync(DEV_CERT_SAN)
+    || fs.readFileSync(DEV_CERT_SAN, 'utf8') !== san
+
+  if (shouldCreate) {
+    fs.mkdirSync(DEV_CERT_DIR, { recursive: true })
+    execFileSync('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-sha256', '-nodes', '-days', '3650',
+      '-keyout', DEV_CERT_KEY,
+      '-out', DEV_CERT_CERT,
+      '-subj', '/CN=localhost',
+      '-addext', `subjectAltName=${san}`,
+    ], { stdio: 'ignore' })
+    fs.writeFileSync(DEV_CERT_SAN, san)
+  }
+
+  return {
+    key: fs.readFileSync(DEV_CERT_KEY),
+    cert: fs.readFileSync(DEV_CERT_CERT),
+  }
+}
+
+function killPort(port: number) {
+  try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }) } catch { /* ignore */ }
+}
+
+function stripViteClientScript(html: string) {
+  return html.replace(/\s*<script type="module" src="\/@vite\/client"><\/script>\s*/g, '\n')
+}
+
+function disableViteLiveReloadPlugin() {
+  return {
+    name: 'disable-vite-live-reload',
+    apply: 'serve' as const,
+    configureServer(server: import('vite').ViteDevServer) {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = (req.url || '/').split('?')[0]
+        const accept = req.headers.accept || ''
+        const wantsHtml = accept.includes('text/html') || accept.includes('*/*')
+        if (req.method !== 'GET' || !wantsHtml || (pathname !== '/' && pathname !== '/index.html')) {
+          next()
+          return
+        }
+
+        try {
+          const rawHtml = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf8')
+          const transformedHtml = await server.transformIndexHtml(req.url || '/', rawHtml)
+          const html = stripViteClientScript(transformedHtml)
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'text/html')
+          res.end(html)
+        } catch (error) {
+          next(error)
+        }
+      })
+    },
+  }
+}
 
 function offlineServerPlugin() {
   let proc: ChildProcess | null = null
   return {
     name: 'offline-server',
     configureServer() {
-      try { execSync('lsof -ti:8769 | xargs kill -9', { stdio: 'ignore' }) } catch { /* ignore */ }
+      killPort(8769)
       const script = path.resolve(__dirname, 'robot_monitor/offline_server.py')
       proc = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BAG_DATA_DIR } })
       proc.stdout?.on('data', (d) => process.stdout.write(`[offline] ${d}`))
@@ -45,7 +123,7 @@ function sshBridgePlugin() {
     name: 'ssh-bridge',
     configureServer() {
       // ── 1. ssh_bridge.py (log streaming) ──
-      try { execSync('lsof -ti:8765 | xargs kill -9', { stdio: 'ignore' }) } catch { /* ignore */ }
+      killPort(8765)
       const script = path.resolve(__dirname, 'robot_monitor/ssh_bridge.py')
       bridge = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'] })
       bridge.stdout?.on('data', (d) => process.stdout.write(`[bridge] ${d}`))
@@ -78,7 +156,7 @@ function sshBridgePlugin() {
       }, 0)
 
       // ── 3. SSH tunnel: localhost:8768 → robot:8767 ──
-      try { execSync(`lsof -ti:${LOCAL_PCL_PORT} | xargs kill -9`, { stdio: 'ignore' }) } catch { /* ignore */ }
+      killPort(LOCAL_PCL_PORT)
 
       let tunnelFails = 0
       const MAX_TUNNEL_FAILS = 3
@@ -91,7 +169,7 @@ function sshBridgePlugin() {
           '-N',
           '-L', `${LOCAL_PCL_PORT}:localhost:${REMOTE_PCL_PORT}`,
         ], { stdio: ['ignore', 'ignore', 'ignore'] })
-        pclTunnel.on('exit', (code) => {
+        pclTunnel.on('exit', () => {
           tunnelFails++
           if (tunnelFails >= MAX_TUNNEL_FAILS) {
             console.warn(`[pcl-tunnel] 连接失败 ${tunnelFails} 次，已停止自动重连。如需点云功能，请确认机器在线后重启。`)
@@ -104,7 +182,7 @@ function sshBridgePlugin() {
       startPclTunnel()
 
       // ── 4. PCL proxy: browser:8766 → tunnel:8768 ──
-      try { execSync('lsof -ti:8766 | xargs kill -9', { stdio: 'ignore' }) } catch { /* ignore */ }
+      killPort(8766)
       const pclProxyScript = path.resolve(__dirname, 'robot_monitor/pcl_proxy.mjs')
       pclProxy = spawn(process.execPath, [pclProxyScript], { stdio: ['ignore', 'pipe', 'pipe'] })
       pclProxy.stdout?.on('data', (d) => process.stdout.write(`[pcl-proxy] ${d}`))
@@ -130,7 +208,7 @@ function bagFilePlugin() {
   return {
     name: 'bag-file-server',
     configureServer(server: import('vite').ViteDevServer) {
-      server.middlewares.use('/api/bags', (req, res, next) => {
+      server.middlewares.use('/api/bags', (req, res) => {
         const url = req.url ?? '/'
         // List endpoint
         if (url === '/' || url === '') {
@@ -181,7 +259,7 @@ function bagDataPlugin() {
   return {
     name: 'bag-data-server',
     configureServer(server: import('vite').ViteDevServer) {
-      server.middlewares.use('/api/bag_data', (req, res, next) => {
+      server.middlewares.use('/api/bag_data', (req, res) => {
         const url = decodeURIComponent(req.url ?? '/')
         let filePath: string | null = null
         let contentType = 'application/octet-stream'
@@ -260,36 +338,43 @@ function bagDataPlugin() {
   }
 }
 
-export default defineConfig({
-  plugins: [vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
+export default defineConfig(({ command }) => ({
+  plugins: [disableViteLiveReloadPlugin(), vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
   server: {
-    host: '192.168.55.247',
+    host: '0.0.0.0',
     port: 5173,
-    open: 'http://192.168.55.247:5173/',
+    https: command === 'serve' ? ensureDevCertificate() : undefined,
+    open: `https://${DEV_SERVER_HOST}:5173/`,
     strictPort: true,
     watch: {
-      ignored: ['**/data/**', '**/node_modules/**', '**/.git/**', '**/lib/**', '**/include/**'],
+      ignored: ['**/data/**', '**/node_modules/**', '**/.git/**', '**/.venv/**', '**/lib/**', '**/include/**'],
       usePolling: false,
     },
-    hmr: {
-      host: '192.168.55.247',
-      port: 5173,
-      overlay: false,
-    },
+    hmr: false,
     proxy: {
+      '/bridge-ws': {
+        target: 'ws://localhost:8765',
+        ws: true,
+        changeOrigin: true,
+      },
+      '/pcl-ws': {
+        target: 'ws://localhost:8766',
+        ws: true,
+        changeOrigin: true,
+      },
       '/offline': {
         target: 'http://localhost:8769',
         changeOrigin: true,
         timeout: 300000, // 5 minutes timeout for long operations
         proxyTimeout: 300000,
-        configure: (proxy, options) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
             // Enable streaming for SSE
             if (req.url?.includes('/analyze_avoiding')) {
               proxyReq.setHeader('Connection', 'keep-alive');
             }
           });
-          proxy.on('proxyRes', (proxyRes, req, res) => {
+          proxy.on('proxyRes', (proxyRes, _req, res) => {
             // Disable buffering for SSE responses
             if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
               res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
@@ -308,4 +393,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

@@ -60,7 +60,7 @@ export interface LogEntry {
   relevant: boolean
 }
 
-const BRIDGE_URL = 'ws://localhost:8765'
+const BRIDGE_URL = import.meta.env.VITE_BRIDGE_WS_URL || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bridge-ws`
 
 export function useObstacleMonitor(
   getMqttConnected: () => boolean | undefined,

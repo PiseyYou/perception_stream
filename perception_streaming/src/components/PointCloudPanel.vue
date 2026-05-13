@@ -31,7 +31,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as THREE from 'three'
 
-const WS_URL = 'ws://localhost:8767'
+const WS_URL = import.meta.env.VITE_PCL_WS_URL || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/pcl-ws`
 
 const emit = defineEmits<{ (e: 'collapse'): void }>()
 

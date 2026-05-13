@@ -130,7 +130,7 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import MqttClient from './utils/mqttClient'
-import { joinChannel, leaveChannel } from './composables/useAgoraRTC'
+import { joinChannel, leaveChannel, useAgoraRTC } from './composables/useAgoraRTC'
 import { updateSshPortForSN } from './composables/useObstacleMonitor'
 import ConnectionPanel, { type ConnectionForm } from './components/ConnectionPanel.vue'
 import DevicePanel, { type DeviceForm } from './components/DevicePanel.vue'
@@ -169,13 +169,15 @@ const monitorStatus = ref<MonitorStatus>({
 
 // ─── LocalStorage Persistence ────────────────────────
 const STORAGE_KEY = 'perception_streaming_mqtt_creds'
+const DEFAULT_MQTT_USERNAME = import.meta.env.VITE_DEFAULT_MQTT_USERNAME || ''
+const DEFAULT_MQTT_PASSWORD = import.meta.env.VITE_DEFAULT_MQTT_PASSWORD || ''
 
 function loadSavedCredentials(): { username: string; password: string } {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) return JSON.parse(saved)
   } catch { /* ignore */ }
-  return { username: 'worker-mfefcm2ky5', password: '' }
+  return { username: DEFAULT_MQTT_USERNAME, password: DEFAULT_MQTT_PASSWORD }
 }
 
 function saveCredentials(username: string, password: string) {
@@ -188,7 +190,7 @@ const savedCreds = loadSavedCredentials()
 
 const connectionForm = ref<ConnectionForm>({
   protocol: 'wss',
-  broker: 'mqtt-test.yjserver.com',
+  broker: 'mqtt-us.yjserver.com',
   port: 8084,
   clientId: 'mqttx_' + Math.random().toString(16).substring(2, 10),
   username: savedCreds.username,
@@ -198,7 +200,7 @@ const connectionForm = ref<ConnectionForm>({
 })
 
 const deviceForm = ref<DeviceForm>({
-  sn: new URLSearchParams(location.search).get('sn') || 'LK-MR2P1US000015',
+  sn: new URLSearchParams(location.search).get('sn') || 'LK-MR6P1US000286',
   agoraAppId: import.meta.env.VITE_AGORA_APP_ID || '4b918a3ad6b54639895fcf119d6fe7c7',
   camera: 0,
   resolution: 0,
@@ -224,6 +226,18 @@ const mqttConnected = ref(false)
 const videoStarted = ref(false)
 const logs = ref<string[]>([])
 const mqttClient = new MqttClient()
+const { connectionState: agoraConnectionState, remoteUserCount } = useAgoraRTC()
+
+watch(
+  () => [connectionForm.value.username, connectionForm.value.password] as const,
+  ([username, password]) => saveCredentials(username, password),
+  { deep: false }
+)
+
+watch(agoraConnectionState, (state) => addLog(`Agora 状态: ${state}`))
+watch(remoteUserCount, (count) => {
+  if (count > 0) addLog(`Agora 已订阅远端视频用户: ${count}`)
+})
 
 function addLog(msg: string) {
   logs.value.push(`[${new Date().toLocaleTimeString()}] ${msg}`)
@@ -294,11 +308,14 @@ function handleConnectMqtt() {
             addLog(`[${topic}] ${operation}`)
           }
 
-          // Robot confirms streaming → join Agora channel
           if (operation === 'mow_enable_remote_rtsp' && json.success === true) {
             addLog('机器确认推流, 加入 Agora 频道...')
             joinChannel(deviceForm.value.agoraAppId, deviceForm.value.sn)
-            videoStarted.value = true
+              .then(() => { videoStarted.value = true })
+              .catch((err) => {
+                const message = err instanceof Error ? err.message : String(err)
+                addLog(`✗ 加入 Agora 频道失败: ${message}`)
+              })
           }
         } catch {
           addLog(`[${topic}] ${message}`)
@@ -338,6 +355,14 @@ function handleStartVideo() {
 
   if (!d.agoraAppId) {
     alert('请填写 Agora App ID')
+    return
+  }
+
+  if (!window.isSecureContext) {
+    const secureUrl = `https://${location.host}${location.pathname}${location.search}`
+    const msg = `当前页面不是安全上下文，Agora 视频需要使用 ${secureUrl} 打开`
+    addLog(`✗ ${msg}`)
+    alert(msg)
     return
   }
 

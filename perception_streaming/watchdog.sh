@@ -8,6 +8,7 @@ VITE_LOG="/tmp/vite-dev.log"
 CHECK_INTERVAL=10  # 检查间隔（秒）
 MAX_RESTART_ATTEMPTS=3  # 最大连续重启次数
 RESTART_COOLDOWN=60  # 重启冷却时间（秒）
+VITE_URL="${VITE_WATCHDOG_URL:-https://127.0.0.1:5173/}"
 
 # 初始化计数器
 restart_count=0
@@ -19,17 +20,21 @@ log() {
 
 check_vite_running() {
     # 检查进程是否存在
-    if ! pgrep -f "vite" > /dev/null; then
+    if ! pgrep -f "$PROJECT_DIR/node_modules/.bin/vite" > /dev/null; then
         return 1
     fi
 
     # 检查端口是否监听
-    if ! netstat -tln 2>/dev/null | grep -q "192.168.55.247:5173"; then
+    if command -v ss >/dev/null 2>&1; then
+        if ! ss -ltn 2>/dev/null | grep -Eq '(^|[[:space:]])[^[:space:]]*:5173[[:space:]]'; then
+            return 1
+        fi
+    elif ! netstat -tln 2>/dev/null | grep -Eq '(^|[[:space:]])[^[:space:]]*:5173[[:space:]]'; then
         return 1
     fi
 
-    # 检查HTTP响应
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 http://192.168.55.247:5173/ 2>/dev/null)
+    # 检查 HTTPS 响应；开发证书是自签名证书，必须允许 -k。
+    http_code=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$VITE_URL" 2>/dev/null)
     if [ "$http_code" != "200" ]; then
         return 1
     fi

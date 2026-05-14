@@ -29,10 +29,16 @@
       <div class="lf-section-title">📂 离线日志 & 避障图片</div>
       <div class="lf-row">
         <label class="lf-label">日志文件夹:</label>
-        <input v-model="logDir" class="lf-input" placeholder="本地日志目录，如 /home/youfeng/debug/custom/0123/20260331/" />
+        <label class="lf-sub-label">端口号</label>
+        <input v-model="logPortSuffix" class="lf-input-sn" placeholder="0286" maxlength="4" inputmode="numeric" />
+        <label class="lf-sub-label">日期</label>
+        <input v-model="logDate" class="lf-input-date" placeholder="20260513" maxlength="8" inputmode="numeric" />
         <label class="lf-label">避障图片文件夹:</label>
-        <input v-model="imgDir" class="lf-input" placeholder="避障图片目录，如 /home/youfeng/debug/custom/0123/避障图片/" />
-        <button class="lf-btn green" :disabled="analyzeLoading || (!logDir && !imgDir)" @click="analyzeAvoiding">
+        <label class="lf-sub-label">端口号</label>
+        <input v-model="imgPortSuffix" class="lf-input-sn" placeholder="0286" maxlength="4" inputmode="numeric" />
+        <label class="lf-sub-label">日期</label>
+        <input v-model="imgDate" class="lf-input-date" placeholder="20260513" maxlength="8" inputmode="numeric" />
+        <button class="lf-btn green" :disabled="analyzeLoading || !canAnalyze" @click="analyzeAvoiding">
           {{ analyzeLoading ? '⏳ 分析中...' : '🔍 分析避障' }}
         </button>
       </div>
@@ -267,6 +273,26 @@ import { readAnalysisCache, writeAnalysisCache } from '../utils/analysisCache'
 import { buildMergedTimeline, type AnalysisTimelineRow } from '../utils/analysisTimeline'
 import { consumeSseJsonChunk } from '../utils/sseJsonStream'
 
+function getPreviousDateString(now = new Date()): string {
+  const previous = new Date(now)
+  previous.setDate(previous.getDate() - 1)
+  return previous.getFullYear().toString() +
+    String(previous.getMonth() + 1).padStart(2, '0') +
+    String(previous.getDate()).padStart(2, '0')
+}
+
+function cleanDigits(value: string, maxLength: number): string {
+  return value.replace(/\D/g, '').slice(0, maxLength)
+}
+
+function buildAvoidingLogDir(portSuffix: string, date: string): string {
+  return `data/log_debug/${cleanDigits(portSuffix, 4)}/${cleanDigits(date, 8)}/ros2_log`
+}
+
+function buildAvoidingImageDir(portSuffix: string, date: string): string {
+  return `data/stereo_debug/${cleanDigits(portSuffix, 4)}/${cleanDigits(date, 8)}`
+}
+
 interface AnalysisRow {
   ts: string
   text: string
@@ -319,8 +345,19 @@ const pullLogLines = ref<string[]>([])
 const pullProgress = ref(0)
 let pullAbort: AbortController | null = null
 
-const logDir = ref('data/log_debug/0286/20260413/log/ros2_log')
-const imgDir = ref('data/stereo_debug/0286/20260413')
+const defaultAnalysisDate = getPreviousDateString()
+const logPortSuffix = ref('0286')
+const logDate = ref(defaultAnalysisDate)
+const imgPortSuffix = ref('0286')
+const imgDate = ref(defaultAnalysisDate)
+const logDir = computed(() => buildAvoidingLogDir(logPortSuffix.value, logDate.value))
+const imgDir = computed(() => buildAvoidingImageDir(imgPortSuffix.value, imgDate.value))
+const canAnalyze = computed(() =>
+  cleanDigits(logPortSuffix.value, 4).length === 4 &&
+  cleanDigits(logDate.value, 8).length === 8 &&
+  cleanDigits(imgPortSuffix.value, 4).length === 4 &&
+  cleanDigits(imgDate.value, 8).length === 8,
+)
 const analyzeLoading = ref(false)
 const analyzeError = ref(false)
 const analyzeStatus = ref('')
@@ -522,7 +559,6 @@ async function doPullLogs() {
         if (!shouldPull) {
           pullStatus.value = `✅ 使用现有日志: ${checkDir} (${checkData.file_count} 个文件)`
           localSaveDir.value = checkDir
-          if (!logDir.value) logDir.value = checkDir
           return
         }
       }
@@ -598,7 +634,6 @@ async function doPullLogs() {
           }
           if (data.local_dir) {
             localSaveDir.value = data.local_dir
-            if (!logDir.value && (data.file_count || 0) > 0) logDir.value = data.local_dir
           }
           pullProgress.value = 100
           pullLoading.value = false
@@ -635,7 +670,7 @@ function stopPull() {
 }
 
 async function analyzeAvoiding() {
-  if (!logDir.value && !imgDir.value) return
+  if (!canAnalyze.value) return
 
   // 先检查是否有缓存的分析结果
   const cacheKey = `${logDir.value}|${imgDir.value}`
@@ -699,6 +734,7 @@ async function analyzeAvoiding() {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let analysisDone = false
 
     const handleAnalyzePayloads = (payloadText: string) => {
       const parsed = consumeSseJsonChunk(buffer, payloadText)
@@ -722,6 +758,8 @@ async function analyzeAvoiding() {
         }
 
         if (data.done) {
+          analysisDone = true
+          analyzeLoading.value = false
           if ((resultData as any).ok) {
             const normalized = applyAnalysisResult(resultData, cacheKey)
             analyzeStatus.value = `✅ 分析完成，找到 ${normalized.avoiding_count} 个避障事件`
@@ -752,14 +790,18 @@ async function analyzeAvoiding() {
       }
     }
 
-    while (true) {
+    while (!analysisDone) {
       const { done, value } = await reader.read()
       if (done) break
 
       handleAnalyzePayloads(decoder.decode(value, { stream: true }))
     }
 
-    handleAnalyzePayloads(`${decoder.decode()}\n\n`)
+    if (analysisDone) {
+      reader.cancel().catch(() => {})
+    } else {
+      handleAnalyzePayloads(`${decoder.decode()}\n\n`)
+    }
   } catch (e: any) {
     const rawMessage = e?.message || 'network error'
     const message = /failed to fetch|networkerror|network error/i.test(rawMessage)
@@ -835,6 +877,11 @@ async function analyzeAvoiding() {
   white-space: nowrap;
   font-size: 12px;
 }
+.lf-sub-label {
+  color: #7f93bb;
+  white-space: nowrap;
+  font-size: 11px;
+}
 .lf-input {
   flex: 1;
   min-width: 200px;
@@ -865,7 +912,19 @@ async function analyzeAvoiding() {
   text-align: center;
   font-family: monospace;
 }
-.lf-input-sn:focus {
+.lf-input-date {
+  width: 100px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-align: center;
+  font-family: monospace;
+}
+.lf-input-sn:focus,
+.lf-input-date:focus {
   outline: none;
   border-color: #42a5f5;
 }

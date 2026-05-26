@@ -39,8 +39,10 @@
 - SN 自动路径生成（输入 SN 末尾 4 位自动生成当日路径）
 - bestMow CDT 前方矩形框修正（非 K100 模式下可选启用）
 - 统一输出目录命名（根据硬件模式自动选择 432 或 384 后缀）
-- Vite HTTPS 开发服务器看门狗（自动监控和重启，保证服务稳定性）
+- Vite HTTPS 开发服务器看门狗（自动监控和重启，支持较长冷启动等待，保证服务稳定性）
 - HTTPS/WSS 代理访问（`/bridge-ws`、`/pcl-ws`、`/offline`），支持 Agora 安全上下文
+- 离线服务与 SSH Bridge 子进程自动拉起（异常退出后按退避重启）
+- 日志拉取 SSE 结束后主动断开连接，避免代理层卡住完成态
 - MQTT Broker 预设与本地凭据持久化（账号密码通过环境变量注入，不写入代码）
 - 双目图片转存（将网页已缓存图片按端口后4位转存到调试电脑目录）
 - 避障离线分析路径自动生成（输入端口后4位和日期后自动定位 `data/log_debug/<端口>/<日期>/ros2_log` 与 `data/stereo_debug/<端口>/<日期>`）
@@ -297,7 +299,7 @@ systemctl start monitor_avoiding
 tail -f /tmp/vite-watchdog.log
 ```
 
-看门狗默认检查 `https://127.0.0.1:5173/`，开发证书为自签名证书，脚本会使用 `curl -k` 检查。可通过 `VITE_WATCHDOG_URL` 覆盖检测地址。
+看门狗默认检查 `https://127.0.0.1:5173/`，开发证书为自签名证书，脚本会使用 `curl -k` 检查。由于当前项目冷启动通常需要 50 秒以上，看门狗改为轮询等待 Vite 就绪，而不是固定等待 8 秒。可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
 
 详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 
@@ -306,6 +308,8 @@ tail -f /tmp/vite-watchdog.log
 - 前端开发：`npm run dev`
 - 构建生产版本：`npm run build`
 - 预览生产版本：`npm run preview`
+- Node 回归测试：`node tests/watchdog-http-url.test.mjs && node tests/vite-http-server.test.mjs && node tests/vite-offline-sse-proxy.test.mjs && node tests/offline-server-plugin-restart.test.mjs && node tests/log-pull-sse-contract.test.mjs`
+- Python 回归测试：`python3 -m unittest robot_monitor.tests.test_offline_server`
 - 后端服务独立重启：`./restart_services.sh`（优先使用 `.venv/bin/python`，也可通过 `PYTHON=/path/to/python` 覆盖）
 - 后端服务独立启动：参考 `start.sh` 中的命令
 

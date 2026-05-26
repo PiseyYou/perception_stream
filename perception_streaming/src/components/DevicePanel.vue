@@ -22,6 +22,7 @@
               <option value="LK-MR2P1US000115">LK-MR2P1US000115</option>
               <option value="LK-MR6P1US000123">LK-MR6P1US000123</option>
               <option value="LK-MR6P1US000124">LK-MR6P1US000124</option>
+              <option value="LK-MR541EU000027">LK-MR541EU000027</option>
               <option value="LK-MR6P1US000286">LK-MR6P1US000286</option>
             </select>
             <button class="btn-newtab" @click="openNewTab" title="在新标签页打开此 SN">

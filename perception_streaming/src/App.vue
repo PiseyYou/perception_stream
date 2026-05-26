@@ -340,11 +340,39 @@ function handleConnectMqtt() {
   }
 }
 
-function handleDisconnectMqtt() {
-  if (videoStarted.value) handleStopVideo()
-  const result = mqttClient.disconnect()
-  mqttConnected.value = false
-  addLog(result)
+let liveMonitorCleanupPromise: Promise<void> | null = null
+
+function cleanupLiveMonitor(waitForVideoLeave = true) {
+  if (liveMonitorCleanupPromise) return liveMonitorCleanupPromise
+
+  liveMonitorCleanupPromise = (async () => {
+    try {
+      if (videoStarted.value) {
+        if (waitForVideoLeave) {
+          await handleStopVideo()
+        } else {
+          publishStopVideoCommand()
+          videoStarted.value = false
+          leaveChannel()
+          addLog('已关闭视频')
+        }
+      }
+
+      if (mqttConnected.value || mqttClient.isConnected) {
+        const result = mqttClient.disconnect()
+        mqttConnected.value = false
+        addLog(result)
+      }
+    } finally {
+      liveMonitorCleanupPromise = null
+    }
+  })()
+
+  return liveMonitorCleanupPromise
+}
+
+async function handleDisconnectMqtt() {
+  await cleanupLiveMonitor()
 }
 
 // ─── Video Control ───────────────────────────────────
@@ -388,10 +416,7 @@ function handleStartVideo() {
   }
 }
 
-async function handleStopVideo() {
-  await leaveChannel()
-  videoStarted.value = false
-
+function publishStopVideoCommand() {
   const d = deviceForm.value
   const c = connectionForm.value
   const message = {
@@ -401,6 +426,12 @@ async function handleStopVideo() {
     payload: { appid: '', license: '', token: 'web1' },
   }
   mqttClient.publish(`bestmow/request/${d.sn}`, JSON.stringify(message))
+}
+
+async function handleStopVideo() {
+  publishStopVideoCommand()
+  await leaveChannel()
+  videoStarted.value = false
   addLog('已关闭视频')
 }
 
@@ -408,16 +439,23 @@ async function handleStopVideo() {
 
 // ─── Initialization ──────────────────────────────────
 
+function handlePageUnload() {
+  cleanupLiveMonitor(false)
+}
+
 // Initialize SSH port based on current SN
 onMounted(() => {
   updateSshPortForSN(deviceForm.value.sn)
+  window.addEventListener('pagehide', handlePageUnload)
+  window.addEventListener('beforeunload', handlePageUnload)
 })
 
 // ─── Cleanup ─────────────────────────────────────────
 
 onBeforeUnmount(() => {
-  if (videoStarted.value) handleStopVideo()
-  mqttClient.destroy()
+  window.removeEventListener('pagehide', handlePageUnload)
+  window.removeEventListener('beforeunload', handlePageUnload)
+  cleanupLiveMonitor().finally(() => mqttClient.destroy())
 })
 </script>
 

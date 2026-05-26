@@ -3726,22 +3726,31 @@ class OfflineHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("Connection", "keep-alive")
+            self.send_header("Connection", "close")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
+            def send_sse(data: dict):
+                self.wfile.write(f"data: {json.dumps(data)}\n\n".encode())
+                self.wfile.flush()
+
             def progress_callback(log_msg: str, percent: int = None):
-                import json as _json
                 data = {"log": log_msg}
                 if percent is not None:
                     data["percent"] = percent
-                self.wfile.write(f"data: {_json.dumps(data)}\n\n".encode())
-                self.wfile.flush()
+                send_sse(data)
 
             result = pull_robot_logs(port, local_save_dir, progress_callback)
-            # 最后发送完成标记
-            self.wfile.write(f"data: {json.dumps({'done': True, **result})}\n\n".encode())
-            self.wfile.flush()
+            send_sse({
+                "done": True,
+                "ok": result.get("ok", False),
+                "partial_success": result.get("partial_success", False),
+                "local_dir": result.get("local_dir", ""),
+                "file_count": result.get("file_count", 0),
+                "errors": result.get("errors", []),
+                "error": result.get("error", ""),
+            })
+            self.close_connection = True
             return
 
         if path == "/offline/check_local_logs":

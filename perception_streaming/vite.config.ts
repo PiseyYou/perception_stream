@@ -31,7 +31,7 @@ function getDevCertificateSubjectAltName() {
       if (addr.family === 'IPv4' && !addr.internal) hosts.add(addr.address)
     }
   }
-  return [...hosts].map(host => isIP(host) ? `IP:${host}` : `DNS:${host}`).join(',')
+  return [...hosts].map((host) => isIP(host) ? `IP:${host}` : `DNS:${host}`).join(',')
 }
 
 function ensureDevCertificate() {
@@ -44,11 +44,22 @@ function ensureDevCertificate() {
   if (shouldCreate) {
     fs.mkdirSync(DEV_CERT_DIR, { recursive: true })
     execFileSync('openssl', [
-      'req', '-x509', '-newkey', 'rsa:2048', '-sha256', '-nodes', '-days', '3650',
-      '-keyout', DEV_CERT_KEY,
-      '-out', DEV_CERT_CERT,
-      '-subj', '/CN=localhost',
-      '-addext', `subjectAltName=${san}`,
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-sha256',
+      '-nodes',
+      '-days',
+      '3650',
+      '-keyout',
+      DEV_CERT_KEY,
+      '-out',
+      DEV_CERT_CERT,
+      '-subj',
+      '/CN=localhost',
+      '-addext',
+      `subjectAltName=${san}`,
     ], { stdio: 'ignore' })
     fs.writeFileSync(DEV_CERT_SAN, san)
   }
@@ -98,26 +109,76 @@ function disableViteLiveReloadPlugin() {
 
 function offlineServerPlugin() {
   let proc: ChildProcess | null = null
+  let restartTimer: ReturnType<typeof setTimeout> | null = null
+  let restartDelayMs = 1000
+  let shuttingDown = false
+
+  function scheduleRestart(start: () => void) {
+    if (restartTimer || shuttingDown) return
+    const delay = restartDelayMs
+    restartTimer = setTimeout(() => {
+      restartTimer = null
+      start()
+    }, delay)
+    restartDelayMs = Math.min(restartDelayMs * 2, 30000)
+    console.log(`[offline] restarting in ${delay}ms`)
+  }
+
   return {
     name: 'offline-server',
     configureServer() {
       killPort(8769)
       const script = path.resolve(__dirname, 'robot_monitor/offline_server.py')
-      proc = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BAG_DATA_DIR } })
-      proc.stdout?.on('data', (d) => process.stdout.write(`[offline] ${d}`))
-      proc.stderr?.on('data', (d) => process.stderr.write(`[offline] ${d}`))
-      proc.on('exit', (code) => console.log(`[offline] exited ${code}`))
-      process.on('exit', () => proc?.kill())
-      process.on('SIGINT', () => { proc?.kill(); process.exit() })
+      const start = () => {
+        if (proc || shuttingDown) return
+        const startedAt = Date.now()
+        proc = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BAG_DATA_DIR } })
+        proc.stdout?.on('data', (d) => process.stdout.write(`[offline] ${d}`))
+        proc.stderr?.on('data', (d) => process.stderr.write(`[offline] ${d}`))
+        proc.on('error', (error) => {
+          console.error(`[offline] failed to start: ${error.message}`)
+          proc = null
+          scheduleRestart(start)
+        })
+        proc.on('exit', (code, signal) => {
+          console.log(`[offline] exited ${code ?? signal}`)
+          proc = null
+          if (Date.now() - startedAt > 10000) restartDelayMs = 1000
+          scheduleRestart(start)
+        })
+      }
+      const stop = () => {
+        shuttingDown = true
+        if (restartTimer) clearTimeout(restartTimer)
+        proc?.kill()
+        proc = null
+      }
+      start()
+      process.once('exit', stop)
+      process.once('SIGINT', () => { stop(); process.exit() })
     },
   }
 }
 
 function sshBridgePlugin() {
   let bridge: ChildProcess | null = null
+  let bridgeRestartTimer: ReturnType<typeof setTimeout> | null = null
+  let bridgeRestartDelayMs = 1000
   let pclTunnel: ChildProcess | null = null
   let pclProxy: ChildProcess | null = null
   let cleanupRegistered = false
+  let shuttingDown = false
+
+  function scheduleBridgeRestart(start: () => void) {
+    if (bridgeRestartTimer || shuttingDown) return
+    const delay = bridgeRestartDelayMs
+    bridgeRestartTimer = setTimeout(() => {
+      bridgeRestartTimer = null
+      start()
+    }, delay)
+    bridgeRestartDelayMs = Math.min(bridgeRestartDelayMs * 2, 30000)
+    console.log(`[bridge] restarting in ${delay}ms`)
+  }
 
   return {
     name: 'ssh-bridge',
@@ -125,10 +186,25 @@ function sshBridgePlugin() {
       // ── 1. ssh_bridge.py (log streaming) ──
       killPort(8765)
       const script = path.resolve(__dirname, 'robot_monitor/ssh_bridge.py')
-      bridge = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'] })
-      bridge.stdout?.on('data', (d) => process.stdout.write(`[bridge] ${d}`))
-      bridge.stderr?.on('data', (d) => process.stderr.write(`[bridge] ${d}`))
-      bridge.on('exit', (code) => console.log(`[bridge] exited ${code}`))
+      const startBridge = () => {
+        if (bridge || shuttingDown) return
+        const startedAt = Date.now()
+        bridge = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'] })
+        bridge.stdout?.on('data', (d) => process.stdout.write(`[bridge] ${d}`))
+        bridge.stderr?.on('data', (d) => process.stderr.write(`[bridge] ${d}`))
+        bridge.on('error', (error) => {
+          console.error(`[bridge] failed to start: ${error.message}`)
+          bridge = null
+          scheduleBridgeRestart(startBridge)
+        })
+        bridge.on('exit', (code, signal) => {
+          console.log(`[bridge] exited ${code ?? signal}`)
+          bridge = null
+          if (Date.now() - startedAt > 10000) bridgeRestartDelayMs = 1000
+          scheduleBridgeRestart(startBridge)
+        })
+      }
+      startBridge()
 
       // ── 2. Deploy & start pcl_ws_bridge.py on robot (async, non-blocking) ──
       const pclScript = path.resolve(__dirname, 'robot_monitor/pcl_ws_bridge.py')
@@ -189,10 +265,18 @@ function sshBridgePlugin() {
       pclProxy.stderr?.on('data', (d) => process.stderr.write(`[pcl-proxy] ${d}`))
       pclProxy.on('exit', (code) => console.log(`[pcl-proxy] exited ${code}`))
 
+      const stop = () => {
+        shuttingDown = true
+        if (bridgeRestartTimer) clearTimeout(bridgeRestartTimer)
+        bridge?.kill()
+        pclTunnel?.kill()
+        pclProxy?.kill()
+      }
+
       if (!cleanupRegistered) {
         cleanupRegistered = true
-        process.on('exit', () => { bridge?.kill(); pclTunnel?.kill(); pclProxy?.kill() })
-        process.on('SIGINT', () => { bridge?.kill(); pclTunnel?.kill(); pclProxy?.kill(); process.exit() })
+        process.on('exit', stop)
+        process.on('SIGINT', () => { stop(); process.exit() })
       }
     },
   }
@@ -347,8 +431,21 @@ export default defineConfig(({ command }) => ({
     open: `https://${DEV_SERVER_HOST}:5173/`,
     strictPort: true,
     watch: {
-      ignored: ['**/data/**', '**/node_modules/**', '**/.git/**', '**/.venv/**', '**/lib/**', '**/include/**'],
-      usePolling: false,
+      ignored: [
+        '**/data/**',
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/.venv/**',
+        '**/build/**',
+        '**/cmake-build-*/**',
+        '**/CMakeFiles/**',
+        '**/lib/**',
+        '**/include/**',
+        '**/dist/**',
+        '**/vite.config.ts.timestamp-*.mjs',
+      ],
+      usePolling: true,
+      interval: 1000,
     },
     hmr: false,
     proxy: {
@@ -367,21 +464,6 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         timeout: 300000, // 5 minutes timeout for long operations
         proxyTimeout: 300000,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            // Enable streaming for SSE
-            if (req.url?.includes('/analyze_avoiding')) {
-              proxyReq.setHeader('Connection', 'keep-alive');
-            }
-          });
-          proxy.on('proxyRes', (proxyRes, _req, res) => {
-            // Disable buffering for SSE responses
-            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
-              res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
-              proxyRes.pipe(res);
-            }
-          });
-        },
       },
       '/ros2deploy': {
         target: 'http://localhost:8769',

@@ -24,6 +24,7 @@
               <option value="LK-MR6P1US000124">LK-MR6P1US000124</option>
               <option value="LK-MR541EU000027">LK-MR541EU000027</option>
               <option value="LK-MR6P1US000286">LK-MR6P1US000286</option>
+              <option value="LK-MR641US000367">LK-MR641US000367</option>
             </select>
             <button class="btn-newtab" @click="openNewTab" title="在新标签页打开此 SN">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

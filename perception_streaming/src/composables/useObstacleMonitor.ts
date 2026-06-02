@@ -14,6 +14,7 @@ export const SN_PORT_MAP: Record<string, number> = {
   'LK-MR6P1US000124': 10124,
   'LK-MR541EU000027': 10027,
   'LK-MR6P1US000286': 10286,
+  'LK-MR641US000367': 10367,
 }
 
 // Update SSH port based on device SN

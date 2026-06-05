@@ -356,6 +356,64 @@ def _unique_move_destination(dest_dir: str, filename: str) -> str:
     return candidate
 
 
+def _read_image_size(path: str) -> tuple[int, int]:
+    if PIL_AVAILABLE:
+        with Image.open(path) as img:
+            return img.size
+
+    with open(path, "rb") as f:
+        header = f.read(32)
+        if header.startswith(b"\x89PNG\r\n\x1a\n") and header[12:16] == b"IHDR":
+            return struct.unpack(">II", header[16:24])
+        if header.startswith(b"BM"):
+            return struct.unpack("<ii", header[18:26])
+        if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+            if header[12:16] == b"VP8X":
+                chunk = f.read(18)
+                width = int.from_bytes(chunk[8:11], "little") + 1
+                height = int.from_bytes(chunk[11:14], "little") + 1
+                return width, height
+            if header[12:16] == b"VP8 ":
+                f.seek(26)
+                dims = f.read(4)
+                width, height = struct.unpack("<HH", dims)
+                return width & 0x3fff, height & 0x3fff
+            if header[12:16] == b"VP8L":
+                f.seek(21)
+                b = f.read(4)
+                bits = int.from_bytes(b, "little")
+                width = (bits & 0x3fff) + 1
+                height = ((bits >> 14) & 0x3fff) + 1
+                return width, height
+
+        if header.startswith(b"\xff\xd8"):
+            f.seek(2)
+            while True:
+                marker_start = f.read(1)
+                if not marker_start:
+                    break
+                if marker_start != b"\xff":
+                    continue
+                marker = f.read(1)
+                while marker == b"\xff":
+                    marker = f.read(1)
+                if not marker or marker in (b"\xd8", b"\xd9"):
+                    continue
+                length_bytes = f.read(2)
+                if len(length_bytes) != 2:
+                    break
+                segment_len = struct.unpack(">H", length_bytes)[0]
+                if marker in [bytes([m]) for m in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF)]:
+                    data = f.read(5)
+                    if len(data) != 5:
+                        break
+                    height, width = struct.unpack(">HH", data[1:5])
+                    return width, height
+                f.seek(segment_len - 2, os.SEEK_CUR)
+
+    raise ValueError("无法读取图片分辨率")
+
+
 def _filter_stereo_image_size(folder: str, expected_size: tuple[int, int] = (1280, 480)) -> dict:
     folder = _resolve_project_path(folder)
     result = {
@@ -370,9 +428,6 @@ def _filter_stereo_image_size(folder: str, expected_size: tuple[int, int] = (128
     if not os.path.isdir(folder):
         result["errors"].append(f"目录不存在: {folder}")
         return result
-    if not PIL_AVAILABLE:
-        result["errors"].append("PIL 不可用，无法读取图片分辨率")
-        return result
 
     other_size_dir = os.path.join(folder, "other_size")
     image_files = sorted(
@@ -384,8 +439,7 @@ def _filter_stereo_image_size(folder: str, expected_size: tuple[int, int] = (128
     for fname in image_files:
         src = os.path.join(folder, fname)
         try:
-            with Image.open(src) as img:
-                size = img.size
+            size = _read_image_size(src)
             if size == expected_size:
                 result["kept_count"] += 1
                 continue
@@ -1837,6 +1891,7 @@ def upload_images_from_robot(port: int, date_str: str) -> dict:
     if not date_str:
         return {"ok": False, "error": "未提供日期"}
 
+    ssh_key = get_ssh_key_path()
     port_suffix = str(port)[-4:]
     local_dir = os.path.join(LOCAL_IMAGE_BASE, port_suffix, date_str)
 
@@ -1845,7 +1900,7 @@ def upload_images_from_robot(port: int, date_str: str) -> dict:
 
     scp_cmd = [
         "scp", "-r",
-        "-i", SSH_KEY,
+        "-i", ssh_key,
         "-o", "StrictHostKeyChecking=no",
         "-o", "ConnectTimeout=15",
         "-P", str(port),
@@ -1881,14 +1936,15 @@ def upload_images_range_from_robot(port: int, date_start: str, date_end: str) ->
     if date_start > date_end:
         return {"ok": False, "error": "开始日期不能晚于截止日期"}
 
+    ssh_key = get_ssh_key_path()
     port_suffix = str(port)[-4:]
     local_base = os.path.join(LOCAL_IMAGE_BASE, port_suffix)
 
     REMOTE_BASE = "/userdata/bestmow_data/image_save_path"
     # SSH options for rsync - use proper quoting
-    ssh_opts = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -p {port}"
+    ssh_opts = f"ssh -i {ssh_key} -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -p {port}"
     ssh_base = [
-        "ssh", "-i", SSH_KEY,
+        "ssh", "-i", ssh_key,
         "-o", "StrictHostKeyChecking=no",
         "-o", "ConnectTimeout=15",
         "-o", "ServerAliveInterval=10",

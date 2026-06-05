@@ -1,8 +1,10 @@
+import struct
 import sys
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 TEST_DIR = Path(__file__).resolve().parent
@@ -11,6 +13,89 @@ if str(ROBOT_MONITOR_DIR) not in sys.path:
     sys.path.insert(0, str(ROBOT_MONITOR_DIR))
 
 import offline_server  # noqa: E402
+
+
+class OfflineServerFilterStereoImageSizeTest(unittest.TestCase):
+    def test_filter_stereo_image_size_reads_png_size_without_pil(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            kept = folder / "kept.png"
+            moved = folder / "moved.png"
+            png_sig = b"\x89PNG\r\n\x1a\n"
+            kept.write_bytes(png_sig + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 1280, 480) + b"\x08\x02\x00\x00\x00" + b"\x00\x00\x00\x00")
+            moved.write_bytes(png_sig + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 640, 480) + b"\x08\x02\x00\x00\x00" + b"\x00\x00\x00\x00")
+
+            with patch.object(offline_server, "PIL_AVAILABLE", False), \
+                 patch.object(offline_server, "Image", None):
+                result = offline_server._filter_stereo_image_size(str(folder))
+
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(result["scanned_count"], 2)
+            self.assertEqual(result["kept_count"], 1)
+            self.assertEqual(result["moved_count"], 1)
+            self.assertTrue(kept.exists())
+            self.assertFalse(moved.exists())
+            self.assertTrue((folder / "other_size" / "moved.png").exists())
+            self.assertEqual(result["moved"][0]["size"], [640, 480])
+
+    def test_filter_stereo_image_size_reads_jpeg_size_without_pil(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            kept = folder / "kept.jpg"
+            moved = folder / "moved.jpg"
+
+            def jpeg_bytes(width, height):
+                return (
+                    b"\xff\xd8"
+                    + b"\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+                    + b"\xff\xc0" + struct.pack(">H", 17) + b"\x08" + struct.pack(">HH", height, width) + b"\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00"
+                    + b"\xff\xd9"
+                )
+
+            kept.write_bytes(jpeg_bytes(1280, 480))
+            moved.write_bytes(jpeg_bytes(1280, 720))
+
+            with patch.object(offline_server, "PIL_AVAILABLE", False), \
+                 patch.object(offline_server, "Image", None):
+                result = offline_server._filter_stereo_image_size(str(folder))
+
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(result["scanned_count"], 2)
+            self.assertEqual(result["kept_count"], 1)
+            self.assertEqual(result["moved_count"], 1)
+            self.assertTrue(kept.exists())
+            self.assertFalse(moved.exists())
+            self.assertTrue((folder / "other_size" / "moved.jpg").exists())
+            self.assertEqual(result["moved"][0]["size"], [1280, 720])
+
+
+class OfflineServerUploadImagesSshKeyTest(unittest.TestCase):
+    def test_upload_images_range_reads_current_ssh_key_path_at_call_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_key = str(Path(tmp) / "bestmow_rsa_202605")
+            current_key = str(Path(tmp) / "bestmow_rsa_202606")
+            calls = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append(cmd)
+                if cmd[0] == "ssh":
+                    return subprocess.CompletedProcess(cmd, 0, stdout="20260602\n", stderr="")
+                if cmd[0] == "rsync":
+                    return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+                raise AssertionError(f"unexpected command: {cmd}")
+
+            with patch.object(offline_server, "SSH_KEY", old_key), \
+                 patch.object(offline_server, "get_ssh_key_path", return_value=current_key), \
+                 patch.object(offline_server, "LOCAL_IMAGE_BASE", str(Path(tmp) / "stereo_debug")), \
+                 patch.object(offline_server.subprocess, "run", side_effect=fake_run):
+                result = offline_server.upload_images_range_from_robot(10115, "20260602", "20260605")
+
+            self.assertTrue(result["ok"])
+            rsync_ssh_command = calls[1][calls[1].index("-e") + 1]
+            self.assertIn(current_key, calls[0])
+            self.assertIn(f"ssh -i {current_key}", rsync_ssh_command)
+            self.assertNotIn(old_key, calls[0])
+            self.assertNotIn(f"ssh -i {old_key}", rsync_ssh_command)
 
 
 class OfflineServerResultDiscoveryTest(unittest.TestCase):

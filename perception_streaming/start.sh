@@ -13,4 +13,5 @@ export CHOKIDAR_USEPOLLING=false
 export VITE_CJS_IGNORE_WARNING=true
 
 echo "Starting Vite dev server..."
+echo "Open http://${VITE_DEV_SERVER_HOST:-192.168.55.247}:5173/"
 npm run dev

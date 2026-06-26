@@ -98,6 +98,140 @@ class OfflineServerUploadImagesSshKeyTest(unittest.TestCase):
             self.assertNotIn(f"ssh -i {old_key}", rsync_ssh_command)
 
 
+class OfflineServerBoluoTransferConnectionTest(unittest.TestCase):
+    def test_test_boluo_transfer_connection_reports_success(self):
+        def fake_run(cmd, **kwargs):
+            self.assertEqual(kwargs["env"]["SSHPASS"], "youfeng")
+            self.assertIn("youfeng@192.168.55.239", cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+        with patch.object(offline_server.shutil, "which", return_value="/usr/bin/sshpass"), \
+             patch.object(offline_server.subprocess, "run", side_effect=fake_run):
+            result = offline_server.test_boluo_transfer_connection(
+                "192.168.55.239",
+                "youfeng",
+                "youfeng",
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["host"], "192.168.55.239")
+        self.assertEqual(result["user"], "youfeng")
+
+    def test_test_boluo_transfer_connection_reports_failure(self):
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 255, stdout="", stderr="Permission denied")
+
+        with patch.object(offline_server.shutil, "which", return_value="/usr/bin/sshpass"), \
+             patch.object(offline_server.subprocess, "run", side_effect=fake_run):
+            result = offline_server.test_boluo_transfer_connection(
+                "192.168.55.239",
+                "youfeng",
+                "bad",
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("Permission denied", result["error"])
+
+
+class OfflineServerPullRobotLogsTest(unittest.TestCase):
+    def test_pull_robot_logs_filters_files_by_module_keyword(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local_dir = Path(tmp) / "logs"
+            remote_files = [
+                "/userdata/log_dir/ros2_log/stereo_perception_001.log",
+                "/userdata/log_dir/ros2_log/nav2_single_node_navigator_001.log",
+                "/userdata/log_dir/system_log/stereo_perception_debug.log",
+            ]
+            rsynced_paths = []
+
+            def fake_run(cmd, **kwargs):
+                if cmd[0] == "ssh":
+                    remote_cmd = cmd[-1]
+                    if remote_cmd == "echo ok":
+                        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+                    if remote_cmd.startswith("find "):
+                        return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(remote_files) + "\n", stderr="")
+                    if remote_cmd.startswith("stat "):
+                        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+                    raise AssertionError(f"unexpected ssh command: {remote_cmd}")
+
+                if cmd[0] == "rsync":
+                    files_from = Path(cmd[cmd.index("--files-from") + 1])
+                    rel_paths = [line.strip() for line in files_from.read_text().splitlines() if line.strip()]
+                    rsynced_paths.extend(rel_paths)
+                    destination = Path(cmd[-1])
+                    for rel_path in rel_paths:
+                        target = destination / rel_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text("log\n")
+                    return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+                raise AssertionError(f"unexpected command: {cmd}")
+
+            with patch.object(offline_server, "LOCAL_LOG_PULL_BASE", str(Path(tmp) / "base")), \
+                 patch.object(offline_server.subprocess, "run", side_effect=fake_run):
+                result = offline_server.pull_robot_logs(10337, str(local_dir), module_keyword="stereo_perception")
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["file_count"], 2)
+            self.assertEqual(rsynced_paths, [
+                "ros2_log/stereo_perception_001.log",
+                "system_log/stereo_perception_debug.log",
+            ])
+            self.assertIn("[过滤] 模块关键词 stereo_perception: 2/3 个文件", "\n".join(result["logs"]))
+
+    def test_pull_robot_logs_splits_failed_rsync_batches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local_dir = Path(tmp) / "logs"
+            remote_files = [f"/userdata/log_dir/ros2_log/file_{i:02d}.log" for i in range(21)]
+            rsync_file_counts = []
+
+            def fake_run(cmd, **kwargs):
+                if cmd[0] == "ssh":
+                    remote_cmd = cmd[-1]
+                    if remote_cmd == "echo ok":
+                        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+                    if remote_cmd.startswith("find "):
+                        return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(remote_files) + "\n", stderr="")
+                    if remote_cmd.startswith("stat "):
+                        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+                    raise AssertionError(f"unexpected ssh command: {remote_cmd}")
+
+                if cmd[0] == "rsync":
+                    files_from = Path(cmd[cmd.index("--files-from") + 1])
+                    rel_paths = [line.strip() for line in files_from.read_text().splitlines() if line.strip()]
+                    rsync_file_counts.append(len(rel_paths))
+                    if len(rel_paths) == 20:
+                        return subprocess.CompletedProcess(
+                            cmd,
+                            12,
+                            stdout="",
+                            stderr="Connection to 120.25.121.3 closed by remote host. rsync: connection unexpectedly closed",
+                        )
+
+                    destination = Path(cmd[-1])
+                    for rel_path in rel_paths:
+                        target = destination / rel_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text("log\n")
+                    return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+                raise AssertionError(f"unexpected command: {cmd}")
+
+            with patch.object(offline_server, "LOCAL_LOG_PULL_BASE", str(Path(tmp) / "base")), \
+                 patch.object(offline_server.subprocess, "run", side_effect=fake_run), \
+                 patch.object(offline_server.time, "sleep"):
+                result = offline_server.pull_robot_logs(10337, str(local_dir), module_keyword="")
+
+            self.assertTrue(result["ok"])
+            self.assertFalse(result["partial_success"])
+            self.assertEqual(result["file_count"], 21)
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(rsync_file_counts.count(20), 3)
+            self.assertIn(10, rsync_file_counts)
+            self.assertIn("[降级] 批次 1/2 仍失败，拆分为 10 + 10 个文件继续拉取", "\n".join(result["logs"]))
+
+
 class OfflineServerResultDiscoveryTest(unittest.TestCase):
     def test_build_output_dir_uses_stereo_debug_conventions(self):
         folder = "data/stereo_debug/0016/20260420"

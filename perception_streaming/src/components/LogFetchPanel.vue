@@ -15,10 +15,25 @@
         </button>
         <button v-if="pullLoading" class="lf-btn red" @click="stopPull">■ 停止</button>
       </div>
+      <div class="lf-row lf-filter-row">
+        <label class="lf-label">拉取模块:</label>
+        <input v-model="moduleKeyword" class="lf-input-module" placeholder="stereo_perception" />
+        <span class="lf-transfer-hint">只拉取文件名包含该关键词的日志，留空则拉取全部日志</span>
+      </div>
+      <div class="lf-row lf-transfer-row">
+        <label class="lf-label">一键转存:</label>
+        <label class="lf-sub-label">目标IP</label>
+        <input v-model="logTransferHost" class="lf-input-host" placeholder="192.168.55.239" />
+        <button class="lf-btn purple" :disabled="transferLoading || pullLoading || !canTransferLogs" @click="transferLogsToDebugHost">
+          {{ transferLoading ? '⏳ 转存中...' : '⇪ 一键转存' }}
+        </button>
+        <span class="lf-transfer-hint">/home/youfeng/debug/log/{{ transferPortSuffix }}</span>
+      </div>
       <div v-if="pullLoading" class="lf-progress-bar">
         <div class="lf-progress-fill" :style="{ width: (pullProgress || 0) + '%' }">{{ pullProgress || 0 }}%</div>
       </div>
       <div v-if="pullStatus" class="lf-status" :class="{ error: pullError }">{{ pullStatus }}</div>
+      <div v-if="transferStatus" class="lf-status" :class="{ error: transferError }">{{ transferStatus }}</div>
       <div v-if="pullLogLines.length" class="lf-terminal">
         <div v-for="(line, i) in pullLogLines" :key="i" class="lf-log-line" :class="{ 'log-err': line.startsWith('ERROR') || line.startsWith('❌') }">{{ line }}</div>
       </div>
@@ -328,6 +343,7 @@ function defaultSaveDir(p: number): string {
 const snLast4 = ref('0016')
 const port = ref<number | null>(DEFAULT_PORT)
 const localSaveDir = ref(defaultSaveDir(DEFAULT_PORT))
+const moduleKeyword = ref('stereo_perception')
 
 // 当输入SN末尾4位时，自动拼接路径和端口号
 function onSnInput() {
@@ -344,6 +360,17 @@ const pullStatus = ref('')
 const pullLogLines = ref<string[]>([])
 const pullProgress = ref(0)
 let pullAbort: AbortController | null = null
+const logTransferHost = ref('192.168.55.239')
+const transferLoading = ref(false)
+const transferError = ref(false)
+const transferStatus = ref('')
+const transferPortSuffix = computed(() => String(port.value || '').slice(-4) || '----')
+const canTransferLogs = computed(() =>
+  Boolean(port.value) &&
+  cleanDigits(transferPortSuffix.value, 4).length === 4 &&
+  Boolean(localSaveDir.value.trim()) &&
+  Boolean(logTransferHost.value.trim()),
+)
 
 const defaultAnalysisDate = getPreviousDateString()
 const logPortSuffix = ref('0286')
@@ -577,7 +604,11 @@ async function doPullLogs() {
   pullAbort = new AbortController()
 
   try {
-    const requestBody: any = { port: port.value, resume: true }  // 启用断点续传
+    const requestBody: any = {
+      port: port.value,
+      resume: true,
+      module_keyword: moduleKeyword.value.trim(),
+    }  // 启用断点续传
     if (localSaveDir.value && localSaveDir.value.trim()) {
       requestBody.local_save_dir = localSaveDir.value.trim()
     }
@@ -667,6 +698,42 @@ function stopPull() {
   pullAbort?.abort()
   pullLoading.value = false
   pullStatus.value = '已取消'
+}
+
+async function transferLogsToDebugHost() {
+  if (!canTransferLogs.value || !port.value) {
+    transferError.value = true
+    transferStatus.value = '❌ 请先确认端口号、日志保存目录和目标 IP'
+    return
+  }
+
+  transferLoading.value = true
+  transferError.value = false
+  transferStatus.value = ''
+
+  try {
+    const res = await fetch('/offline/transfer_logs_to_debug_host', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        port: port.value,
+        local_dir: localSaveDir.value.trim(),
+        host: logTransferHost.value.trim(),
+      }),
+    })
+    const data = await readJsonResponse<any>(res, '一键转存')
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`)
+    }
+
+    const warning = data.errors?.length ? `，${data.errors.length} 个警告` : ''
+    transferStatus.value = `✅ 已转存到 ${data.remote_path} (${data.file_count || 0} 个文件${warning})`
+  } catch (e: any) {
+    transferError.value = true
+    transferStatus.value = `❌ 转存失败: ${e.message || e}`
+  } finally {
+    transferLoading.value = false
+  }
 }
 
 async function analyzeAvoiding() {
@@ -923,8 +990,30 @@ async function analyzeAvoiding() {
   text-align: center;
   font-family: monospace;
 }
+.lf-input-host {
+  width: 140px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.lf-input-module {
+  width: 180px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: monospace;
+}
 .lf-input-sn:focus,
-.lf-input-date:focus {
+.lf-input-date:focus,
+.lf-input-host:focus,
+.lf-input-module:focus {
   outline: none;
   border-color: #42a5f5;
 }
@@ -941,9 +1030,19 @@ async function analyzeAvoiding() {
 .lf-btn.blue:hover:not(:disabled) { background: #1976d2; }
 .lf-btn.green { background: #2e7d32; color: #fff; }
 .lf-btn.green:hover:not(:disabled) { background: #388e3c; }
+.lf-btn.purple { background: #6d4fc2; color: #fff; }
+.lf-btn.purple:hover:not(:disabled) { background: #7b5ed8; }
 .lf-btn.red { background: #c62828; color: #fff; }
 .lf-btn.red:hover:not(:disabled) { background: #e53935; }
 .lf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lf-transfer-row {
+  margin-top: 8px;
+}
+.lf-transfer-hint {
+  color: #8ca4cf;
+  font-size: 12px;
+  font-family: monospace;
+}
 .lf-progress-info {
   margin-top: 8px;
   padding: 8px 12px;

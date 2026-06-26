@@ -8,7 +8,7 @@ VITE_LOG="/tmp/vite-dev.log"
 CHECK_INTERVAL=10  # 检查间隔（秒）
 MAX_RESTART_ATTEMPTS=3  # 最大连续重启次数
 RESTART_COOLDOWN=60  # 重启冷却时间（秒）
-VITE_URL="${VITE_WATCHDOG_URL:-https://127.0.0.1:5173/}"
+VITE_URL="${VITE_WATCHDOG_URL:-http://127.0.0.1:5173/}"
 STARTUP_TIMEOUT="${VITE_WATCHDOG_STARTUP_TIMEOUT:-120}"
 STARTUP_CHECK_INTERVAL="${VITE_WATCHDOG_STARTUP_CHECK_INTERVAL:-2}"
 
@@ -35,8 +35,8 @@ check_vite_running() {
         return 1
     fi
 
-    # 检查 HTTPS 响应；开发证书是自签名证书，因此这里使用 -k。
-    http_code=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$VITE_URL" 2>/dev/null)
+    # 检查 HTTP 响应；与 start.sh / Vite 当前输出的访问地址保持一致。
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$VITE_URL" 2>/dev/null)
     if [ "$http_code" != "200" ]; then
         return 1
     fi

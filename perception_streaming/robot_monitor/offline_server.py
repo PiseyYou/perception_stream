@@ -1877,8 +1877,12 @@ LOCAL_IMAGE_BASE = os.path.join(PROJECT_ROOT, "data/stereo_debug")
 ROBOT_IMAGE_BASE = "/userdata/bestmow_data/image_perception_debug"
 BOLUO_TRANSFER_HOST = os.environ.get("BOLUO_TRANSFER_HOST", "192.168.55.239")
 BOLUO_TRANSFER_USER = os.environ.get("BOLUO_TRANSFER_USER", "youfeng")
-BOLUO_TRANSFER_PASSWORD = os.environ.get("BOLUO_TRANSFER_PASSWORD", "")
+BOLUO_TRANSFER_PASSWORD = os.environ.get("BOLUO_TRANSFER_PASSWORD", "youfeng")
 BOLUO_TRANSFER_BASE = os.environ.get("BOLUO_TRANSFER_BASE", "/home/youfeng/debug/boluo")
+LOG_TRANSFER_HOST = os.environ.get("LOG_TRANSFER_HOST", "192.168.55.239")
+LOG_TRANSFER_USER = os.environ.get("LOG_TRANSFER_USER", "youfeng")
+LOG_TRANSFER_PASSWORD = os.environ.get("LOG_TRANSFER_PASSWORD", "youfeng")
+LOG_TRANSFER_BASE = os.environ.get("LOG_TRANSFER_BASE", "/home/youfeng/debug/log")
 TRANSFER_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
 
@@ -2090,17 +2094,57 @@ def _count_image_files(root: str) -> int:
     return total
 
 
-def _boluo_ssh_env() -> dict:
+def _boluo_ssh_env(password: str = BOLUO_TRANSFER_PASSWORD) -> dict:
     env = os.environ.copy()
-    env["SSHPASS"] = BOLUO_TRANSFER_PASSWORD
+    env["SSHPASS"] = password
     return env
 
 
-def _remote_transfer_dir(port_suffix: str, folder: str) -> str:
-    return f"{BOLUO_TRANSFER_BASE.rstrip('/')}/{port_suffix}/{folder}"
+def _remote_transfer_dir(port_suffix: str, folder: str, base: str = BOLUO_TRANSFER_BASE) -> str:
+    return f"{base.rstrip('/')}/{port_suffix}/{folder}"
 
 
-def download_to_local(port: int, date_start: str, date_end: str) -> dict:
+def test_boluo_transfer_connection(host: str = BOLUO_TRANSFER_HOST, user: str = BOLUO_TRANSFER_USER, password: str = BOLUO_TRANSFER_PASSWORD) -> dict:
+    host = (host or "").strip()
+    user = (user or "").strip()
+    if not host:
+        return {"ok": False, "error": "未提供转存 IP"}
+    if not user:
+        return {"ok": False, "error": "未提供转存用户"}
+    if not password:
+        return {"ok": False, "error": "未提供转存密码"}
+
+    sshpass = shutil.which("sshpass")
+    if not sshpass:
+        return {"ok": False, "error": "缺少 sshpass，无法使用密码测试连接"}
+
+    ssh_target = f"{user}@{host}"
+    ssh_env = _boluo_ssh_env(password)
+    ssh_options = [
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ConnectTimeout=8",
+        "-o", "ServerAliveInterval=5",
+        "-o", "ServerAliveCountMax=1",
+        "-o", "PreferredAuthentications=password",
+    ]
+    try:
+        rc = subprocess.run(
+            [sshpass, "-e", "ssh", *ssh_options, ssh_target, "echo ok"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=ssh_env,
+        )
+        if rc.returncode == 0:
+            return {"ok": True, "host": host, "user": user}
+        return {"ok": False, "error": (rc.stderr.strip() or rc.stdout.strip() or "SSH 连接失败")[:300]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "SSH 连接超时"}
+    except Exception as e:
+        return {"ok": False, "error": f"SSH 连接异常: {e}"}
+
+
+def download_to_local(port: int, date_start: str, date_end: str, host: str = BOLUO_TRANSFER_HOST, user: str = BOLUO_TRANSFER_USER, password: str = BOLUO_TRANSFER_PASSWORD, base: str = BOLUO_TRANSFER_BASE) -> dict:
     """将网页端已缓存的图片转存到 192.168.55.239:/home/youfeng/debug/boluo/。"""
     if not date_start or not date_end:
         return {"ok": False, "error": "未提供起止日期"}
@@ -2111,8 +2155,17 @@ def download_to_local(port: int, date_start: str, date_end: str) -> dict:
 
     sshpass = shutil.which("sshpass")
     rsync = shutil.which("rsync")
-    if not BOLUO_TRANSFER_PASSWORD:
-        return {"ok": False, "error": "未配置 BOLUO_TRANSFER_PASSWORD，无法使用密码转存"}
+    host = (host or "").strip()
+    user = (user or "").strip()
+    base = (base or "").strip()
+    if not host:
+        return {"ok": False, "error": "未提供转存 IP"}
+    if not user:
+        return {"ok": False, "error": "未提供转存用户"}
+    if not password:
+        return {"ok": False, "error": "未提供转存密码"}
+    if not base:
+        return {"ok": False, "error": "未提供转存路径"}
     if not sshpass:
         return {"ok": False, "error": "缺少 sshpass，无法使用密码转存"}
     if not rsync:
@@ -2144,7 +2197,7 @@ def download_to_local(port: int, date_start: str, date_end: str) -> dict:
             "debug_info": f"本地共有 {len(all_folders)} 个文件夹: {', '.join(all_folders[:10])}",
         }
 
-    ssh_env = _boluo_ssh_env()
+    ssh_env = _boluo_ssh_env(password)
     ssh_options = [
         "-o", "StrictHostKeyChecking=no",
         "-o", "ConnectTimeout=15",
@@ -2152,8 +2205,8 @@ def download_to_local(port: int, date_start: str, date_end: str) -> dict:
         "-o", "ServerAliveCountMax=3",
         "-o", "PreferredAuthentications=password",
     ]
-    ssh_target = f"{BOLUO_TRANSFER_USER}@{BOLUO_TRANSFER_HOST}"
-    base_dir = f"{BOLUO_TRANSFER_BASE.rstrip('/')}/{port_suffix}"
+    ssh_target = f"{user}@{host}"
+    base_dir = f"{base.rstrip('/')}/{port_suffix}"
 
     try:
         mkdir_base = [
@@ -2182,7 +2235,7 @@ def download_to_local(port: int, date_start: str, date_end: str) -> dict:
             errors.append(f"{folder}: 未找到图片文件")
             continue
 
-        remote_dir = _remote_transfer_dir(port_suffix, folder)
+        remote_dir = _remote_transfer_dir(port_suffix, folder, base)
         try:
             mkdir_folder = [
                 sshpass, "-e", "ssh",
@@ -2267,7 +2320,106 @@ def check_local_logs(local_dir: str) -> dict:
         return {"exists": False, "file_count": 0, "error": str(e)}
 
 
-def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=None) -> dict:
+def _log_transfer_env() -> dict:
+    env = os.environ.copy()
+    env["SSHPASS"] = LOG_TRANSFER_PASSWORD
+    return env
+
+
+def _local_log_dir_date(local_dir: str) -> str:
+    name = os.path.basename(local_dir.rstrip(os.sep))
+    if re.fullmatch(r'\d{8}', name):
+        return name
+    return datetime.now().strftime("%Y%m%d")
+
+
+def _count_regular_files(root: str) -> int:
+    total = 0
+    for _, _, files in os.walk(root):
+        total += len(files)
+    return total
+
+
+def transfer_logs_to_debug_host(local_dir: str, port: int, host: str = LOG_TRANSFER_HOST) -> dict:
+    """将已下载的当天日志转存到调试电脑 /home/youfeng/debug/log/<端口后4位>/<日期>/。"""
+    if not local_dir:
+        return {"ok": False, "error": "未提供本地日志目录"}
+    if not host:
+        return {"ok": False, "error": "未提供目标 IP"}
+
+    if not os.path.isabs(local_dir):
+        local_dir = os.path.join(PROJECT_ROOT, local_dir)
+    local_dir = os.path.abspath(local_dir)
+
+    if not os.path.isdir(local_dir):
+        return {"ok": False, "error": f"源目录不存在: {local_dir}，请先拉取日志"}
+
+    sshpass = shutil.which("sshpass")
+    rsync = shutil.which("rsync")
+    if not LOG_TRANSFER_PASSWORD:
+        return {"ok": False, "error": "未配置 LOG_TRANSFER_PASSWORD，无法使用密码转存"}
+    if not sshpass:
+        return {"ok": False, "error": "缺少 sshpass，无法使用密码转存"}
+    if not rsync:
+        return {"ok": False, "error": "缺少 rsync，无法转存日志"}
+
+    port_suffix = str(port)[-4:]
+    date_folder = _local_log_dir_date(local_dir)
+    remote_dir = f"{LOG_TRANSFER_BASE.rstrip('/')}/{port_suffix}/{date_folder}"
+    ssh_target = f"{LOG_TRANSFER_USER}@{host}"
+    ssh_env = _log_transfer_env()
+    ssh_options = [
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ConnectTimeout=15",
+        "-o", "ServerAliveInterval=10",
+        "-o", "ServerAliveCountMax=3",
+        "-o", "PreferredAuthentications=password",
+    ]
+
+    try:
+        mkdir_cmd = [
+            sshpass, "-e", "ssh",
+            *ssh_options,
+            ssh_target,
+            f"mkdir -p -- {shlex.quote(remote_dir)}",
+        ]
+        subprocess.run(mkdir_cmd, capture_output=True, text=True, timeout=30, check=True, env=ssh_env)
+    except subprocess.CalledProcessError as e:
+        error = e.stderr.strip() or e.stdout.strip() or str(e)
+        return {"ok": False, "error": f"无法创建远程目录: {error}"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "创建远程目录超时"}
+    except Exception as e:
+        return {"ok": False, "error": f"无法创建远程目录: {e}"}
+
+    rsync_cmd = [
+        sshpass, "-e", rsync,
+        "-avz", "--partial", "--timeout=60",
+        "-e", "ssh " + " ".join(shlex.quote(opt) for opt in ssh_options),
+        local_dir.rstrip(os.sep) + "/",
+        f"{ssh_target}:{shlex.quote(remote_dir)}/",
+    ]
+    try:
+        rc = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=600, env=ssh_env)
+        if rc.returncode != 0:
+            return {"ok": False, "error": rc.stderr.strip() or rc.stdout.strip() or "rsync 失败"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "转存日志超时"}
+    except Exception as e:
+        return {"ok": False, "error": f"转存日志失败: {e}"}
+
+    return {
+        "ok": True,
+        "remote_path": f"{ssh_target}:{remote_dir}/",
+        "local_dir": local_dir,
+        "file_count": _count_regular_files(local_dir),
+        "port_suffix": port_suffix,
+        "date": date_folder,
+        "errors": [],
+    }
+
+
+def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=None, module_keyword: str = "stereo_perception") -> dict:
     """
     SSH 至机器，将 /userdata/log_dir 下的全部日志 rsync 到本地。
     本地路径: data/log_debug/<last4digits_port>/<YYYYMMDD>/
@@ -2331,6 +2483,22 @@ def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=Non
 
     _log(f"[扫描] 发现 {len(all_files)} 个文件", 10)
 
+    module_keyword = (module_keyword or "").strip()
+    if module_keyword:
+        total_files = len(all_files)
+        all_files = [f for f in all_files if module_keyword in os.path.basename(f)]
+        _log(f"[过滤] 模块关键词 {module_keyword}: {len(all_files)}/{total_files} 个文件", 11)
+        if not all_files:
+            return {
+                "ok": False,
+                "error": f"远端日志文件名未匹配模块关键词: {module_keyword}",
+                "logs": logs,
+                "local_dir": local_dir,
+                "file_count": 0,
+                "errors": [],
+                "partial_success": False,
+            }
+
     # Find latest mtime to determine local folder date
     try:
         stat_cmd = " ; ".join(f"stat -c '%Y %n' {f} 2>/dev/null" for f in all_files[:100])
@@ -2356,7 +2524,8 @@ def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=Non
 
     _log(f"[保存] 本地目录: {local_dir}", 15)
 
-    # Transfer files in batches (20/batch) to avoid SSH disconnection on large directories
+    # Transfer files in batches, then split failed batches so transient SSH drops
+    # do not cause a whole group of otherwise-good log files to be skipped.
     downloaded = []
     errors = []
     ssh_opts = (
@@ -2368,20 +2537,19 @@ def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=Non
     BATCH = 20
     total_ok = 0
     num_batches = (len(all_files) + BATCH - 1) // BATCH
-    for bi, batch_start in enumerate(range(0, len(all_files), BATCH)):
-        batch = all_files[batch_start:batch_start + BATCH]
-        rel_paths = [f[len(remote_log_dir):].lstrip('/') for f in batch]
+
+    def _rsync_group(files: list[str], label: str, max_retries: int = 2) -> tuple[bool, str]:
         tf_path = None
         retry_count = 0
-        max_retries = 2
 
         while retry_count <= max_retries:
             try:
+                rel_paths = [f[len(remote_log_dir):].lstrip('/') for f in files]
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tf:
                     tf.write('\n'.join(rel_paths) + '\n')
                     tf_path = tf.name
                 rsync_cmd = [
-                    "rsync", "-av", "--timeout=180", "--partial", "--inplace",
+                    "rsync", "-av", "--timeout=180", "--partial", "--append-verify",
                     "--files-from", tf_path,
                     "-e", ssh_opts,
                     f"{SSH_USER}@{SSH_HOST}:{remote_log_dir}/",
@@ -2389,49 +2557,67 @@ def pull_robot_logs(port: int, local_save_dir: str = None, progress_callback=Non
                 ]
                 rc = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=240)
                 if rc.returncode == 0:
-                    total_ok += len(batch)
-                    percent = int(15 + (bi + 1) * 85 / num_batches) if num_batches > 0 else 100
-                    _log(f"[进度] {percent}% - 批次 {bi+1}/{num_batches} 完成 ({len(batch)} 文件)", percent)
-                    break
-                else:
-                    err = (rc.stderr.strip() or rc.stdout.strip() or "rsync 失败")[:300]
-                    if retry_count < max_retries:
-                        _log(f"[重试] 批次 {bi+1}/{num_batches} 失败，重试 {retry_count+1}/{max_retries}: {err[:100]}")
-                        retry_count += 1
-                        time.sleep(2)
-                        continue
-                    else:
-                        errors.append(err)
-                        _log(f"[错误] 批次 {bi+1}/{num_batches} 失败: {err[:100]}")
-                        break
+                    return True, ""
+
+                err = (rc.stderr.strip() or rc.stdout.strip() or "rsync 失败")[:300]
+                if retry_count < max_retries:
+                    _log(f"[重试] {label} 失败，重试 {retry_count+1}/{max_retries}: {err[:100]}")
+                    retry_count += 1
+                    time.sleep(2)
+                    continue
+                return False, err
             except subprocess.TimeoutExpired:
                 if retry_count < max_retries:
-                    _log(f"[重试] 批次 {bi+1}/{num_batches} 超时(240秒)，重试 {retry_count+1}/{max_retries}")
+                    _log(f"[重试] {label} 超时(240秒)，重试 {retry_count+1}/{max_retries}")
                     retry_count += 1
                     time.sleep(2)
                     continue
-                else:
-                    err_msg = f"批次 {bi+1} 传输超时(240秒)"
-                    errors.append(err_msg)
-                    _log(f"[错误] {err_msg}")
-                    break
+                return False, f"{label} 传输超时(240秒)"
             except Exception as e:
                 if retry_count < max_retries:
-                    _log(f"[重试] 批次 {bi+1}/{num_batches} 异常，重试 {retry_count+1}/{max_retries}: {str(e)[:100]}")
+                    _log(f"[重试] {label} 异常，重试 {retry_count+1}/{max_retries}: {str(e)[:100]}")
                     retry_count += 1
                     time.sleep(2)
                     continue
-                else:
-                    err_msg = f"批次 {bi+1} 异常: {str(e)[:200]}"
-                    errors.append(err_msg)
-                    _log(f"[错误] {err_msg}")
-                    break
+                return False, f"{label} 异常: {str(e)[:200]}"
             finally:
                 if tf_path and os.path.exists(tf_path):
                     try:
                         os.unlink(tf_path)
                     except Exception:
                         pass
+
+        return False, f"{label} rsync 失败"
+
+    def _transfer_with_fallback(files: list[str], label: str) -> int:
+        ok, err = _rsync_group(files, label)
+        if ok:
+            return len(files)
+
+        if len(files) == 1:
+            errors.append(err)
+            _log(f"[错误] {label} 失败: {err[:100]}")
+            return 0
+
+        mid = len(files) // 2
+        _log(f"[降级] {label} 仍失败，拆分为 {mid} + {len(files) - mid} 个文件继续拉取: {err[:100]}")
+        return (
+            _transfer_with_fallback(files[:mid], f"{label}.1")
+            + _transfer_with_fallback(files[mid:], f"{label}.2")
+        )
+
+    for bi, batch_start in enumerate(range(0, len(all_files), BATCH)):
+        batch = all_files[batch_start:batch_start + BATCH]
+        label = f"批次 {bi+1}/{num_batches}"
+        batch_ok = _transfer_with_fallback(batch, label)
+        total_ok += batch_ok
+        percent = int(15 + (bi + 1) * 85 / num_batches) if num_batches > 0 else 100
+        if batch_ok == len(batch):
+            _log(f"[进度] {percent}% - {label} 完成 ({len(batch)} 文件)", percent)
+        elif batch_ok > 0:
+            _log(f"[进度] {percent}% - {label} 部分完成 ({batch_ok}/{len(batch)} 文件)", percent)
+        else:
+            _log(f"[错误] {label} 全部失败", percent)
 
     if total_ok > 0:
         downloaded.append(remote_log_dir)
@@ -3769,7 +3955,21 @@ class OfflineHandler(BaseHTTPRequestHandler):
             port = int(body.get("port", 10111))
             date_start = body.get("date_start", "")  # YYYYMMDD
             date_end = body.get("date_end", "")      # YYYYMMDD
-            result = download_to_local(port, date_start, date_end)
+            host = body.get("transfer_host", BOLUO_TRANSFER_HOST)
+            user = body.get("transfer_user", BOLUO_TRANSFER_USER)
+            password = body.get("transfer_password", BOLUO_TRANSFER_PASSWORD)
+            base = body.get("transfer_base", BOLUO_TRANSFER_BASE)
+            result = download_to_local(port, date_start, date_end, host, user, password, base)
+            self._json(result)
+            return
+
+        if path == "/offline/test_boluo_transfer_connection":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            host = body.get("transfer_host", BOLUO_TRANSFER_HOST)
+            user = body.get("transfer_user", BOLUO_TRANSFER_USER)
+            password = body.get("transfer_password", BOLUO_TRANSFER_PASSWORD)
+            result = test_boluo_transfer_connection(host, user, password)
             self._json(result)
             return
 
@@ -3778,6 +3978,7 @@ class OfflineHandler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length)) if length else {}
             port = int(body.get("port", 10111))
             local_save_dir = body.get("local_save_dir", None)
+            module_keyword = body.get("module_keyword", "stereo_perception")
             # 流式SSE输出进度
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -3796,7 +3997,7 @@ class OfflineHandler(BaseHTTPRequestHandler):
                     data["percent"] = percent
                 send_sse(data)
 
-            result = pull_robot_logs(port, local_save_dir, progress_callback)
+            result = pull_robot_logs(port, local_save_dir, progress_callback, module_keyword)
             send_sse({
                 "done": True,
                 "ok": result.get("ok", False),
@@ -3814,6 +4015,16 @@ class OfflineHandler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length)) if length else {}
             local_dir = body.get("local_dir", "")
             result = check_local_logs(local_dir)
+            self._json(result)
+            return
+
+        if path == "/offline/transfer_logs_to_debug_host":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            port = int(body.get("port", 10111))
+            local_dir = body.get("local_dir", "")
+            host = body.get("host", LOG_TRANSFER_HOST)
+            result = transfer_logs_to_debug_host(local_dir, port, host)
             self._json(result)
             return
 

@@ -43,9 +43,22 @@
       <label>截止:</label>
       <input v-model="uploadDateEnd" class="sa2-date-input" placeholder="20260331" maxlength="8" />
       <button class="sa2-upload-btn" :disabled="uploadRunning || !uploadDateStart || !uploadDateEnd || !uploadPort" @click="doUploadImages">{{ uploadRunning ? '⏳ 上传中...' : '📤 上传图片' }}</button>
-      <button class="sa2-download-btn" :disabled="downloadRunning || !uploadDateStart || !uploadDateEnd || !uploadPort" @click="doDownloadToLocal">{{ downloadRunning ? '⏳ 转存中...' : '💾 转存本地' }}</button>
       <span v-if="uploadStatus" class="sa2-upload-status" :class="{ error: uploadError }">{{ uploadStatus }}</span>
-      <span v-if="downloadStatus" class="sa2-download-status" :class="{ error: downloadError }">{{ downloadStatus }}</span>
+      <div class="sa2-transfer-row">
+        <label>转存IP:</label>
+        <input v-model="downloadTransferHost" class="sa2-transfer-host-input" placeholder="192.168.55.239" />
+        <label>用户:</label>
+        <input v-model="downloadTransferUser" class="sa2-transfer-user-input" placeholder="youfeng" />
+        <label>密码:</label>
+        <input v-model="downloadTransferPassword" type="password" class="sa2-transfer-user-input" placeholder="****" />
+        <label>路径:</label>
+        <input v-model="downloadTransferBase" class="sa2-transfer-base-input" placeholder="/home/youfeng/debug/boluo" />
+        <button class="sa2-transfer-test-btn" :disabled="downloadTransferTestRunning || !downloadTransferHost.trim() || !downloadTransferUser.trim() || !downloadTransferPassword" @click="doTestDownloadTransfer">{{ downloadTransferTestRunning ? '测试中...' : '测试' }}</button>
+        <span v-if="downloadTransferTestStatus" class="sa2-transfer-test-status" :class="{ ok: downloadTransferTestOk === true, error: downloadTransferTestOk === false }">{{ downloadTransferTestStatus }}</span>
+        <button class="sa2-download-btn" :disabled="downloadRunning || !uploadDateStart || !uploadDateEnd || !uploadPort || !downloadTransferHost.trim() || !downloadTransferUser.trim() || !downloadTransferPassword || !downloadTransferBase.trim()" @click="doDownloadToLocal">{{ downloadRunning ? '⏳ 转存中...' : '💾 转存本地' }}</button>
+        <span class="sa2-transfer-hint">{{ downloadTransferSource }} → {{ downloadTransferTarget }}</span>
+        <span v-if="downloadStatus" class="sa2-download-status" :class="{ error: downloadError }">{{ downloadStatus }}</span>
+      </div>
     </div>
     <div v-if="pairs.length" class="sa2-legend">
       <span class="sa2-li"><span class="sa2-dot" style="background:#6464ff"></span>bg</span>
@@ -145,6 +158,16 @@ const uploadError = ref(false)
 const downloadRunning = ref(false)
 const downloadStatus = ref('')
 const downloadError = ref(false)
+const downloadTransferHost = ref('192.168.55.239')
+const downloadTransferUser = ref('youfeng')
+const downloadTransferPassword = ref('youfeng')
+const downloadTransferBase = ref('/home/youfeng/debug/boluo')
+const downloadTransferPortSuffix = computed(() => String(uploadPort.value || '').slice(-4) || '----')
+const downloadTransferSource = computed(() => `${STEREO_DEBUG_PREFIX}/${downloadTransferPortSuffix.value}`)
+const downloadTransferTarget = computed(() => `${downloadTransferBase.value.replace(/\/+$/, '')}/${downloadTransferPortSuffix.value}`)
+const downloadTransferTestRunning = ref(false)
+const downloadTransferTestStatus = ref('')
+const downloadTransferTestOk = ref<boolean | null>(null)
 const UPLOAD_IMAGES_TIMEOUT_MS = 5 * 60 * 1000
 
 function normalizeStereoDebugSuffix(value: string) {
@@ -746,6 +769,38 @@ async function doUploadImages() {
   }
 }
 
+async function doTestDownloadTransfer() {
+  if (downloadTransferTestRunning.value) return
+  downloadTransferTestRunning.value = true
+  downloadTransferTestStatus.value = '测试中...'
+  downloadTransferTestOk.value = null
+
+  try {
+    const res = await fetch('/offline/test_boluo_transfer_connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transfer_host: downloadTransferHost.value.trim(),
+        transfer_user: downloadTransferUser.value.trim(),
+        transfer_password: downloadTransferPassword.value,
+      }),
+    })
+    const data = await readJsonResponse<any>(res, '测试转存连接')
+    if (res.ok && data.ok) {
+      downloadTransferTestOk.value = true
+      downloadTransferTestStatus.value = '连接正常'
+    } else {
+      downloadTransferTestOk.value = false
+      downloadTransferTestStatus.value = `连接失败: ${data.error || `HTTP ${res.status}`}`
+    }
+  } catch (e: any) {
+    downloadTransferTestOk.value = false
+    downloadTransferTestStatus.value = `连接失败: ${e.message || e}`
+  } finally {
+    downloadTransferTestRunning.value = false
+  }
+}
+
 async function doDownloadToLocal() {
   if (!uploadDateStart.value || !uploadDateEnd.value || !uploadPort.value || downloadRunning.value) return
   downloadRunning.value = true
@@ -770,6 +825,10 @@ async function doDownloadToLocal() {
         port: uploadPort.value,
         date_start: uploadDateStart.value,
         date_end: uploadDateEnd.value,
+        transfer_host: downloadTransferHost.value.trim(),
+        transfer_user: downloadTransferUser.value.trim(),
+        transfer_password: downloadTransferPassword.value,
+        transfer_base: downloadTransferBase.value.trim(),
       }),
       signal: controller.signal,
     })
@@ -1260,14 +1319,25 @@ onBeforeUnmount(() => {
 .sa2-zoom-img { max-width:92vw; max-height:92vh; object-fit:contain; border:2px solid #4fc3f7; border-radius:4px; cursor:default; }
 .sa2-port-input { width:64px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 6px; color:#e0e0e0; font-size:11px; text-align:center; }
 .sa2-date-input { width:80px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 6px; color:#e0e0e0; font-size:11px; font-family:monospace; }
+.sa2-transfer-host-input { width:112px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 6px; color:#e0e0e0; font-size:11px; font-family:monospace; }
+.sa2-transfer-user-input { width:62px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 6px; color:#e0e0e0; font-size:11px; font-family:monospace; }
+.sa2-transfer-base-input { width:210px; background:#1a1a2e; border:1px solid #333; border-radius:4px; padding:4px 6px; color:#e0e0e0; font-size:11px; font-family:monospace; }
+.sa2-transfer-row { flex-basis:100%; display:flex; align-items:center; gap:6px; min-width:0; }
 .sa2-upload-btn { padding:4px 12px; background:#1a3a1a; border:1px solid #2e7d32; border-radius:4px; color:#a5d6a7; font-size:11px; cursor:pointer; white-space:nowrap; }
 .sa2-upload-btn:hover:not(:disabled) { background:#2e5a2e; }
 .sa2-upload-btn:disabled { opacity:.5; cursor:not-allowed; }
+.sa2-transfer-test-btn { padding:4px 10px; background:#2a263a; border:1px solid #6d5dfc; border-radius:4px; color:#c8c2ff; font-size:11px; cursor:pointer; white-space:nowrap; }
+.sa2-transfer-test-btn:hover:not(:disabled) { background:#383052; }
+.sa2-transfer-test-btn:disabled { opacity:.5; cursor:not-allowed; }
 .sa2-download-btn { padding:4px 12px; background:#1a2a3a; border:1px solid #2e5d7d; border-radius:4px; color:#a5c6d7; font-size:11px; cursor:pointer; white-space:nowrap; }
 .sa2-download-btn:hover:not(:disabled) { background:#2e4a5e; }
 .sa2-download-btn:disabled { opacity:.5; cursor:not-allowed; }
 .sa2-upload-status { font-size:11px; color:#69f0ae; font-family:monospace; white-space:nowrap; }
 .sa2-upload-status.error { color:#ef5350; }
+.sa2-transfer-hint { font-size:10px; color:#8ca4cf; font-family:monospace; white-space:nowrap; }
+.sa2-transfer-test-status { font-size:11px; font-family:monospace; white-space:nowrap; }
+.sa2-transfer-test-status.ok { color:#69f0ae; }
+.sa2-transfer-test-status.error { color:#ef5350; }
 .sa2-download-status { font-size:11px; color:#69d0ee; font-family:monospace; white-space:nowrap; }
 .sa2-download-status.error { color:#ef5350; }
 </style>

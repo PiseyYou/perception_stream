@@ -168,29 +168,36 @@ const monitorStatus = ref<MonitorStatus>({
 })
 
 // ─── LocalStorage Persistence ────────────────────────
-const STORAGE_KEY = 'perception_streaming_mqtt_creds'
+const LEGACY_STORAGE_KEY = 'perception_streaming_mqtt_creds'
+const STORAGE_KEY_PREFIX = 'perception_streaming_mqtt_creds_v2'
+const DEFAULT_MQTT_BROKER = 'mqtt-us.yjserver.com'
 const DEFAULT_MQTT_USERNAME = import.meta.env.VITE_DEFAULT_MQTT_USERNAME || ''
 const DEFAULT_MQTT_PASSWORD = import.meta.env.VITE_DEFAULT_MQTT_PASSWORD || ''
 
-function loadSavedCredentials(): { username: string; password: string } {
+function getCredentialStorageKey(broker: string) {
+  return `${STORAGE_KEY_PREFIX}:${broker}`
+}
+
+function loadSavedCredentials(broker: string): { username: string; password: string } {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(getCredentialStorageKey(broker))
     if (saved) return JSON.parse(saved)
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
   } catch { /* ignore */ }
   return { username: DEFAULT_MQTT_USERNAME, password: DEFAULT_MQTT_PASSWORD }
 }
 
-function saveCredentials(username: string, password: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ username, password }))
+function saveCredentials(broker: string, username: string, password: string) {
+  localStorage.setItem(getCredentialStorageKey(broker), JSON.stringify({ username, password }))
 }
 
-const savedCreds = loadSavedCredentials()
+const savedCreds = loadSavedCredentials(DEFAULT_MQTT_BROKER)
 
 // ─── Form State ──────────────────────────────────────
 
 const connectionForm = ref<ConnectionForm>({
   protocol: 'wss',
-  broker: 'mqtt-us.yjserver.com',
+  broker: DEFAULT_MQTT_BROKER,
   port: 8084,
   clientId: 'mqttx_' + Math.random().toString(16).substring(2, 10),
   username: savedCreds.username,
@@ -229,8 +236,8 @@ const mqttClient = new MqttClient()
 const { connectionState: agoraConnectionState, remoteUserCount } = useAgoraRTC()
 
 watch(
-  () => [connectionForm.value.username, connectionForm.value.password] as const,
-  ([username, password]) => saveCredentials(username, password),
+  () => [connectionForm.value.broker, connectionForm.value.username, connectionForm.value.password] as const,
+  ([broker, username, password]) => saveCredentials(broker, username, password),
   { deep: false }
 )
 
@@ -267,7 +274,7 @@ function handleConnectMqtt() {
   })
 
   // Save credentials to localStorage
-  saveCredentials(c.username, c.password)
+  saveCredentials(c.broker, c.username, c.password)
 
   const result = mqttClient.connect()
   if (result === 'connect') {

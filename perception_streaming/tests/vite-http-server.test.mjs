@@ -9,18 +9,13 @@ const source = fs.readFileSync(viteConfigPath, 'utf8')
 
 assert.match(
   source,
+  /open:\s*`http:\/\/\$\{DEV_SERVER_HOST\}:5173\/`/,
+  'dev server open URL should match the HTTP entrypoint users open in the browser',
+)
+assert.doesNotMatch(
+  source,
   /https:\s*command === 'serve' \? ensureDevCertificate\(\) : undefined/,
-  'dev server should enable HTTPS on port 5173 so Agora keeps a secure context',
-)
-assert.match(
-  source,
-  /ensureDevCertificate\(/,
-  'dev server should generate a self-signed certificate for the HTTPS entrypoint',
-)
-assert.match(
-  source,
-  /open:\s*`https:\/\/\$\{DEV_SERVER_HOST\}:5173\/`/,
-  'dev server open URL should match the documented HTTPS entrypoint',
+  'dev server should not make port 5173 HTTPS-only because HTTP users get ERR_EMPTY_RESPONSE',
 )
 
 console.log('vite-http-server test passed')

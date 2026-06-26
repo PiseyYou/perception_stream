@@ -11,6 +11,29 @@ const routeMatch = source.match(/if path == "\/offline\/pull_robot_logs":[\s\S]*
 assert.ok(routeMatch, 'pull_robot_logs route should exist')
 
 const route = routeMatch[0]
+const componentPath = path.resolve(__dirname, '../src/components/LogFetchPanel.vue')
+const componentSource = fs.readFileSync(componentPath, 'utf8')
+
+assert.match(
+  componentSource,
+  /const moduleKeyword = ref\('stereo_perception'\)/,
+  'log pull UI should default the module keyword to stereo_perception',
+)
+assert.match(
+  componentSource,
+  /module_keyword:\s*moduleKeyword\.value\.trim\(\)/,
+  'log pull request should send the selected module keyword to the server',
+)
+assert.match(
+  route,
+  /module_keyword = body\.get\("module_keyword", "stereo_perception"\)/,
+  'pull-log route should read the module keyword from the request body',
+)
+assert.match(
+  route,
+  /pull_robot_logs\(port, local_save_dir, progress_callback, module_keyword\)/,
+  'pull-log route should pass the module keyword into pull_robot_logs',
+)
 assert.match(
   route,
   /self\.send_header\("Connection", "close"\)/,

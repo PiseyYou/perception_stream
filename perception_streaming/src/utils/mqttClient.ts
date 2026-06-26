@@ -22,6 +22,7 @@ class MqttClient {
   private client: IMqttClient | null = null
   private brokerURL: string = ''
   private options: IClientOptions = {}
+  private connectionFailed = false
   private listeners: Map<EventType, Set<EventHandler>> = new Map()
   // 统一的 topic→callback 路由表，避免多次 subscribe() 累积 message 监听器
   private topicCallbacks: Map<string, MessageCallback> = new Map()
@@ -43,6 +44,7 @@ class MqttClient {
   // ─── Lifecycle ─────────────────────────────────────
   init(params: MqttConnectParams): void {
     this.brokerURL = params.brokerUrl
+    this.connectionFailed = false
     this.options = {
       clientId: params.clientId,
       username: params.username,
@@ -59,6 +61,7 @@ class MqttClient {
 
       this.client.on('connect', () => {
         console.log('MQTT Connected')
+        this.connectionFailed = false
         this.emit('connect')
       })
       this.client.on('reconnect', () => {
@@ -71,6 +74,11 @@ class MqttClient {
       })
       this.client.on('error', (error) => {
         console.error('MQTT Error:', error)
+        if (error.message?.includes('Connection refused: Not authorized')) {
+          this.connectionFailed = true
+          this.client?.end(true)
+          this.client = null
+        }
         this.emit('error', error)
       })
 
@@ -92,14 +100,16 @@ class MqttClient {
   }
 
   disconnect(): string {
-    if (this.client && this.client.connected) {
-      this.client.end(() => {
+    if (this.client) {
+      this.client.end(true, () => {
         this.client = null
+        this.connectionFailed = false
         console.log('MQTT Disconnected')
       })
       this.topicCallbacks.clear()
       return 'MQTT Disconnected'
     }
+    this.connectionFailed = false
     return 'MQTT Not Connected'
   }
 
@@ -119,7 +129,7 @@ class MqttClient {
   }
 
   publish(topic: string, message: string): string {
-    if (!this.client) return 'MQTT Not Connected'
+    if (!this.client || !this.client.connected) return 'MQTT Not Connected'
     const options: IClientPublishOptions = { qos: 1, retain: false }
     this.client.publish(topic, message, options, (err) => {
       if (err) console.error('Publish failed:', err)

@@ -1238,10 +1238,14 @@ class BridgeServer:
         remote_script = "/userdata/bestmow_data/image_perception_debug/monitor_mow_obstacle.sh"
         remote_service = f"/etc/systemd/system/{new_service}"
 
-        # 停止并禁用旧服务
+        # 停止并禁用旧服务和同名服务，避免覆盖运行中的 unit/script
         await loop.run_in_executor(
             None, self.ssh.exec_output_raw,
             f"systemctl stop {old_service} 2>/dev/null; systemctl disable {old_service} 2>/dev/null"
+        )
+        await loop.run_in_executor(
+            None, self.ssh.exec_output_raw,
+            f"systemctl stop {new_service} 2>/dev/null; systemctl disable {new_service} 2>/dev/null"
         )
 
         # 确保远端目录存在（先单独执行，不与 SFTP 混用）
@@ -1249,6 +1253,13 @@ class BridgeServer:
             None, self.ssh.exec_output_raw,
             "mkdir -p /userdata/bestmow_data/image_perception_debug"
         )
+        cleanup_out = await loop.run_in_executor(
+            None, self.ssh.exec_output_raw,
+            f"[ -f {remote_service} ] && rm -f {remote_service}; [ -f {remote_script} ] && rm -f {remote_script}"
+        )
+        if cleanup_out and cleanup_out.strip():
+            await self.broadcast({"type": "monitor_service_status", "status": "error", "reason": f"清理旧服务文件失败: {cleanup_out.strip()}"})
+            return
 
         # 上传脚本和服务文件（独立连接，避免复用 transport 导致 EOF）
         upload_error = [None]

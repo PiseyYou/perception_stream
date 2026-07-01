@@ -28,15 +28,80 @@ BACK_THRESH=200               # label=1 (back) 点数阈值
 STAT_THRESH=10                # label=5 (stat) 点数阈值
 CHECK_INTERVAL=5              # 检查是否有更新日志文件的间隔（秒）
 LOG_DIR="/userdata/log_dir/ros2_log"
+MONITOR_LOG_FILE="${MONITOR_LOG_FILE:-$LOG_DIR/monitor_mow_obstacle.log}"
+MONITOR_LOG_MAX_BYTES="${MONITOR_LOG_MAX_BYTES:-1048576}"
+MONITOR_LOG_MAX_FILES="${MONITOR_LOG_MAX_FILES:-3}"
 
 # ── 状态变量 ────────────────────────────────────────────────────────────────
 is_mowing=0                   # 当前是否处于割草状态
 last_trigger_time=0           # 上次触发时间（秒级时间戳）
 
+# ── 输出日志轮转 ────────────────────────────────────────────────────────────
+rotate_monitor_log() {
+    local max_files="$MONITOR_LOG_MAX_FILES"
+    if ! [[ "$max_files" =~ ^[0-9]+$ ]] || (( max_files < 1 )); then
+        max_files=1
+    fi
+
+    local extra suffix
+    for extra in "$MONITOR_LOG_FILE".*; do
+        [[ "$extra" == "$MONITOR_LOG_FILE.*" ]] && continue
+        suffix="${extra##*.}"
+        if [[ "$suffix" =~ ^[0-9]+$ ]] && (( suffix >= max_files )); then
+            rm -f "$extra"
+        fi
+    done
+
+    if [[ ! -f "$MONITOR_LOG_FILE" ]]; then
+        return
+    fi
+
+    local size
+    size=$(wc -c < "$MONITOR_LOG_FILE" 2>/dev/null || echo 0)
+    if ! [[ "$size" =~ ^[0-9]+$ ]] || (( size < MONITOR_LOG_MAX_BYTES )); then
+        return
+    fi
+
+    local last_backup=$(( max_files - 1 ))
+    if (( last_backup <= 0 )); then
+        : > "$MONITOR_LOG_FILE"
+    else
+        rm -f "$MONITOR_LOG_FILE.$last_backup"
+        local i
+        for (( i = last_backup - 1; i >= 1; i-- )); do
+            if [[ -f "$MONITOR_LOG_FILE.$i" ]]; then
+                mv -f "$MONITOR_LOG_FILE.$i" "$MONITOR_LOG_FILE.$(( i + 1 ))"
+            fi
+        done
+        mv -f "$MONITOR_LOG_FILE" "$MONITOR_LOG_FILE.1"
+    fi
+
+    exec >> "$MONITOR_LOG_FILE" 2>&1
+}
+
+setup_monitor_log_output() {
+    local log_dir
+    log_dir=$(dirname "$MONITOR_LOG_FILE")
+    if ! mkdir -p "$log_dir" 2>/dev/null; then
+        echo "无法创建日志目录: $log_dir" >&2
+        return
+    fi
+
+    rotate_monitor_log
+    exec >> "$MONITOR_LOG_FILE" 2>&1
+}
+
+emit_line() {
+    rotate_monitor_log
+    printf '%s\n' "$*"
+}
+
 # ── 日志函数 ────────────────────────────────────────────────────────────────
 log() {
-    echo "[$(date '+%Y/%m/%d %H:%M:%S')] $*"
+    emit_line "[$(date '+%Y/%m/%d %H:%M:%S')] $*"
 }
+
+setup_monitor_log_output
 
 # ── 执行 service call ───────────────────────────────────────────────────────
 trigger_service() {
@@ -193,7 +258,7 @@ if [[ -n "$FIXED_DECISION" && -n "$FIXED_PERCEPTION" ]]; then
     while IFS= read -r tagged_line; do
         prefix="${tagged_line:0:2}"
         line="${tagged_line:2}"
-        echo "$line"
+        emit_line "$line"
         if [[ "$prefix" == "D:" ]]; then
             process_decision_line "$line"
         else
@@ -249,7 +314,7 @@ read_new_lines() {
 
     if (( total > offset_ref )); then
         while IFS= read -r line; do
-            echo "$line"
+            emit_line "$line"
             "$processor" "$line"
         done < <(tail -n +$(( offset_ref + 1 )) "$file" 2>/dev/null)
         offset_ref=$total

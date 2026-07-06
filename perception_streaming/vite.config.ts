@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const VENV_PYTHON = path.resolve(__dirname, '.venv/bin/python')
 const PYTHON = process.env.PYTHON || (fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3')
-const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202606')
+const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202607')
 const REMOTE_HOST = '120.25.121.3'
 const REMOTE_PORT = '10015'
 const LOCAL_PCL_PORT = 8768   // SSH tunnel local end (pcl_proxy.mjs connects here)
@@ -370,7 +370,7 @@ function bagDataPlugin() {
   }
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(() => ({
   plugins: [disableViteLiveReloadPlugin(), vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
   server: {
     host: '0.0.0.0',

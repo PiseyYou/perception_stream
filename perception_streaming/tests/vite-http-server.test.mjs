@@ -15,7 +15,12 @@ assert.match(
 assert.doesNotMatch(
   source,
   /https:\s*command === 'serve' \? ensureDevCertificate\(\) : undefined/,
-  'dev server should not make port 5173 HTTPS-only because HTTP users get ERR_EMPTY_RESPONSE',
+  'dev server should not enable HTTPS on the HTTP entrypoint',
+)
+assert.doesNotMatch(
+  source,
+  /function ensureDevCertificate\(\)/,
+  'vite config should not require a development HTTPS certificate',
 )
 
 console.log('vite-http-server test passed')

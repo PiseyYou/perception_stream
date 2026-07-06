@@ -12,10 +12,10 @@ assert.match(
   /VITE_URL="\$\{VITE_WATCHDOG_URL:-http:\/\/127\.0\.0\.1:5173\/\}"/,
   'watchdog should check the same HTTP dev URL that users open',
 )
-assert.match(
+assert.doesNotMatch(
   source,
-  /curl -s -o \/dev\/null -w "%\{http_code\}" --connect-timeout 3 "\$VITE_URL"/,
-  'watchdog should not use HTTPS-only curl flags for the HTTP dev server',
+  /curl -k -s -o \/dev\/null -w "%\{http_code\}" --connect-timeout 3 "\$VITE_URL"/,
+  'watchdog should not use TLS flags for the HTTP health check',
 )
 assert.match(
   source,

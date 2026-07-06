@@ -15,7 +15,7 @@ assert.match(
 assert.doesNotMatch(
   source,
   /https:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173\//,
-  'start.sh should not advertise HTTPS for the HTTP dev server',
+  'start.sh should not advertise HTTPS when the dev server is HTTP',
 )
 
-console.log('start-script-https-url test passed')
+console.log('start-script-http-url test passed')

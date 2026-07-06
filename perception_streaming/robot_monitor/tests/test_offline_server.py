@@ -72,8 +72,8 @@ class OfflineServerFilterStereoImageSizeTest(unittest.TestCase):
 class OfflineServerUploadImagesSshKeyTest(unittest.TestCase):
     def test_upload_images_range_reads_current_ssh_key_path_at_call_time(self):
         with tempfile.TemporaryDirectory() as tmp:
-            old_key = str(Path(tmp) / "bestmow_rsa_202605")
-            current_key = str(Path(tmp) / "bestmow_rsa_202606")
+            old_key = str(Path(tmp) / "bestmow_rsa_202606")
+            current_key = str(Path(tmp) / "bestmow_rsa_202607")
             calls = []
 
             def fake_run(cmd, **kwargs):

@@ -2,12 +2,12 @@
 # Vite Dev Server Watchdog
 # 监控Vite开发服务器，自动重启掉线的服务
 
-PROJECT_DIR="/media/sda1/perception_process/perception_streaming"
-LOG_FILE="/tmp/vite-watchdog.log"
-VITE_LOG="/tmp/vite-dev.log"
-CHECK_INTERVAL=10  # 检查间隔（秒）
-MAX_RESTART_ATTEMPTS=3  # 最大连续重启次数
-RESTART_COOLDOWN=60  # 重启冷却时间（秒）
+PROJECT_DIR="${PROJECT_DIR:-/media/sda1/perception_process/perception_streaming}"
+LOG_FILE="${VITE_WATCHDOG_LOG:-/tmp/vite-watchdog.log}"
+VITE_LOG="${VITE_DEV_LOG:-/tmp/vite-dev.log}"
+CHECK_INTERVAL="${VITE_WATCHDOG_CHECK_INTERVAL:-10}"  # 检查间隔（秒）
+MAX_RESTART_ATTEMPTS="${VITE_WATCHDOG_MAX_RESTART_ATTEMPTS:-3}"  # 最大连续重启次数
+RESTART_COOLDOWN="${VITE_WATCHDOG_RESTART_COOLDOWN:-60}"  # 重启冷却时间（秒）
 VITE_URL="${VITE_WATCHDOG_URL:-http://127.0.0.1:5173/}"
 STARTUP_TIMEOUT="${VITE_WATCHDOG_STARTUP_TIMEOUT:-120}"
 STARTUP_CHECK_INTERVAL="${VITE_WATCHDOG_STARTUP_CHECK_INTERVAL:-2}"
@@ -35,7 +35,7 @@ check_vite_running() {
         return 1
     fi
 
-    # 检查 HTTP 响应；与 start.sh / Vite 当前输出的访问地址保持一致。
+    # 检查 HTTP 响应
     http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$VITE_URL" 2>/dev/null)
     if [ "$http_code" != "200" ]; then
         return 1
@@ -55,7 +55,7 @@ start_vite() {
     # 启动新进程
     npm run dev > "$VITE_LOG" 2>&1 &
 
-    # 等待启动完成。Vite 在当前项目里需要生成证书并启动多个插件，冷启动常超过 8 秒。
+    # 等待启动完成。Vite 在当前项目里需要启动多个插件，冷启动常超过 8 秒。
     local waited=0
     while [ "$waited" -lt "$STARTUP_TIMEOUT" ]; do
         if check_vite_running; then

@@ -20,7 +20,7 @@ def load_ssh_config() -> dict:
     if not config_file.exists():
         # 返回默认配置
         return {
-            "ssh_key_path": "bestmow_rsa_202606",
+            "ssh_key_path": "bestmow_rsa_202607",
             "ssh_host": "120.25.121.3",
             "ssh_user": "root",
             "default_ports": {

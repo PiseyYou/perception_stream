@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 // ─── Label color LUT — matches C++ initColorMap() ───
 export const LABEL_COLOR: Record<number, [number, number, number]> = {
-  0:   [0,         0,         200/255],  // background 蓝色
+  0:   [0,         0,         0      ],  // ignore 黑色
   1:   [0,         0,         200/255],  // background 蓝色
   2:   [100/255,   255/255,   102/255],  // grass 绿色
   3:   [118/255,    89/255,   0      ],  // road 褐色
@@ -23,6 +23,7 @@ export const LABEL_COLOR: Record<number, [number, number, number]> = {
   104: [255/255,   0,         0      ],  // stat
   105: [255/255,   255/255,   0      ],  // dyna
   106: [0,         255/255,   255/255],  // charge_station
+  107: [0,         255/255,   0      ],  // person/small_ball
 }
 export const PASSABLE = new Set([2, 3])
 
@@ -30,13 +31,9 @@ export function labelColor(label: number): [number, number, number] {
   return LABEL_COLOR[label] ?? [1.0, 0.0, 0.5]
 }
 
-// OTP (offline test panel) label colors
-export const OTP_LABEL_COLOR: Record<number, [number, number, number]> = {
-  0: [0.1,0.1,0.1], 1: [0.78,0.0,0.0], 2: [0.4,1.0,0.39], 3: [0.0,0.35,0.46],
-  4: [0.0,1.0,1.0], 5: [0.0,0.0,1.0], 6: [0.0,0.65,1.0], 7: [0.58,0.08,1.0],
-  100: [1.0,0.0,0.0], 101: [1.0,0.0,0.0], 102: [1.0,0.0,0.0], 103: [1.0,0.0,1.0],
-}
-export const OTP_PASSABLE = new Set([0, 1, 2, 3])
+// Offline-test panel uses the same reference palette as the C++ point-cloud view.
+export const OTP_LABEL_COLOR = LABEL_COLOR
+export const OTP_PASSABLE = PASSABLE
 
 // ─── Spherical camera state ───────────────────────────────────
 export interface SphState { theta: number; phi: number; radius: number }

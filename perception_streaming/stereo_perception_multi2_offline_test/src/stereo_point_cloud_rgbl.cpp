@@ -190,14 +190,59 @@ cv::Mat stereo_point_cloud::getYView_l(
   float zScale = round(rows / (p_max.z - p_min.z)); // Z映射到行
   float xScale = round(cols / (p_max.x - p_min.x)); // X映射到列
 
-  // ⚠️ 修复：分两次绘制，先绘制非label==2的点，再绘制label==2确保草地可见
-  // 第一遍：绘制所有非label==2的点
+  // 分层绘制：基础类别先画，草地次之，障碍物最后叠加，避免近处草地点覆盖栅栏/墙体点。
+  for (std::size_t i = 0; i < xyz_rgbl_cloud->points.size(); ++i) {
+    const pcl::PointXYZRGBL &ipoint = xyz_rgbl_cloud->points[i];
+    if (ipoint.label != 1 && ipoint.label != 3)
+      continue;
+
+    pcl::PointXYZRGB &point_rgb = rgb_cloud->points[i];
+    point_rgb.x = ipoint.x;
+    point_rgb.y = ipoint.y;
+    point_rgb.z = ipoint.z;
+    int v = ipoint.label;
+
+    // 修复：Z映射到行(r)，X映射到列(c)
+    // ⚠️ 翻转Z轴：让近处(Z小)显示在图像底部(r大)
+    int r = static_cast<int>(round(zScale * (p_max.z - point_rgb.z))); // 翻转
+    int c = static_cast<int>(round(xScale * (point_rgb.x - p_min.x)));
+
+    if (r < 0 || r >= img.rows || c < 0 || c >= img.cols) {
+      continue;
+    }
+
+    cv::circle(img, cv::Point(c, r), 1, colorMap[v], -1);
+  }
+
+  for (std::size_t i = 0; i < xyz_rgbl_cloud->points.size(); ++i) {
+    const pcl::PointXYZRGBL &ipoint = xyz_rgbl_cloud->points[i];
+    if (ipoint.label != 2)
+      continue;
+
+    pcl::PointXYZRGB &point_rgb = rgb_cloud->points[i];
+    point_rgb.x = ipoint.x;
+    point_rgb.y = ipoint.y;
+    point_rgb.z = ipoint.z;
+    int v = ipoint.label;
+
+    // 修复：Z映射到行(r)，X映射到列(c)
+    // ⚠️ 翻转Z轴：让近处(Z小)显示在图像底部(r大)
+    int r = static_cast<int>(round(zScale * (p_max.z - point_rgb.z))); // 翻转
+    int c = static_cast<int>(round(xScale * (point_rgb.x - p_min.x)));
+
+    if (r < 0 || r >= img.rows || c < 0 || c >= img.cols)
+      continue;
+
+    // 草地使用稍大的半径确保可见
+    cv::circle(img, cv::Point(c, r), 1, colorMap[v], -1);
+  }
+
   int label104_drawn = 0;
   int label104_out_of_bounds = 0;
   for (std::size_t i = 0; i < xyz_rgbl_cloud->points.size(); ++i) {
     const pcl::PointXYZRGBL &ipoint = xyz_rgbl_cloud->points[i];
-    if (ipoint.label == 2)
-      continue; // 跳过草地，稍后绘制
+    if (ipoint.label == 1 || ipoint.label == 2 || ipoint.label == 3)
+      continue;
 
     pcl::PointXYZRGB &point_rgb = rgb_cloud->points[i];
     point_rgb.x = ipoint.x;
@@ -222,30 +267,6 @@ cv::Mat stereo_point_cloud::getYView_l(
   if (label104_drawn > 0 || label104_out_of_bounds > 0) {
     std::cout << "[YView_l] Label 104: " << label104_drawn << " 点已绘制, "
               << label104_out_of_bounds << " 点超出边界" << std::endl;
-  }
-
-  // 第二遍：绘制label==2的草地点，确保在最上层
-  for (std::size_t i = 0; i < xyz_rgbl_cloud->points.size(); ++i) {
-    const pcl::PointXYZRGBL &ipoint = xyz_rgbl_cloud->points[i];
-    if (ipoint.label != 2)
-      continue; // 只绘制草地
-
-    pcl::PointXYZRGB &point_rgb = rgb_cloud->points[i];
-    point_rgb.x = ipoint.x;
-    point_rgb.y = ipoint.y;
-    point_rgb.z = ipoint.z;
-    int v = ipoint.label;
-
-    // 修复：Z映射到行(r)，X映射到列(c)
-    // ⚠️ 翻转Z轴：让近处(Z小)显示在图像底部(r大)
-    int r = static_cast<int>(round(zScale * (p_max.z - point_rgb.z))); // 翻转
-    int c = static_cast<int>(round(xScale * (point_rgb.x - p_min.x)));
-
-    if (r < 0 || r >= img.rows || c < 0 || c >= img.cols)
-      continue;
-
-    // 草地使用稍大的半径确保可见
-    cv::circle(img, cv::Point(c, r), 1, colorMap[v], -1);
   }
 
   // ✅ 修复：移除所有变换，直接返回俯视图

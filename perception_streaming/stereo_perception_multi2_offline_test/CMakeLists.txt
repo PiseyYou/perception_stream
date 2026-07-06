@@ -88,20 +88,56 @@ link_directories(
 set(SOURCES
     src/offline_test_main.cpp
     src/offline_processor.cpp
+    src/offline_processor_depth_inpainting.cpp
+    src/offline_processor_red_brick.cpp
+    src/cdt_perception.cpp
+    src/label_postprocess.cpp
+    src/semantic_depth_utils.cpp
     src/stereo_point_cloud_rgbl.cpp
     # 从对应的 perception 模块复用源文件
     ${PERCEPTION_SRC_DIR}/src/dsg_perception.cpp
     ${PERCEPTION_SRC_DIR}/src/multi_sub_perception.cpp
-    ${PERCEPTION_SRC_DIR}/src/cdt_perception.cpp
     ${PERCEPTION_SRC_DIR}/src/stereo_multi_match.cpp
     ${PERCEPTION_SRC_DIR}/src/multiscale_filter.cpp
 )
 
 # 可执行文件
 add_executable(offline_test_main ${SOURCES})
+enable_testing()
+
+add_executable(label_postprocess_test
+    tests/label_postprocess_test.cpp
+    src/label_postprocess.cpp
+)
+target_link_libraries(label_postprocess_test
+    ${OpenCV_LIBS}
+)
+add_test(NAME label_postprocess_test COMMAND label_postprocess_test)
+
+add_executable(semantic_depth_utils_test
+    tests/semantic_depth_utils_test.cpp
+    src/semantic_depth_utils.cpp
+)
+target_link_libraries(semantic_depth_utils_test
+    ${OpenCV_LIBS}
+)
+add_test(NAME semantic_depth_utils_test COMMAND semantic_depth_utils_test)
+
+add_executable(point_cloud_view_test
+    tests/point_cloud_view_test.cpp
+    src/stereo_point_cloud_rgbl.cpp
+)
+target_link_libraries(point_cloud_view_test
+    ${OpenCV_LIBS}
+    ${PCL_LIBRARIES}
+    ${PCL_FILTERS_LIB}
+)
+add_test(NAME point_cloud_view_test COMMAND point_cloud_view_test)
+
 target_compile_definitions(offline_test_main PRIVATE
     HB_DNN_QUANTI_TYPE_NONE=NONE
     HB_DNN_QUANTI_TYPE_SCALE=SCALE
+    OFFLINE_MODEL_DIR="${CMAKE_SOURCE_DIR}/models/"
 )
 
 # 如果使用真实 DNN 库，需要链接 conda 的 libstdc++
@@ -146,5 +182,43 @@ set_target_properties(offline_test_main PROPERTIES
     INSTALL_RPATH "${OFFLINE_RUNTIME_RPATH}"
 )
 
+add_executable(single_segmentation_compare
+    src/single_segmentation_compare.cpp
+    ${PERCEPTION_SRC_DIR}/src/dsg_perception.cpp
+    ${PERCEPTION_SRC_DIR}/src/multi_sub_perception.cpp
+    ${PERCEPTION_SRC_DIR}/src/multiscale_filter.cpp
+)
+
+target_compile_definitions(single_segmentation_compare PRIVATE
+    HB_DNN_QUANTI_TYPE_NONE=NONE
+    HB_DNN_QUANTI_TYPE_SCALE=SCALE
+    OFFLINE_MODEL_DIR="${CMAKE_SOURCE_DIR}/models/"
+)
+
+if(USE_REAL_DNN)
+    if(EXISTS ${CONDA_LIBSTDCXX})
+        target_link_libraries(single_segmentation_compare ${CONDA_LIBSTDCXX})
+    endif()
+endif()
+
+target_link_libraries(single_segmentation_compare
+    ${OpenCV_LIBS}
+    ${PCL_LIBRARIES}
+    ${PCL_FILTERS_LIB}
+    ${DNN_LIB}
+    -Wl,--no-as-needed
+    ${HBDK_LIB}
+    -Wl,--as-needed
+    z
+    dl
+    rt
+    pthread
+)
+
+set_target_properties(single_segmentation_compare PROPERTIES
+    BUILD_RPATH "${OFFLINE_RUNTIME_RPATH}"
+    INSTALL_RPATH "${OFFLINE_RUNTIME_RPATH}"
+)
+
 # 安装规则
-install(TARGETS offline_test_main DESTINATION bin)
+install(TARGETS offline_test_main single_segmentation_compare DESTINATION bin)

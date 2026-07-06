@@ -68,6 +68,9 @@ public:
     void stereo_process_pci_depth_rgb_seg_det_fusion(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
+    void stereo_process_pci_depth_rgb_seg_det_fusion_bestmow(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
+                                                                       pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
+                                                                       pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud);
     void stereo_process_pci_depth_rgb_seg_det_fusion_dsg(const cv::Mat &depth, const cv::Mat &lab, std::vector<Detection> &dect_src, cv::Mat &ori_mat,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &xyz_rgbl_cloud,
                                                                        pcl::PointCloud<pcl::PointXYZRGBL> &out_xyz_rgbl_cloud,

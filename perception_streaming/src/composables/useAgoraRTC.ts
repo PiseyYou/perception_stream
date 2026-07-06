@@ -1,4 +1,4 @@
-import AgoraRTC, { type IAgoraRTCClient } from 'agora-rtc-sdk-ng'
+import type { IAgoraRTCClient } from 'agora-rtc-sdk-ng'
 import { ref } from 'vue'
 
 const VIDEO_CONTAINER_ID = 'video-container'
@@ -68,6 +68,7 @@ export async function joinChannel(appid: string, channel: string) {
         return
     }
 
+    const { default: AgoraRTC } = await import('agora-rtc-sdk-ng')
     agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' })
     agoraClient.on('user-published', handleUserPublished)
     agoraClient.on('user-unpublished', handleUserUnpublished)

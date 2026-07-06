@@ -19,10 +19,10 @@ assert.doesNotMatch(
   'Model 6 label filtering should not force a fixed bottom region to label 2',
 )
 
-assert.doesNotMatch(
+assert.match(
   filterSource,
   /cv::compare\s*\(\s*lab_dst\s*,\s*0[\s\S]*?lab_dst\.setTo\s*\(\s*2\s*,\s*mask_zero\s*\)/,
-  'Model 6 label filtering should preserve model output label 0 instead of rewriting it to label 2',
+  'Model 6 label filtering should match the reference path by normalizing label 0 to label 2',
 )
 
 const model6Match = source.match(
@@ -57,14 +57,20 @@ assert.doesNotMatch(
 
 assert.match(
   model6Source,
-  /stereo_process_pci_depth_rgb_seg_det_fusion\s*\([\s\S]*resized_img\s*,\s*\/\/ 使用 640x384/,
-  'Model 6 fusion should use the 384 image for both K100 and bestmow',
+  /stereo_process_pci_depth_rgb_seg_det_fusion\s*\([\s\S]*fusion_img,\s*\/\/ K100: 640x432/,
+  'Model 6 K100 fusion should match the reference 640x432 point-cloud fusion path',
 )
 
 assert.match(
   model6Source,
-  /cv::Mat\s+filtered_depth\s*=\s*stereo_matcher_\.stereo_multi_process_filter[\s\S]*if\s*\(\s*hardware_mode_\.isK100Hardware\(\)\s*\)[\s\S]*cv::resize\s*\(\s*depth_432\s*,\s*result\.depth\s*,\s*cv::Size\s*\(\s*640\s*,\s*384\s*\)[\s\S]*else\s*\{[\s\S]*result\.depth\s*=\s*filtered_depth\s*\(\s*cv::Rect\s*\(\s*0\s*,\s*0\s*,\s*640\s*,\s*384\s*\)\s*\)\.clone\(\)/,
-  'Model 6 depth should be normalized to 384 before fusion in both hardware modes',
+  /stereo_process_pci_depth_rgb_seg_det_fusion_bestmow\s*\([\s\S]*fusion_img,\s*\/\/ bestmow: 640x384/,
+  'Model 6 bestmow fusion should match the reference 640x384 point-cloud fusion path',
+)
+
+assert.match(
+  model6Source,
+  /if\s*\(\s*hardware_mode_\.isK100Hardware\(\)\s*\)[\s\S]*result\.depth\s*=\s*depth_480\s*\(\s*cv::Rect\s*\(\s*0,\s*0,\s*640,\s*432\s*\)\s*\)\.clone\(\)[\s\S]*else\s*\{[\s\S]*result\.depth\s*=\s*depth_480\s*\(\s*cv::Rect\s*\(\s*0,\s*0,\s*640,\s*384\s*\)\s*\)\.clone\(\)/,
+  'Model 6 depth should match the reference K100 432 / bestmow 384 fusion sizes',
 )
 
 const saveMatch = source.match(/void OfflineProcessor::saveResults[\s\S]*?\/\/ 保存点云/)

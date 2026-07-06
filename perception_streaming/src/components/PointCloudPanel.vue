@@ -123,6 +123,7 @@ const LABEL_COLOR: Record<number, [number, number, number]> = {
   104: [255/255,  0,        0       ],  // stat
   105: [0,        255/255,  255/255 ],  // dyna        → cyan
   106: [255/255,  255/255,  0       ],  // charge_station → yellow
+  107: [0,        255/255,  0       ],  // person/small_ball → green
 }
 function labelToColor(label: number): [number, number, number] {
   return LABEL_COLOR[label] ?? [1.0, 0.0, 0.5]

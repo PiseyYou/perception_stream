@@ -14,6 +14,35 @@ const downloadFunction = downloadFunctionMatch[0]
 const testConnectionFunctionMatch = componentSource.match(/async function doTestDownloadTransfer\(\)[\s\S]*?async function doDownloadToLocal/)
 assert.ok(testConnectionFunctionMatch, 'doTestDownloadTransfer function should exist')
 const testConnectionFunction = testConnectionFunctionMatch[0]
+const configLoadMatch = componentSource.match(/onMounted\(async \(\) => \{[\s\S]*?\n\}\)/)
+assert.ok(configLoadMatch, 'stereo panel should load server config on mount')
+const configLoadBlock = configLoadMatch[0]
+
+assert.match(
+  componentSource,
+  /function defaultStereoFolderSuffix\(port:[\s\S]*dateStr = today\)[\s\S]*return `\$\{portSuffix\}\/\$\{dateStr\}`/,
+  'stereo folder defaults should be derived from the port suffix and current date',
+)
+assert.match(
+  componentSource,
+  /const nightFolderInput = ref\(defaultStereoFolderSuffix\(\)\)/,
+  'night stereo folder should default to <port last four digits>/<today>',
+)
+assert.match(
+  componentSource,
+  /const dayFolderInput = ref\(defaultStereoFolderSuffix\(\)\)/,
+  'day stereo folder should default to <port last four digits>/<today>',
+)
+assert.doesNotMatch(
+  componentSource,
+  /ref\('0115\/20260421'\)|ref\('0016\/20260420'\)/,
+  'stereo folder defaults should not be hard-coded to stale sample dates',
+)
+assert.match(
+  configLoadBlock,
+  /applyDefaultStereoFolders\(data\.default_ports\.stereo_analysis\)/,
+  'loading the default stereo port should refresh both stereo folder defaults',
+)
 
 assert.match(
   componentSource,

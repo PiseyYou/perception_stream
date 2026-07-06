@@ -9,7 +9,7 @@
 看门狗每10秒执行以下检查：
 1. **进程检查**：检查vite进程是否存在
 2. **端口检查**：检查192.168.55.247:5173端口是否监听
-3. **HTTP检查**：检查HTTP响应是否为200
+3. **HTTPS检查**：检查HTTPS响应是否为200
 
 任何一项检查失败，立即触发自动重启。
 
@@ -55,18 +55,57 @@ tail -f /tmp/vite-dev.log
 [2026-05-07 18:21:04] ✓ Vite服务器启动成功
 ```
 
-## 开机自启动（可选）
+## 开机自启动（推荐 systemd）
 
-如需开机自动启动看门狗，可以添加到crontab：
+长期运行请使用 systemd 管理看门狗。systemd 负责开机启动和守护 `watchdog.sh`，`watchdog.sh` 负责通过 HTTPS 健康检查并重启 Vite。
+
+### 安装并启动
 
 ```bash
-crontab -e
+sudo ./script/install_perception_streaming_watchdog.sh
 ```
 
-添加以下行：
+### 查看状态
+
+```bash
+sudo systemctl status perception-streaming-watchdog.service
 ```
-@reboot /media/sda1/perception_process/perception_streaming/start-watchdog.sh
+
+### 重启服务
+
+```bash
+sudo systemctl restart perception-streaming-watchdog.service
 ```
+
+### 查看 systemd 日志
+
+```bash
+sudo journalctl -u perception-streaming-watchdog.service -f
+```
+
+### 查看 watchdog / Vite 日志
+
+```bash
+tail -f /tmp/vite-watchdog.log
+tail -f /tmp/vite-dev.log
+```
+
+### 停止开机自启动
+
+```bash
+sudo systemctl disable --now perception-streaming-watchdog.service
+```
+
+### 临时调试方式
+
+如果只是当前登录会话里临时调试，也可以继续使用：
+
+```bash
+./start-watchdog.sh
+./stop-watchdog.sh
+```
+
+不建议用 `crontab @reboot` 作为长期方案，因为它不能在 watchdog 进程异常退出后继续守护该进程。
 
 ## 文件说明
 

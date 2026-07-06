@@ -458,6 +458,41 @@ class OfflineServerResultDiscoveryTest(unittest.TestCase):
         self.assertEqual(offline_server._progress_state["total"], 25)
         self.assertEqual(offline_server._progress_state["status"], "正在处理: frame_0002.jpg")
 
+    def test_run_offline_day_mode_uses_current_cli_hardware_argument(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "0339" / "20260704"
+            input_dir.mkdir(parents=True)
+            captured = {}
+
+            class FakeProc:
+                stdout = []
+                returncode = 0
+
+                def wait(self):
+                    return 0
+
+            def fake_popen(cmd, **kwargs):
+                captured["cmd"] = cmd
+                captured["env"] = kwargs.get("env", {})
+                return FakeProc()
+
+            with patch.object(offline_server, "STEREO_OFFLINE_EXE", str(Path(tmp) / "offline_test_main")), \
+                 patch.object(offline_server.os.path, "isfile", return_value=True), \
+                 patch.object(offline_server, "_count_input_images", return_value=29), \
+                 patch.object(offline_server, "_ensure_writable_output_dir", return_value=[]), \
+                 patch.object(offline_server, "_collect_result_images", return_value=[]), \
+                 patch.object(offline_server, "_sync_legacy_pointcloud_dir", side_effect=lambda output, pcd: (pcd, [])), \
+                 patch.object(offline_server, "_find_result_pcd_dir", return_value=(str(input_dir / "pcd_6_205_432"), [])), \
+                 patch.object(offline_server.subprocess, "Popen", side_effect=fake_popen):
+                offline_server.run_offline_test(str(input_dir), 6, 205, use_k100=True)
+
+            self.assertEqual(captured["cmd"][1], str(input_dir))
+            self.assertEqual(captured["cmd"][2], str(input_dir / "sub_6_205_432"))
+            self.assertEqual(captured["cmd"][3], "k100")
+            self.assertNotIn("6", captured["cmd"][3:])
+            self.assertEqual(captured["env"]["OFFLINE_INFER_MODE"], "6")
+            self.assertEqual(captured["env"]["HARDWARE_MODE"], "K100")
+
     def test_terminate_current_process_stops_running_child(self):
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
         offline_server._current_proc = proc

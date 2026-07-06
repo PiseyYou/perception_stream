@@ -202,14 +202,13 @@ inline cv::Mat visualizeDepth(const cv::Mat& depth, float max_depth = 10.0f) {
 /**
  * @brief 创建输出目录
  */
-inline void createOutputDirectories(const std::string& base_dir,
-                                    const std::string& pointcloud_dir = "") {
+inline void createOutputDirectories(const std::string& base_dir) {
     fs::create_directories(base_dir);
-    if (!pointcloud_dir.empty()) {
-        fs::create_directories(pointcloud_dir);
-    } else {
-        fs::create_directories(base_dir + "/pointcloud");
-    }
+    fs::create_directories(base_dir + "/segmentation");
+    fs::create_directories(base_dir + "/pointcloud");
+    fs::create_directories(base_dir + "/detection");
+    fs::create_directories(base_dir + "/depth");
+    fs::create_directories(base_dir + "/combined");  // 添加合并图像目录
 }
 
 /**
@@ -239,6 +238,44 @@ inline cv::Mat drawResultOptimized(const cv::Mat& img_src, const cv::Mat& img_la
     }
 
     return pure_seg;
+}
+
+/**
+ * @brief 从 CDT 检测结果中提取矩形区域
+ *
+ * CDT (Cable Tie Detection) 用于检测扎带位置。
+ * 该函数从检测结果中提取一个矩形区域，用于后续的掩码处理。
+ *
+ * @param cdt_detections CDT 检测结果向量
+ * @return cv::Rect 提取的矩形区域，如果无效则返回空矩形
+ *
+ * @note 逻辑规则：
+ *       - 如果检测到 0 个或 2+ 个扎带，返回空矩形（不确定性高）
+ *       - 如果检测到恰好 1 个扎带，提取其边界框
+ *       - 矩形高度从检测框顶部延伸到图像底部（384）
+ *       - 验证边界有效性（xmin>0, ymin>0, xmax≤640, ymax≤480）
+ */
+inline cv::Rect get_cdt_rect(const std::vector<Detection>& cdt_detections) {
+    // 只有恰好检测到 1 个扎带时才处理
+    if (cdt_detections.size() != 1) {
+        return cv::Rect();  // 返回空矩形
+    }
+
+    const Detection& det = cdt_detections[0];
+
+    // 提取边界框坐标
+    int xmin = std::max(0, static_cast<int>(det.bbox.xmin));
+    int ymin = std::max(0, static_cast<int>(det.bbox.ymin));
+    int xmax = std::min(640, static_cast<int>(det.bbox.xmax));
+    int ymax = 384;  // 从检测框底部延伸到图像底部
+
+    // 验证边界有效性
+    if (xmin <= 0 || ymin <= 0 || xmax > 640 || ymax > 480) {
+        return cv::Rect();  // 边界无效，返回空矩形
+    }
+
+    // 创建并返回矩形
+    return cv::Rect(xmin, ymin, xmax - xmin, ymax - ymin);
 }
 
 #endif // OFFLINE_UTILS_HPP

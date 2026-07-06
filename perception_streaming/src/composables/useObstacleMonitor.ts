@@ -14,12 +14,19 @@ export const SN_PORT_MAP: Record<string, number> = {
   'LK-MR6P1US000124': 10124,
   'LK-MR541EU000027': 10027,
   'LK-MR6P1US000286': 10286,
+  'LK-MR641US000337': 10337,
+  'LK-MR641US000339': 10339,
   'LK-MR641US000367': 10367,
 }
 
 // Update SSH port based on device SN
+export function defaultSshPortForSN(sn: string) {
+  const match = sn.match(/\d{4}$/)
+  return match ? Number(`1${match[0]}`) : null
+}
+
 export function updateSshPortForSN(sn: string) {
-  const port = SN_PORT_MAP[sn]
+  const port = SN_PORT_MAP[sn] ?? defaultSshPortForSN(sn)
   if (port) {
     sshPort.value = port
   }

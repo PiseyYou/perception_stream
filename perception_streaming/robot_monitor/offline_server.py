@@ -715,7 +715,6 @@ def run_offline_test(input_dir: str, infer_mode: int, erode_pixel: int, is_expor
             local_exe,
             local_data_abs,
             final_pic_dir,
-            str(model_mode),
             "k100" if use_k100 else "bestmow",
         ]
         broadcast({"type": "log", "text": f"[Offline] 启动命令: {' '.join(run_cmd)}"})

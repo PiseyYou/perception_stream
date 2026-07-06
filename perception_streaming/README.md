@@ -286,20 +286,22 @@ systemctl start monitor_avoiding
 ```
 
 ### Vite 开发服务器看门狗
-自动监控 Vite HTTPS 开发服务器状态，一旦检测到服务掉线，自动重启服务。
+自动监控 Vite HTTPS 开发服务器状态，一旦检测到服务掉线，自动重启服务。长期运行推荐使用 systemd：
 
 ```bash
-# 启动看门狗
-./start-watchdog.sh
+# 安装、开机启用并立即启动看门狗
+sudo ./script/install_perception_streaming_watchdog.sh
 
-# 停止看门狗
-./stop-watchdog.sh
+# 查看服务状态
+sudo systemctl status perception-streaming-watchdog.service
 
 # 查看日志
+sudo journalctl -u perception-streaming-watchdog.service -f
 tail -f /tmp/vite-watchdog.log
+tail -f /tmp/vite-dev.log
 ```
 
-看门狗默认检查 `https://127.0.0.1:5173/`，开发证书为自签名证书，脚本会使用 `curl -k` 检查。由于当前项目冷启动通常需要 50 秒以上，看门狗改为轮询等待 Vite 就绪，而不是固定等待 8 秒。可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
+临时调试仍可使用 `./start-watchdog.sh` 和 `./stop-watchdog.sh`。看门狗默认检查 `https://127.0.0.1:5173/`。由于当前项目冷启动通常需要 50 秒以上，看门狗会轮询等待 Vite 就绪，可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
 
 详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 

@@ -2,6 +2,11 @@
 #define OFFLINE_CONFIG_HPP
 
 #include <string>
+#include <iostream>
+
+#ifndef OFFLINE_MODEL_DIR
+#define OFFLINE_MODEL_DIR "../models/"
+#endif
 
 /**
  * @brief 离线测试配置结构
@@ -18,30 +23,32 @@ struct OfflineConfig {
 
     // ========== Model 6 (Sub) 专用配置 ==========
     bool enable_red_brick_refine = false;              // 红色砖头颜色后处理
-    int red_brick_min_area = 100;                      // 红色砖头最小面积
+    int red_brick_min_area = 200;                      // 红色砖头最小面积（对齐参考代码默认值）
     int depth_inpainting_strategy = 0;                 // 深度补全策略：0=关闭, 1=检测框, 2=语义, 3=两者
     bool enable_height_filter = false;                 // 启用高度过滤
-    bool enable_draw_detection_box = false;             // 是否在可视化结果中绘制检测框
+    bool enable_draw_detection_box = false;            // 是否在可视化结果中绘制检测框
 
     // ========== Model 7 (DSG) 专用配置 ==========
     bool enable_dsg_hsv_dark_filter = false;           // HSV 暗色过滤
-    bool enable_dsg_hsv_obstacle_protection = false;   // HSV 暗色过滤时保护障碍物
+    bool enable_dsg_hsv_obstacle_protection = true;    // HSV 暗色过滤时保护障碍物
     bool enable_dsg_detection_in_pointcloud = false;   // 点云中显示检测框
     bool enable_dsg_outlier_removal = false;           // 点云融合时启用离群点移除
 
-    // ========== bestMow CDT 前方矩形框配置 ==========
-    bool enable_bestmow_cdt = false;                   // bestMow 模式下启用 CDT 前方矩形框修正
+    // ========== CDT (扎带检测) 配置 ==========
+    bool enable_cdt = false;                           // 是否启用 CDT 检测
+    std::string cdt_model_name = "";                   // CDT 模型文件名
+
+    // ========== 深度补全配置 ==========
+    bool enable_label_100_filter = true;               // 深度补全时是否包含 label>=100 区域
 
     // ========== 路径配置 ==========
-    std::string model_dir = "/app/models/";  // Docker 容器中的模型路径
+    std::string model_dir = OFFLINE_MODEL_DIR;
     std::string input_dir = "";
     std::string output_dir = "";  // 留空，由 auto_configure() 自动生成
-    std::string pointcloud_dir = "";
 
     // 模型文件名（根据推理模式和硬件模式自动选择）
     std::string mul_sub_model_name = "";  // Model 6
     std::string dsg_model_name = "";      // Model 7
-    std::string cdt_model_name = "";      // bestMow CDT
 
     // ========== 输出控制 ==========
     bool save_segmentation = true;   // 保存分割结果
@@ -55,7 +62,7 @@ struct OfflineConfig {
         // 根据推理模式和硬件模式自动选择模型文件
         if (infer_mode == 6) {
             // Model 6: Sub (multi_sub)
-            mul_sub_model_name = "sub_20260303_640x384.bin";
+            mul_sub_model_name = "sub_20260611_640x384.bin";
         } else if (infer_mode == 7) {
             // Model 7: DSG
             if (use_k100_mode) {
@@ -65,7 +72,9 @@ struct OfflineConfig {
                 dsg_model_name = "dsg_multi_20260407_640x384.bin";
             }
         }
-        if (!use_k100_mode && enable_bestmow_cdt) {
+
+        // CDT 模型配置
+        if (enable_cdt) {
             cdt_model_name = "cdt_20251125_640x384.bin";
         }
 
@@ -83,23 +92,7 @@ struct OfflineConfig {
         std::string erode_suffix = erode_pixel > 0 ? "_erode" + std::to_string(erode_pixel) : "";
 
         if (output_dir.empty()) {
-            if (infer_mode == 6) {
-                output_dir = input_dir + (use_k100_mode ? "/sub_6_205_432" : "/sub_6_205_384");
-            } else if (infer_mode == 7) {
-                output_dir = input_dir + (use_k100_mode ? "/dsg_7_205_432" : "/dsg_7_205_384");
-            } else {
-                output_dir = input_dir + "/output_" + mode_name + "_" + hw_suffix + erode_suffix + "/";
-            }
-        }
-
-        if (pointcloud_dir.empty()) {
-            if (infer_mode == 6) {
-                pointcloud_dir = input_dir + (use_k100_mode ? "/pcd_6_205_432" : "/pcd_6_205_384");
-            } else if (infer_mode == 7) {
-                pointcloud_dir = input_dir + (use_k100_mode ? "/pcd_7_205_432" : "/pcd_7_205_384");
-            } else {
-                pointcloud_dir = output_dir + "/pointcloud";
-            }
+            output_dir = input_dir + "/output_" + mode_name + "_" + hw_suffix + erode_suffix + "/";
         }
     }
 
@@ -124,15 +117,8 @@ struct OfflineConfig {
         std::cout << "Erode pixel: " << erode_pixel << std::endl;
         std::cout << "Detection threshold: " << detection_threshold << std::endl;
         std::cout << "Area threshold: " << area_threshold << std::endl;
-        std::cout << "bestMow CDT: "
-                  << ((!use_k100_mode && enable_bestmow_cdt) ? "enabled" : "disabled")
-                  << std::endl;
-        if (!cdt_model_name.empty()) {
-            std::cout << "CDT Model: " << cdt_model_name << std::endl;
-        }
         std::cout << "\nInput dir: " << input_dir << std::endl;
         std::cout << "Output dir: " << output_dir << std::endl;
-        std::cout << "Pointcloud dir: " << pointcloud_dir << std::endl;
         std::cout << "\nOutput options:" << std::endl;
         std::cout << "  - Segmentation: " << (save_segmentation ? "yes" : "no") << std::endl;
         std::cout << "  - Point cloud: " << (save_pointcloud ? "yes" : "no") << std::endl;

@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <algorithm>
+#include <cctype>
 
 #include "offline_config.hpp"
 #include "offline_processor.hpp"
@@ -13,18 +15,19 @@ void printUsage(const char* program_name) {
     std::cout << "\n========== Stereo Perception Offline Test Tool ==========" << std::endl;
     std::cout << "Version: v2.1.0" << std::endl;
     std::cout << "\nUsage:" << std::endl;
-    std::cout << "  " << program_name << " <input_dir> <output_dir> [infer_mode] [hardware_mode]" << std::endl;
+    std::cout << "  " << program_name << " <input_dir> <output_dir> [hardware_mode] [sub_model_name]" << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  input_dir      : Input directory containing images" << std::endl;
     std::cout << "  output_dir     : Output directory for results" << std::endl;
-    std::cout << "  infer_mode     : Inference mode (optional, 6=day/sub, 7=night/DSG)" << std::endl;
     std::cout << "  hardware_mode  : Hardware mode (optional)" << std::endl;
     std::cout << "                   - k100 or K100: K100 mode (default)" << std::endl;
     std::cout << "                   - bestmow or BESTMOW: bestmow mode" << std::endl;
+    std::cout << "  sub_model_name : Optional Model 6 model file name under models/" << std::endl;
     std::cout << "\nExamples:" << std::endl;
     std::cout << "  " << program_name << " /path/to/images /path/to/output" << std::endl;
-    std::cout << "  " << program_name << " /path/to/images /path/to/output 7 k100" << std::endl;
-    std::cout << "  " << program_name << " /path/to/images /path/to/output 6 bestmow" << std::endl;
+    std::cout << "  " << program_name << " /path/to/images /path/to/output k100" << std::endl;
+    std::cout << "  " << program_name << " /path/to/images /path/to/output k100 sub_20260611_640x384.bin" << std::endl;
+    std::cout << "  " << program_name << " /path/to/images /path/to/output bestmow" << std::endl;
     std::cout << "\nSupported image formats: .jpg, .jpeg, .png, .bmp" << std::endl;
     std::cout << "Stereo format: 1280x480 (auto-split to left/right)" << std::endl;
     std::cout << "========================================================\n" << std::endl;
@@ -36,77 +39,52 @@ int main(int argc, char** argv) {
     std::cout << "  Based on stereo_perception_multi2 with K100/bestmow support" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    if (argc >= 2) {
-        std::string arg1 = argv[1];
-        if (arg1 == "--help" || arg1 == "-h" || arg1 == "help") {
-            printUsage(argv[0]);
-            return 0;
-        }
-    }
-
-    // ========== 从环境变量读取配置 ==========
-    std::string input_dir;
+//    std::string input_dir = "/home/youfeng/debug/custom/0102/0423/stereo/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0286/20260511/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260520/rosbag_LK-MR541EU000027_navigation_202605201059/stereo_output_rosbag_LK-MR541EU000027_navigation_202605201059_0/error_test/cdt_sub_6_205_det_0.3_pc_432_bak/select_origin/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260520/rosbag_LK-MR541EU000027_navigation_202605201059/stereo_output_rosbag_LK-MR541EU000027_navigation_202605201059_0/error_test/cdt_sub_6_205_det_0.3_pc_432_bak/select_origin/single_test/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260520/rosbag_LK-MR541EU000027_navigation_202605201059/stereo_output_rosbag_LK-MR541EU000027_navigation_202605201059_0/error_test/cdt_sub_6_205_det_0.3_pc_432_bak/select_origin/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260528/rosbag/rosbag_LK-MR6P1US000124_navigation_202605281113/stereo_output_rosbag_LK-MR6P1US000124_navigation_202605281113_0/images/extracted_interval/";
+//    std::string input_dir = "/home/youfeng/debug/select/rain_data/rosbag/0725/rosbag_MR1P1251US0007622_camera_202507241507/stereo_output_rosbag_MR1P1251US0007622_camera_202507241507_0/images/extracted_interval/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0337/20260623/select/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0337/20260623/select/output_Sub_bestmow/stereo/select_part/point_cloud_error/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0337/20260623/select/output_Sub_bestmow/stereo/select_part/point_cloud_error/";
+//    std::string input_dir = "/home/youfeng/debug/custom/0337/20260629/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260629/rosbag_LK-MR541EU000027_navigation_202606291439/stereo_output_rosbag_LK-MR541EU000027_navigation_202606291439_0/images/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0027/20260629/rosbag_LK-MR541EU000027_navigation_202606291436/stitched_every_8/";
+//    std::string input_dir = "/home/youfeng/debug/boluo/0368/20260701/";
+    std::string input_dir = "/home/youfeng/debug/boluo/0339/20260704/";
     std::string output_dir;
-    std::string pointcloud_dir;
-    int infer_mode = 7;  // 默认使用 DSG 模式
-    bool use_k100_mode = true;  // 默认使用 K100 模式
+    if (argc == 2 && (std::string(argv[1]) == "-h" || std::string(argv[1]) == "--help")) {
+        printUsage(argv[0]);
+        return 0;
+    }
 
-    // 读取输入目录（优先使用环境变量）
-    const char* env_input = std::getenv("OFFLINE_INPUT_DIR");
-    if (env_input != nullptr) {
-        input_dir = env_input;
-        std::cout << "[Config] Input dir from env: " << input_dir << std::endl;
-    } else if (argc >= 2) {
+    if (argc >= 2) {
         input_dir = argv[1];
-        std::cout << "[Config] Input dir from argv: " << input_dir << std::endl;
-    } else {
-        // 默认路径（用于本地测试）
-        input_dir = "/home/youfeng/debug/custom/0102/0423/stereo/";
-        std::cout << "[Config] Using default input dir: " << input_dir << std::endl;
     }
-
-    // 读取输出目录（可选）
-    const char* env_output = std::getenv("OFFLINE_OUTPUT_DIR");
-    if (env_output != nullptr) {
-        output_dir = env_output;
-        std::cout << "[Config] Output dir from env: " << output_dir << std::endl;
-    } else if (argc >= 3) {
+    if (argc >= 3) {
         output_dir = argv[2];
-        std::cout << "[Config] Output dir from argv: " << output_dir << std::endl;
     }
 
-    const char* env_pcd_output = std::getenv("OFFLINE_POINTCLOUD_DIR");
-    if (env_pcd_output != nullptr) {
-        pointcloud_dir = env_pcd_output;
-        std::cout << "[Config] Pointcloud dir from env: " << pointcloud_dir << std::endl;
-    }
-
-    // 读取推理模式（命令行参数优先于环境变量）
+    // 解析硬件模式（默认 K100）
+    bool use_k100_mode = true;  // 使用 K100 模式和 dsg_multi_20260403_640x384.bin 模型
     if (argc >= 4) {
-        infer_mode = std::atoi(argv[3]);
-        std::cout << "[Config] Infer mode from argv: " << infer_mode << std::endl;
-    } else {
-        const char* env_mode = std::getenv("OFFLINE_INFER_MODE");
-        if (env_mode != nullptr) {
-            infer_mode = std::atoi(env_mode);
-            std::cout << "[Config] Infer mode from env: " << infer_mode << std::endl;
+        std::string mode_str = argv[3];
+        std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (mode_str == "bestmow") {
+            use_k100_mode = true;
+        } else if (mode_str != "k100") {
+            std::cerr << "[Error] Unsupported hardware mode: " << argv[3] << std::endl;
+            printUsage(argv[0]);
+            return 1;
         }
     }
 
-    // 读取硬件模式（命令行参数优先于环境变量）
+    std::string model_override;
     if (argc >= 5) {
-        std::string hw_str = argv[4];
-        std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
-        use_k100_mode = (hw_str == "k100");
-        std::cout << "[Config] Hardware mode from argv: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
-    } else {
-        const char* env_hardware = std::getenv("HARDWARE_MODE");
-        if (env_hardware != nullptr) {
-            std::string hw_str = env_hardware;
-            std::transform(hw_str.begin(), hw_str.end(), hw_str.begin(), ::tolower);
-            use_k100_mode = (hw_str == "k100");
-            std::cout << "[Config] Hardware mode from env: " << (use_k100_mode ? "K100" : "bestmow") << std::endl;
-        }
+        model_override = argv[4];
     }
 
     // 设置环境变量，让 HardwareDetector 读取到正确的模式
@@ -125,50 +103,33 @@ int main(int argc, char** argv) {
     config.use_k100_mode = use_k100_mode;
 
     // 基础配置
-    config.infer_mode = infer_mode;         // 从环境变量或命令行读取
-    config.erode_pixel = 0;                 // 形态学腐蚀像素
-    config.detection_threshold = 0.3f;      // 检测阈值
-    config.area_threshold = 0.5f;           // 区域阈值
+    config.infer_mode = 6;              // 6: Sub模式 (sub_20260320), 7: DSG模式 (dsg_multi_20260407)
+    config.erode_pixel = 0;             // 形态学腐蚀像素
+    config.detection_threshold = 0.3f;  // 检测阈值
+    config.area_threshold = 0.5f;       // 区域阈值
+    config.depth_inpainting_strategy = 2;  // 只使用语义障碍物深度补全，不依赖检测框
 
     // K100 专用配置
     config.enable_dsg_hsv_dark_filter = false;
     config.enable_dsg_detection_in_pointcloud = false;
-    config.enable_bestmow_cdt = !use_k100_mode;
 
     // 路径配置
-    // 优先使用环境变量中的模型目录，否则使用相对路径
-    const char* env_model_dir = std::getenv("MODEL_DIR");
-    if (env_model_dir != nullptr) {
-        config.model_dir = std::string(env_model_dir) + "/";
-        std::cout << "[Config] Model dir from env: " << config.model_dir << std::endl;
-    } else {
-        config.model_dir = "../models/";        // 模型目录（相对于可执行文件）
-    }
     config.input_dir = input_dir;
-
-    // 如果指定了输出目录，使用指定的；否则自动生成
-    if (!output_dir.empty()) {
-        config.output_dir = output_dir;
-        std::cout << "[Config] Using specified output dir: " << output_dir << std::endl;
-    }
-    if (!pointcloud_dir.empty()) {
-        config.pointcloud_dir = pointcloud_dir;
-        std::cout << "[Config] Using specified pointcloud dir: " << pointcloud_dir << std::endl;
-    }
-    // 否则留空，让 auto_configure() 自动生成带模式信息的目录名
+    config.output_dir = output_dir;
 
     // 输出控制
-    config.save_segmentation = false;
+    config.save_segmentation = true;
     config.save_pointcloud = true;
-    config.save_detection = false;
-    config.save_depth = false;
+    config.save_detection = true;
+    config.save_depth = true;
     config.enable_debug_show = true;  // 启用合并可视化保存
 
     // 自动配置（根据硬件模式选择模型等）
     config.auto_configure();
-
-    std::cout << "[Config] Effective infer mode: " << config.infer_mode << std::endl;
-    std::cout << "[Config] Effective hardware mode: " << (config.use_k100_mode ? "K100" : "bestmow") << std::endl;
+    if (!model_override.empty()) {
+        config.mul_sub_model_name = model_override;
+        std::cout << "[Config] Override Model 6 model: " << config.mul_sub_model_name << std::endl;
+    }
 
     // 打印配置
     config.print();
@@ -180,7 +141,7 @@ int main(int argc, char** argv) {
     }
 
     // ========== 创建输出目录 ==========
-    createOutputDirectories(config.output_dir, config.pointcloud_dir);
+    createOutputDirectories(config.output_dir);
 
     // ========== 扫描图像文件 ==========
     std::cout << "\n[Scan] Scanning input directory..." << std::endl;

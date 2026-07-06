@@ -23,7 +23,7 @@ interface PcdHeader {
 const ASCII_DECODER = new TextDecoder('utf-8')
 
 const DEFAULT_LABEL_COLOR: Record<number, [number, number, number]> = {
-  0: [0, 0, 200 / 255],
+  0: [0, 0, 0],
   1: [0, 0, 200 / 255],
   2: [100 / 255, 255 / 255, 102 / 255],
   3: [118 / 255, 89 / 255, 0],
@@ -32,6 +32,11 @@ const DEFAULT_LABEL_COLOR: Record<number, [number, number, number]> = {
   6: [1, 165 / 255, 0],
   7: [1, 20 / 255, 147 / 255],
   8: [0, 1, 1],
+  9: [245 / 255, 130 / 255, 48 / 255],
+  10: [0, 64 / 255, 128 / 255],
+  11: [34 / 255, 139 / 255, 34 / 255],
+  12: [1, 192 / 255, 203 / 255],
+  13: [138 / 255, 43 / 255, 226 / 255],
   100: [1, 0, 0],
   101: [1, 0, 0],
   102: [1, 0, 0],
@@ -39,8 +44,9 @@ const DEFAULT_LABEL_COLOR: Record<number, [number, number, number]> = {
   104: [1, 0, 0],
   105: [1, 1, 0],
   106: [0, 1, 1],
+  107: [0, 1, 0],
 }
-const DEFAULT_PASSABLE_LABELS = new Set([2])
+const DEFAULT_PASSABLE_LABELS = new Set([2, 3])
 
 function defaultLabelColor(label: number): [number, number, number] {
   return DEFAULT_LABEL_COLOR[label] ?? [0.5, 0.5, 0.5]

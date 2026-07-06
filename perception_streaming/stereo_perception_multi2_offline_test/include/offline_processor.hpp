@@ -1,9 +1,9 @@
 #ifndef OFFLINE_PROCESSOR_HPP
 #define OFFLINE_PROCESSOR_HPP
 
-// 使用 PCL 包装器来避免 FLANN 冲突
-#include "pcl_wrapper.h"
-
+#include <opencv2/opencv.hpp>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <string>
 #include <vector>
 
@@ -83,19 +83,29 @@ private:
     // 感知模块
     multi_perception mul_sub_perception_;  // Model 6
     dsg_perception dsg_perception_;        // Model 7
-    cdt_perception cdt_perception_;        // bestMow CDT front-rectangle detector
+    cdt_perception cdt_perception_;        // CDT (扎带检测)
     StereoMultiMatch stereo_matcher_;
 
     // 初始化标志
     bool initialized_ = false;
-    bool cdt_initialized_ = false;
 
     // 辅助函数
     bool initMulSubPerception();
     bool initDSGPerception();
-    bool initBestMowCDT();
+    bool initCDTPerception();
     bool initStereoMatcher();
-    void applyBestMowCDT(cv::Mat& label_map, cv::Mat& cdt_input);
+
+    // 深度补全函数
+    cv::Mat depthInpaintingByDetections(const cv::Mat& depth,
+                                        const cv::Mat& label,
+                                        const std::vector<Detection>& detections);
+    cv::Mat depthInpaintingForObstacles(const cv::Mat& depth,
+                                        const cv::Mat& label);
+
+    // 红色砖头后处理函数
+    void refineObstacleByColorAndEdge(cv::Mat& label_map,
+                                      const cv::Mat& bgr_img,
+                                      int min_area = 200);
 
     // 模型处理函数
     ProcessResult processModel6(const cv::Mat& left_img,

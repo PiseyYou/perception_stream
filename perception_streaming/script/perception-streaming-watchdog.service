@@ -1,0 +1,23 @@
+[Unit]
+Description=Perception Streaming Vite Watchdog
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/media/sda1/perception_process/perception_streaming
+ExecStart=/bin/bash /media/sda1/perception_process/perception_streaming/watchdog.sh
+Restart=always
+RestartSec=10
+LogsDirectory=perception-streaming
+
+# Keep the existing service endpoint and use a systemd-managed log directory.
+Environment=PROJECT_DIR=/media/sda1/perception_process/perception_streaming
+Environment=VITE_WATCHDOG_URL=https://127.0.0.1:5173/
+Environment=VITE_WATCHDOG_LOG=/var/log/perception-streaming/vite-watchdog.log
+Environment=VITE_DEV_LOG=/var/log/perception-streaming/vite-dev.log
+Environment=VITE_WATCHDOG_STARTUP_TIMEOUT=120
+Environment=VITE_WATCHDOG_STARTUP_CHECK_INTERVAL=2
+
+[Install]
+WantedBy=multi-user.target

@@ -76,7 +76,7 @@
         </button>
         <div class="sidebar-content">
           <ConnectionPanel v-model="connectionForm" :connected="mqttConnected" />
-          <DevicePanel v-model="deviceForm" />
+          <DevicePanel v-model="deviceForm" @snAdded="handleDeviceSnAdded" />
           <ControlBar
             :mqttConnected="mqttConnected"
             :videoStarted="videoStarted"
@@ -226,6 +226,10 @@ watch(() => deviceForm.value.sn, async (newSn, oldSn) => {
     handleStartVideo()
   }
 })
+
+function handleDeviceSnAdded(sn: string) {
+  updateSshPortForSN(sn)
+}
 
 // ─── Status ──────────────────────────────────────────
 

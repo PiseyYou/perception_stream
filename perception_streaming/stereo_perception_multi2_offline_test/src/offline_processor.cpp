@@ -1,19 +1,29 @@
 #include "offline_processor.hpp"
+#include "semantic_depth_utils.hpp"
 #include "offline_utils.hpp"
 #include "stereo_point_cloud_rgbl.h"
 #include "hardware_detector.hpp"
 #include <pcl/io/pcd_io.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
+#include <map>
+#include <limits>
 
 // Helper function to filter labels and detections
 static void filterLabelDect(cv::Mat &src_lab, std::vector<Detection> &dect_src,
-                            cv::Mat &lab_dst, std::vector<Detection> &dect_dst,
-                            bool enable_det)
+                     cv::Mat &lab_dst, std::vector<Detection> &dect_dst,
+                     bool enable_det)
 {
     // 先克隆，避免污染原图
     src_lab.copyTo(lab_dst);
+
+    cv::Mat mask_zero;
+    cv::compare(lab_dst, 0, mask_zero, cv::CMP_EQ);
+
+    // 将所有 label == 0 的像素设置为 label == 2
+    lab_dst.setTo(2, mask_zero);
 
     for (size_t i = 0; i < dect_src.size(); i++)
     {
@@ -45,16 +55,32 @@ static void filterLabelDect(cv::Mat &src_lab, std::vector<Detection> &dect_src,
 
         if (target_id == 3)
         {
-            process_roi(103);
+            if (enable_det) {
+                process_roi(103);
+            }
+            Detection det_with_mapped_id = dect_src[i];
+            det_with_mapped_id.id = 103;  // 将ID映射为103
+            dect_dst.push_back(det_with_mapped_id);
         }
         else if (target_id == 6)
         {
-            process_roi(106);
+            if (enable_det) {
+                process_roi(106);
+            }
+            Detection det_with_mapped_id = dect_src[i];
+            det_with_mapped_id.id = 106;  // 将ID映射为106
+            dect_dst.push_back(det_with_mapped_id);
         }
         else if (target_id == 7)
         {
-            // process_roi(107);
+            // 人物检测：不修改 label，保持原始分割结果
+            // if (enable_det) {
+            //     process_roi(107);
+            // }
             std::cout << "[person] have been dect....." << std::endl;
+            Detection det_with_mapped_id = dect_src[i];
+            det_with_mapped_id.id = 107;  // 将ID映射为107
+            dect_dst.push_back(det_with_mapped_id);
         }
         else if (target_id == 4) // 障碍物检测框 (id=4 -> label=104)
         {
@@ -86,52 +112,42 @@ static void filterLabelDect(cv::Mat &src_lab, std::vector<Detection> &dect_src,
             // 情况2: 检测框完全在可行走区域(label==2或3)内
             else if (count_background == 0 && count_walkable > 0)
             {
-                // 保留检测框标签，覆盖整个区域
-                roi_dst.setTo(104);
-                dect_dst.push_back(dect_src[i]);
+                // 只有在 enable_det 为 true 时才修改 label
+                if (enable_det) {
+                    roi_dst.setTo(104);
+                }
+                Detection det_with_mapped_id = dect_src[i];
+                det_with_mapped_id.id = 104;  // 将ID映射为104
+                dect_dst.push_back(det_with_mapped_id);
             }
             // 情况3: 其他情况（主要是背景区域）
             else
             {
-                // 只覆盖背景(1)和静态障碍物(5)
-                cv::Mat mask_one, mask_five;
-                cv::inRange(roi_dst, cv::Scalar(1), cv::Scalar(1), mask_one);
-                cv::inRange(roi_dst, cv::Scalar(5), cv::Scalar(5), mask_five);
-                cv::Mat combined_mask = mask_one | mask_five;
-                roi_dst.setTo(104, combined_mask);
-                dect_dst.push_back(dect_src[i]);
+                // 只有在 enable_det 为 true 时才修改 label
+                if (enable_det) {
+                    // 只覆盖背景(1)和静态障碍物(5)
+                    cv::Mat mask_one, mask_five;
+                    cv::inRange(roi_dst, cv::Scalar(1), cv::Scalar(1), mask_one);
+                    cv::inRange(roi_dst, cv::Scalar(5), cv::Scalar(5), mask_five);
+                    cv::Mat combined_mask = mask_one | mask_five;
+                    roi_dst.setTo(104, combined_mask);
+                }
+                Detection det_with_mapped_id = dect_src[i];
+                det_with_mapped_id.id = 104;  // 将ID映射为104
+                dect_dst.push_back(det_with_mapped_id);
             }
         }
-        if (enable_det)
+        else
         {
-            roi_dst.setTo(target_id + 100);
-            dect_dst.push_back(dect_src[i]);
+            if (enable_det)
+            {
+                roi_dst.setTo(target_id + 100);
+                Detection det_with_mapped_id = dect_src[i];
+                det_with_mapped_id.id = target_id + 100;  // 将ID映射为id+100
+                dect_dst.push_back(det_with_mapped_id);
+            }
         }
     }
-}
-
-static cv::Rect bestMowCdtRect(const std::vector<Detection>& detections,
-                               const cv::Size& label_size)
-{
-    if (detections.size() != 1 || label_size.empty()) {
-        return cv::Rect();
-    }
-
-    const Bbox& bbox = detections[0].bbox;
-    const int xmin = std::max(static_cast<int>(std::lround(bbox.xmin)), 0);
-    const int ymin = std::max(static_cast<int>(std::lround(bbox.ymin)), 0);
-    const int xmax = std::min(static_cast<int>(std::lround(bbox.xmax)), label_size.width);
-
-    if (xmin >= xmax || ymin >= label_size.height) {
-        return cv::Rect();
-    }
-
-    return cv::Rect(xmin, ymin, xmax - xmin, label_size.height - ymin);
-}
-
-static uint8_t bestMowCdtLabelForMode(int infer_mode)
-{
-    return infer_mode == 7 ? 3 : 2;
 }
 
 static std::vector<Detection> scaleDetectionsY(const std::vector<Detection>& detections,
@@ -146,6 +162,246 @@ static std::vector<Detection> scaleDetectionsY(const std::vector<Detection>& det
     return scaled;
 }
 
+static void logSemanticRegionDiagnostics(const std::string& tag,
+                                         const cv::Mat& label,
+                                         const cv::Mat& depth,
+                                         int x0,
+                                         int y0,
+                                         int x1,
+                                         int y1)
+{
+    if (label.empty()) {
+        return;
+    }
+
+    x0 = std::max(0, std::min(x0, label.cols));
+    y0 = std::max(0, std::min(y0, label.rows));
+    x1 = std::max(x0, std::min(x1, label.cols));
+    y1 = std::max(y0, std::min(y1, label.rows));
+    const cv::Rect roi(x0, y0, x1 - x0, y1 - y0);
+
+    std::map<int, int> label_counts;
+    int valid_depth_count = 0;
+    int invalid_depth_count = 0;
+    double depth_sum = 0.0;
+    float min_depth = std::numeric_limits<float>::max();
+    float max_depth = 0.0f;
+
+    for (int y = roi.y; y < roi.y + roi.height; ++y) {
+        const uchar* label_row = label.ptr<uchar>(y);
+        const float* depth_row = (!depth.empty() && depth.rows == label.rows && depth.cols == label.cols)
+                                     ? depth.ptr<float>(y)
+                                     : nullptr;
+        for (int x = roi.x; x < roi.x + roi.width; ++x) {
+            label_counts[label_row[x]]++;
+            if (depth_row) {
+                const float d = depth_row[x];
+                if (std::isfinite(d) && d > 0.0f && d < 6.0f) {
+                    valid_depth_count++;
+                    depth_sum += d;
+                    min_depth = std::min(min_depth, d);
+                    max_depth = std::max(max_depth, d);
+                } else {
+                    invalid_depth_count++;
+                }
+            }
+        }
+    }
+
+    std::cout << "[Diag][" << tag << "] region x=" << roi.x << ", y=" << roi.y
+              << ", w=" << roi.width << ", h=" << roi.height << std::endl;
+    std::cout << "[Diag][" << tag << "] labels:";
+    for (const auto& [label_id, count] : label_counts) {
+        std::cout << " " << label_id << "=" << count;
+    }
+    std::cout << std::endl;
+
+    if (!depth.empty() && depth.size() == label.size()) {
+        const double mean_depth = valid_depth_count > 0 ? depth_sum / valid_depth_count : 0.0;
+        std::cout << "[Diag][" << tag << "] depth valid=" << valid_depth_count
+                  << ", invalid=" << invalid_depth_count
+                  << ", mean_valid=" << mean_depth
+                  << ", range=[" << (valid_depth_count > 0 ? min_depth : 0.0f)
+                  << ", " << (valid_depth_count > 0 ? max_depth : 0.0f) << "]"
+                  << std::endl;
+    } else {
+        std::cout << "[Diag][" << tag << "] depth skipped: label/depth size mismatch" << std::endl;
+    }
+}
+
+static void logBottomSemanticDiagnostics(const std::string& stage,
+                                         const cv::Mat& label,
+                                         const cv::Mat& depth)
+{
+    if (label.empty()) {
+        return;
+    }
+
+    const int bottom_y = label.rows * 3 / 5;
+    logSemanticRegionDiagnostics(stage + ":bottom_center",
+                                 label,
+                                 depth,
+                                 label.cols / 5,
+                                 bottom_y,
+                                 label.cols * 4 / 5,
+                                 label.rows);
+    logSemanticRegionDiagnostics(stage + ":bottom_right",
+                                 label,
+                                 depth,
+                                 label.cols * 3 / 4,
+                                 bottom_y,
+                                 label.cols,
+                                 label.rows);
+}
+
+static bool shouldLogFrame0336Diagnostics(const std::string& image_name)
+{
+    return image_name.find("match_0336") != std::string::npos ||
+           image_name.find("0336") != std::string::npos;
+}
+
+static int countValidDepthInLabelRoi(const cv::Mat& label,
+                                     const cv::Mat& depth,
+                                     const cv::Rect& roi,
+                                     uchar target_label)
+{
+    if (label.empty() || depth.empty() || label.size() != depth.size()) {
+        return 0;
+    }
+
+    const cv::Rect safe_roi = roi & cv::Rect(0, 0, label.cols, label.rows);
+    int count = 0;
+    for (int y = safe_roi.y; y < safe_roi.y + safe_roi.height; ++y) {
+        const uchar* label_row = label.ptr<uchar>(y);
+        const float* depth_row = depth.ptr<float>(y);
+        for (int x = safe_roi.x; x < safe_roi.x + safe_roi.width; ++x) {
+            const float d = depth_row[x];
+            if (label_row[x] == target_label &&
+                std::isfinite(d) && d > 0.0f && d < 6.0f) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+static int countLabelInRoi(const cv::Mat& label,
+                           const cv::Rect& roi,
+                           uchar target_label)
+{
+    if (label.empty()) {
+        return 0;
+    }
+
+    const cv::Rect safe_roi = roi & cv::Rect(0, 0, label.cols, label.rows);
+    int count = 0;
+    for (int y = safe_roi.y; y < safe_roi.y + safe_roi.height; ++y) {
+        const uchar* label_row = label.ptr<uchar>(y);
+        for (int x = safe_roi.x; x < safe_roi.x + safe_roi.width; ++x) {
+            if (label_row[x] == target_label) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+static void logFrame0336RoiDepthStage(const std::string& stage,
+                                      const cv::Mat& label,
+                                      const cv::Mat& depth)
+{
+    if (label.empty()) {
+        return;
+    }
+
+    const int bottom_y = label.rows * 3 / 5;
+    const std::array<std::pair<const char*, cv::Rect>, 3> rois = {{
+        {"bottom_semantic", cv::Rect(label.cols / 5, bottom_y,
+                                     label.cols - label.cols / 5,
+                                     label.rows - bottom_y)},
+        {"bottom_right", cv::Rect(label.cols * 3 / 4, bottom_y,
+                                  label.cols - label.cols * 3 / 4,
+                                  label.rows - bottom_y)},
+        {"bottom_right_wide", cv::Rect(label.cols * 3 / 5, bottom_y,
+                                       label.cols - label.cols * 3 / 5,
+                                       label.rows - bottom_y)}
+    }};
+
+    for (const auto& [name, roi] : rois) {
+        const int label6_pixels = countLabelInRoi(label, roi, 6);
+        const int valid_label6_depth =
+            countValidDepthInLabelRoi(label, depth, roi, 6);
+        std::cout << "[Diag][0336][" << stage << ":" << name << "]"
+                  << " label6_pixels=" << label6_pixels
+                  << ", valid_label6_depth=" << valid_label6_depth
+                  << std::endl;
+    }
+}
+
+static int countLabelInPointCloudRoi(const pcl::PointCloud<pcl::PointXYZRGBL>& cloud,
+                                     int image_cols,
+                                     int image_rows,
+                                     const cv::Rect& roi,
+                                     uint32_t target_label,
+                                     double fx,
+                                     double fy,
+                                     double cx,
+                                     double cy)
+{
+    const cv::Rect safe_roi = roi & cv::Rect(0, 0, image_cols, image_rows);
+    int count = 0;
+    for (const auto& point : cloud.points) {
+        if (point.label != target_label || point.z <= 0.0f) {
+            continue;
+        }
+        const int x = static_cast<int>(std::lround(point.x * fx / point.z + cx));
+        const int y = static_cast<int>(std::lround(point.y * fy / point.z + cy));
+        if (safe_roi.contains(cv::Point(x, y))) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static void logFrame0336PointCloudStage(
+    const pcl::PointCloud<pcl::PointXYZRGBL>& cloud,
+    const cv::Mat& label,
+    const StereoMultiMatch& stereo_matcher)
+{
+    if (label.empty()) {
+        return;
+    }
+
+    int total_label6 = 0;
+    for (const auto& point : cloud.points) {
+        if (point.label == 6) {
+            ++total_label6;
+        }
+    }
+
+    const int bottom_y = label.rows * 3 / 5;
+    const cv::Rect bottom_semantic(label.cols / 5, bottom_y,
+                                   label.cols - label.cols / 5,
+                                   label.rows - bottom_y);
+    const cv::Rect bottom_right(label.cols * 3 / 4, bottom_y,
+                                label.cols - label.cols * 3 / 4,
+                                label.rows - bottom_y);
+
+    std::cout << "[Diag][0336][pointcloud]"
+              << " label6_points=" << total_label6
+              << ", bottom_semantic_label6_points="
+              << countLabelInPointCloudRoi(cloud, label.cols, label.rows,
+                                           bottom_semantic, 6,
+                                           stereo_matcher.fx, stereo_matcher.fy,
+                                           stereo_matcher.cx, stereo_matcher.cy)
+              << ", bottom_right_label6_points="
+              << countLabelInPointCloudRoi(cloud, label.cols, label.rows,
+                                           bottom_right, 6,
+                                           stereo_matcher.fx, stereo_matcher.fy,
+                                           stereo_matcher.cx, stereo_matcher.cy)
+              << std::endl;
+}
+
 OfflineProcessor::OfflineProcessor(const OfflineConfig& config)
     : config_(config),
       hardware_mode_(config.use_k100_mode) {
@@ -157,9 +413,6 @@ OfflineProcessor::~OfflineProcessor() {
             mul_sub_perception_.perception_release();
         } else if (config_.infer_mode == 7) {
             dsg_perception_.perception_release();
-        }
-        if (cdt_initialized_) {
-            cdt_perception_.perception_release();
         }
     }
 }
@@ -187,19 +440,18 @@ bool OfflineProcessor::init() {
         return false;
     }
 
+    // 初始化 CDT 模块（如果启用）
+    if (config_.enable_cdt) {
+        if (!initCDTPerception()) {
+            std::cerr << "[Error] Failed to initialize CDT perception" << std::endl;
+            return false;
+        }
+    }
+
     // 初始化立体匹配模块
     if (!initStereoMatcher()) {
         std::cerr << "[Error] Failed to initialize stereo matcher" << std::endl;
         return false;
-    }
-
-    if (config_.enable_bestmow_cdt && !hardware_mode_.isK100Hardware()) {
-        if (!initBestMowCDT()) {
-            std::cerr << "[Error] Failed to initialize bestMow CDT detector" << std::endl;
-            return false;
-        }
-    } else if (config_.enable_bestmow_cdt && hardware_mode_.isK100Hardware()) {
-        std::cout << "[Init] CDT requested but skipped for K100 mode" << std::endl;
     }
 
     initialized_ = true;
@@ -269,55 +521,14 @@ bool OfflineProcessor::initDSGPerception() {
     }
 }
 
-bool OfflineProcessor::initBestMowCDT() {
-    std::string model_path = config_.model_dir + config_.cdt_model_name;
-    std::cout << "[Init] Loading bestMow CDT model: " << model_path << std::endl;
-
-    if (config_.cdt_model_name.empty()) {
-        std::cerr << "[Error] CDT model name is empty" << std::endl;
-        return false;
-    }
-
-    if (!std::filesystem::exists(model_path)) {
-        const std::vector<std::string> fallback_paths = {
-            "models/" + config_.cdt_model_name,
-            "../models/" + config_.cdt_model_name,
-            "../../models/" + config_.cdt_model_name,
-        };
-        for (const auto& fallback_path : fallback_paths) {
-            if (std::filesystem::exists(fallback_path)) {
-                model_path = fallback_path;
-                std::cout << "[Init] CDT model found via fallback: " << model_path << std::endl;
-                break;
-            }
-        }
-        if (!std::filesystem::exists(model_path)) {
-            std::cerr << "[Error] CDT model file does not exist: " << model_path << std::endl;
-            return false;
-        }
-    }
-
-    try {
-        cdt_perception_.perception_init(model_path.c_str());
-        cdt_initialized_ = true;
-        std::cout << "[Init] bestMow CDT model loaded successfully" << std::endl;
-        return true;
-    } catch (const std::exception& e) {
-        std::cerr << "[Error] bestMow CDT model loading failed: " << e.what() << std::endl;
-        return false;
-    }
-}
-
 bool OfflineProcessor::initStereoMatcher() {
     std::cout << "[Init] Initializing stereo matcher..." << std::endl;
 
-    // 禁用 OpenCL 以避免在 Docker 容器中的段错误
-    cv::ocl::setUseOpenCL(false);
-    std::cout << "[Init] OpenCL disabled for stereo matcher" << std::endl;
-
-    if (config_.infer_mode == 7 && hardware_mode_.isK100Hardware()) {
+    // 根据推理模式选择参数初始化方法
+    // Mode 7 (DSG 夜间模式) 使用自适应参数，其他模式使用原始参数
+    if (config_.infer_mode == 7) {
         stereo_matcher_.stereo_multi_param_init_6m_adaptive();
-        std::cout << "[Init] Stereo matcher initialized (K100 adaptive parameters for night mode)" << std::endl;
+        std::cout << "[Init] Stereo matcher initialized (adaptive parameters for night mode)" << std::endl;
     } else {
         stereo_matcher_.stereo_multi_param_init();
         std::cout << "[Init] Stereo matcher initialized (original parameters)" << std::endl;
@@ -326,27 +537,23 @@ bool OfflineProcessor::initStereoMatcher() {
     return true;
 }
 
-void OfflineProcessor::applyBestMowCDT(cv::Mat& label_map, cv::Mat& cdt_input) {
-    if (!config_.enable_bestmow_cdt || hardware_mode_.isK100Hardware()) {
-        return;
+bool OfflineProcessor::initCDTPerception() {
+    std::string model_path = config_.model_dir + config_.cdt_model_name;
+    std::cout << "[Init] Loading CDT model: " << model_path << std::endl;
+
+    // 检查模型文件是否存在
+    if (!std::filesystem::exists(model_path)) {
+        std::cerr << "[Error] CDT model file does not exist: " << model_path << std::endl;
+        return false;
     }
-    if (!cdt_initialized_ || label_map.empty() || cdt_input.empty()) {
-        return;
-    }
 
-    std::vector<Detection> cdt_detections;
-    cdt_perception_.perception_process_bgr(cdt_input, cdt_detections);
-    const cv::Rect cdt_rect = bestMowCdtRect(cdt_detections, label_map.size());
-
-    std::cout << "[CDT] detections: " << cdt_detections.size()
-              << ", rect: " << cdt_rect
-              << ", area: " << cdt_rect.area() << std::endl;
-
-    if (cdt_rect.area() > 0) {
-        const uint8_t cdt_label = bestMowCdtLabelForMode(config_.infer_mode);
-        label_map(cdt_rect).setTo(cdt_label);
-        std::cout << "[CDT] Applied bestMow front-rectangle label override to "
-                  << static_cast<int>(cdt_label) << std::endl;
+    try {
+        cdt_perception_.perception_init(model_path.c_str());
+        std::cout << "[Init] CDT model loaded successfully" << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[Error] CDT model loading failed: " << e.what() << std::endl;
+        return false;
     }
 }
 
@@ -390,20 +597,22 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
 
     // ========== 图像裁剪和预处理 ==========
     cv::Mat cropped_img, resized_img;
+    cv::Mat lab_dst;
 
     if (hardware_mode_.isK100Hardware()) {
-        // K100 模式：裁剪到 640x432，再 resize 到 640x384 参与推理/融合
-        std::cout << "[Process] K100 mode: Crop to 640x432, then resize to 640x384" << std::endl;
+        // K100 模式：裁剪到 640x432，然后 resize 到 640x384
+        std::cout << "[Process] Model 6 K100 mode: Crop to 640x432, then resize to 640x384" << std::endl;
         cv::Rect crop_region(0, 0, 640, 432);
         cropped_img = left_img(crop_region).clone();
         cv::resize(cropped_img, resized_img, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
     } else {
-        // bestmow 模式：直接裁剪到 640x384，并保持 384 尺度
-        std::cout << "[Process] bestmow mode: Crop to 640x384" << std::endl;
+        // bestmow 模式：直接裁剪到 640x384
+        std::cout << "[Process] Model 6 bestmow mode: Crop to 640x384" << std::endl;
         cv::Rect crop_region(0, 0, 640, 384);
         cropped_img = left_img(crop_region).clone();
         resized_img = cropped_img.clone();
     }
+    result.cropped_img = cropped_img;
 
     // ========== 1. Multi-Sub 推理 ==========
     std::cout << "[Process] Running Multi-Sub inference..." << std::endl;
@@ -415,17 +624,45 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
     mul_sub_perception_.perception_process_bgr_no_argmax_erode(
         resized_img, detections, img_label384, lab_out, config_.erode_pixel);
 
-    // 过滤标签和检测框，保留模型输出的原始标签分布
+    // ========== 1.5 CDT 检测（如果启用） ==========
+    cv::Rect cdt_rect;
+    if (config_.enable_cdt) {
+        std::cout << "[Process] Running CDT detection..." << std::endl;
+        std::vector<Detection> cdt_detections;
+        cdt_perception_.perception_process_bgr(resized_img, cdt_detections);
+        cdt_rect = get_cdt_rect(cdt_detections);
+
+        if (cdt_rect.area() > 0) {
+            std::cout << "[Process] CDT detected at: " << cdt_rect << std::endl;
+        } else {
+            std::cout << "[Process] No valid CDT detection" << std::endl;
+        }
+    }
+
     cv::Mat dst_label384(384, 640, CV_8UC1);
     filterLabelDect(lab_out, detections, dst_label384, dst_detections,
                     config_.enable_draw_detection_box);
-    applyBestMowCDT(dst_label384, resized_img);
+
+    // 应用 CDT 掩码（在 640x384 尺度）
+    if (config_.enable_cdt && cdt_rect.area() > 0) {
+        dst_label384(cdt_rect).setTo(-1);  // 标记为无效区域
+        std::cout << "[Process] CDT mask applied to segmentation" << std::endl;
+    }
+
+    // ========== 1.8 红色砖头后处理（在 640x384 尺度） ==========
+    if (config_.enable_red_brick_refine) {
+        std::cout << "[Process] Applying red brick refinement..." << std::endl;
+        refineObstacleByColorAndEdge(dst_label384, resized_img, config_.red_brick_min_area);
+    }
 
     result.detections = dst_detections;
     result.segmentation = dst_label384;
+    cv::Mat fusion_label = dst_label384;
+    cv::Mat fusion_img = resized_img;
+    std::vector<Detection> fusion_detections = dst_detections;
 
-    if (result.segmentation.empty()) {
-        std::cerr << "[Error] segmentation is empty after Multi-Sub inference!" << std::endl;
+    if (dst_label384.empty()) {
+        std::cerr << "[Error] lab_dst is empty after Multi-Sub inference!" << std::endl;
         return result;
     }
 
@@ -446,23 +683,96 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
             right_gray = right_img;
         }
 
-        // 立体匹配
-        cv::Mat disparity = stereo_matcher_.stereo_multi_process_depth(left_gray, right_gray);
-        cv::Mat filtered_depth = stereo_matcher_.stereo_multi_process_filter(
-            disparity, result.segmentation, config_.enable_height_filter);
+        cv::Mat depth_480;
+        cv::Mat depth_before_morph_480;
+        const bool log_0336 = shouldLogFrame0336Diagnostics(image_name);
 
         if (hardware_mode_.isK100Hardware()) {
-            // K100 模式：深度也从 432 视场归一到 384，用于融合
-            cv::Mat depth_432 = filtered_depth(cv::Rect(0, 0, 640, 432)).clone();
-            cv::resize(depth_432, result.depth, cv::Size(640, 384), 0, 0, cv::INTER_LINEAR);
-            std::cout << "[Process] K100 mode: Model 6 depth cropped to 432, resized to 384" << std::endl;
+            cv::Mat fusion_label_480;
+            cv::resize(dst_label384, fusion_label_480, cv::Size(640, 432),
+                       0, 0, cv::INTER_NEAREST);
+            cv::copyMakeBorder(fusion_label_480, fusion_label_480, 0,
+                               480 - fusion_label_480.rows, 0, 0,
+                               cv::BORDER_CONSTANT, cv::Scalar(2));
+
+            cv::Mat disparity = stereo_matcher_.stereo_multi_process_depth(left_gray, right_gray);
+            if (log_0336) {
+                cv::Mat sgbm_depth;
+                double bf = std::abs(stereo_matcher_.Pr.at<double>(0, 3));
+                cv::Mat disparity_480;
+                cv::resize(disparity, disparity_480, left_gray.size(), 0, 0,
+                           cv::INTER_NEAREST);
+                disparity_480 *= 2.0f;
+                cv::divide(bf, disparity_480, sgbm_depth, 1, CV_32F);
+                sgbm_depth.setTo(100.0f, disparity_480 <= 0.01f);
+                logFrame0336RoiDepthStage("sgbm", fusion_label_480, sgbm_depth);
+            }
+
+            depth_480 = stereo_matcher_.stereo_multi_process_filter(
+                disparity, fusion_label_480, false);
+
+            // K100 模式：深度保持 640x432；融合前将 384 标签还原到 432
+            result.depth = depth_480(cv::Rect(0, 0, 640, 432)).clone();
+            cv::resize(dst_label384, fusion_label, cv::Size(640, 432), 0, 0, cv::INTER_NEAREST);
+            fusion_img = cropped_img;
+            fusion_detections = scaleDetectionsY(dst_detections, 432.0f / 384.0f, 432);
+            std::cout << "[Process] Model 6 K100 mode: Depth cropped to 432 for fusion" << std::endl;
+            if (log_0336) {
+                logFrame0336RoiDepthStage(
+                    "multiscale_before_morph",
+                    fusion_label,
+                    result.depth);
+                logFrame0336RoiDepthStage("after_morph", fusion_label, result.depth);
+            }
         } else {
-            // bestmow 模式：直接使用 384 视场深度
-            result.depth = filtered_depth(cv::Rect(0, 0, 640, 384)).clone();
-            std::cout << "[Process] bestmow mode: Model 6 depth cropped to 384" << std::endl;
+            // bestmow 模式保持原参考路径：直接在原始 640x480 灰度图上计算深度
+            depth_480 = stereo_matcher_.stereo_multi_process(left_gray, right_gray, false);
+            // bestmow 模式：深度直接裁剪到 384 用于融合
+            result.depth = depth_480(cv::Rect(0, 0, 640, 384)).clone();
+            fusion_label = dst_label384;
+            fusion_img = resized_img;
+            fusion_detections = dst_detections;
+            std::cout << "[Process] Model 6 bestmow mode: Depth cropped to 384" << std::endl;
         }
 
         std::cout << "[Process] Depth map computed: " << result.depth.size() << std::endl;
+        if (hardware_mode_.isK100Hardware()) {
+            logBottomSemanticDiagnostics("before_inpaint", fusion_label, result.depth);
+            if (log_0336) {
+                logFrame0336RoiDepthStage("before_inpaint", fusion_label, result.depth);
+            }
+        }
+
+        // ========== 2.5 深度补全（可选） ==========
+        if (config_.depth_inpainting_strategy > 0 && !result.depth.empty()) {
+            std::cout << "[Process] Applying depth inpainting (strategy: "
+                      << config_.depth_inpainting_strategy << ")..." << std::endl;
+
+            // 策略1或3: 基于检测框的补全
+            if (config_.depth_inpainting_strategy == 1 || config_.depth_inpainting_strategy == 3) {
+                result.depth = depthInpaintingByDetections(result.depth, fusion_label, fusion_detections);
+            }
+
+            // 策略2或3: 基于语义分割的补全
+            if (config_.depth_inpainting_strategy == 2 || config_.depth_inpainting_strategy == 3) {
+                result.depth = depthInpaintingForObstacles(result.depth, fusion_label);
+            }
+
+            std::cout << "[Process] Depth inpainting completed" << std::endl;
+            if (hardware_mode_.isK100Hardware()) {
+                logBottomSemanticDiagnostics("after_inpaint", fusion_label, result.depth);
+                if (log_0336) {
+                    logFrame0336RoiDepthStage("after_inpaint", fusion_label, result.depth);
+                }
+            }
+        }
+
+        if (hardware_mode_.isK100Hardware()) {
+            logBottomSemanticDiagnostics("final", fusion_label, result.depth);
+            if (log_0336) {
+                logFrame0336RoiDepthStage("final_depth", fusion_label, result.depth);
+            }
+        }
     } else {
         std::cout << "[Process] No right image, skipping stereo matching" << std::endl;
     }
@@ -474,14 +784,23 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel6(
         pcl::PointCloud<pcl::PointXYZRGBL> xyz_rgbl_cloud;
         pcl::PointCloud<pcl::PointXYZRGBL> out_xyz_rgbl_cloud;
 
-        stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion(
-            result.depth, result.segmentation, result.detections,
-            resized_img,  // 使用 640x384 的融合图像
-            xyz_rgbl_cloud, out_xyz_rgbl_cloud);
+        if (hardware_mode_.isK100Hardware()) {
+            stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion(
+                result.depth, fusion_label, fusion_detections,
+                fusion_img,  // K100: 640x432
+                xyz_rgbl_cloud, out_xyz_rgbl_cloud);
+        } else {
+            stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion_bestmow(
+                result.depth, fusion_label, fusion_detections,
+                fusion_img,  // bestmow: 640x384
+                xyz_rgbl_cloud, out_xyz_rgbl_cloud);
+        }
 
         result.pointcloud = out_xyz_rgbl_cloud;
-        result.cropped_img = cropped_img;
         std::cout << "[Process] Point cloud generated: " << out_xyz_rgbl_cloud.size() << " points" << std::endl;
+        if (hardware_mode_.isK100Hardware() && shouldLogFrame0336Diagnostics(image_name)) {
+            logFrame0336PointCloudStage(out_xyz_rgbl_cloud, fusion_label, stereo_matcher_);
+        }
     }
 
     result.success = true;
@@ -499,7 +818,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
     // ========== 图像裁剪和预处理 ==========
     cv::Mat cropped_img, resized_img;
     cv::Mat dsg_fusion_img;
-    cv::Mat lab_dst(384, 640, CV_8UC1, cv::Scalar(1));
+    cv::Mat lab_dst;
 
     // 根据硬件模式选择裁剪尺寸
     if (hardware_mode_.isK100Hardware()) {
@@ -521,6 +840,9 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
     // ========== 1. DSG 推理 ==========
     std::cout << "[Process] Running DSG inference..." << std::endl;
 
+    // 使用本地 DSG 接口进行推理，输入尺寸保持与参考流程一致（640x384）。
+    std::vector<Detection> dect_src;
+
     dsg_perception_.process_infer_match(resized_img, lab_dst);
 
     std::cout << "[Debug] After inference - lab_dst stats:" << std::endl;
@@ -541,46 +863,94 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
         return result;
     }
 
-    // DSG 模式不返回检测框，只有分割结果
-    result.detections.clear();
+    // ========== 1.5 CDT 检测（如果启用） ==========
+    cv::Rect cdt_rect;
+    if (config_.enable_cdt) {
+        std::cout << "[Process] Running CDT detection..." << std::endl;
+        std::vector<Detection> cdt_detections;
+        cdt_perception_.perception_process_bgr(cropped_img, cdt_detections);
+        cdt_rect = get_cdt_rect(cdt_detections);
+
+        if (cdt_rect.area() > 0) {
+            std::cout << "[Process] CDT detected at: " << cdt_rect << std::endl;
+            // 应用 CDT 掩码到分割结果
+            lab_dst(cdt_rect).setTo(-1);  // 标记为无效区域
+            std::cout << "[Process] CDT mask applied to segmentation" << std::endl;
+        } else {
+            std::cout << "[Process] No valid CDT detection" << std::endl;
+        }
+    }
+
+    // ========== 检测框处理（对齐参考代码） ==========
+    std::vector<Detection> dst_detections;
+    dst_detections.clear();
+
+    // 根据配置决定是否处理检测框
+    bool enable_draw_box = config_.enable_draw_detection_box;
+    if (enable_draw_box) {
+        for (const auto& det : dect_src) {
+            Detection fixed_det = det;
+            fixed_det.id += 100;  // 映射到 100+ 格式
+            dst_detections.push_back(fixed_det);
+        }
+    }
+    result.detections = dst_detections;
 
     // 更新分割结果（lab_dst 已经是 640x384）
     result.segmentation = lab_dst;
+    cv::Mat fusion_label = lab_dst;
+    std::vector<Detection> fusion_detections = dst_detections;
 
     // ========== HSV 暗区域滤波（可选） ==========
     if (config_.enable_dsg_hsv_dark_filter) {
         std::cout << "[Process] Applying HSV dark filter..." << std::endl;
 
-        cv::Mat hsvImg;
-        cv::cvtColor(cropped_img, hsvImg, cv::COLOR_BGR2HSV);
+        if (resized_img.channels() != 3) {
+            std::cout << "[Warning] DSG HSV input image is not 3-channel, skip dark filter" << std::endl;
+        } else if (lab_dst.empty() || lab_dst.size() != resized_img.size()) {
+            std::cout << "[Warning] DSG HSV lab/image size mismatch, skip dark filter. lab="
+                      << lab_dst.size() << ", image=" << resized_img.size() << std::endl;
+        } else {
+            cv::Mat hsvImg;
+            cv::cvtColor(resized_img, hsvImg, cv::COLOR_BGR2HSV);
 
-        // 检测偏黑区域：低饱和度、低亮度
-        cv::Scalar lowerBlack(0, 0, 0);      // H, S, V
-        cv::Scalar upperBlack(180, 50, 80);  // 低饱和度、低亮度
+            cv::Mat darkMask;
+            cv::inRange(hsvImg, cv::Scalar(0, 0, 0), cv::Scalar(180, 50, 80), darkMask);
 
-        cv::Mat darkMask;
-        cv::inRange(hsvImg, lowerBlack, upperBlack, darkMask);
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+            cv::morphologyEx(darkMask, darkMask, cv::MORPH_CLOSE, kernel);
 
-        // 形态学处理去噪
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
-        cv::morphologyEx(darkMask, darkMask, cv::MORPH_CLOSE, kernel);
-        cv::morphologyEx(darkMask, darkMask, cv::MORPH_OPEN, kernel);
+            if (darkMask.size() != lab_dst.size()) {
+                cv::resize(darkMask, darkMask, lab_dst.size(), 0, 0, cv::INTER_NEAREST);
+            }
 
-        // Resize 到标签图尺寸并应用
-        cv::Mat resizedMask;
-        cv::resize(darkMask, resizedMask, lab_dst.size(), 0, 0, cv::INTER_NEAREST);
-        lab_dst.setTo(3, resizedMask);  // 标记为 road (类别3)
+            if (config_.enable_dsg_hsv_obstacle_protection) {
+                cv::Mat obstacle_mask = cv::Mat::zeros(lab_dst.size(), CV_8UC1);
 
-        // 更新分割结果
-        result.segmentation = lab_dst;
+                const int rows = lab_dst.rows;
+                const int cols = lab_dst.cols;
+                for (int y = 0; y < rows; ++y) {
+                    const uint8_t* lab_ptr = lab_dst.ptr<uint8_t>(y);
+                    uint8_t* mask_ptr = obstacle_mask.ptr<uint8_t>(y);
+                    for (int x = 0; x < cols; ++x) {
+                        uint8_t label = lab_ptr[x];
+                        if (label == 5 || (label >= 100 && label <= 106)) {
+                            mask_ptr[x] = 255;
+                        }
+                    }
+                }
 
-        std::cout << "[Process] HSV dark filter applied" << std::endl;
+                cv::Mat safe_dark_mask = darkMask & ~obstacle_mask;
+                lab_dst.setTo(3, safe_dark_mask);
+                std::cout << "[Process] HSV dark filter applied with obstacle protection" << std::endl;
+            } else {
+                lab_dst.setTo(3, darkMask);
+                std::cout << "[Process] HSV dark filter applied without obstacle protection" << std::endl;
+            }
+
+            result.segmentation = lab_dst;
+        }
     }
-
-    applyBestMowCDT(lab_dst, resized_img);
-    result.segmentation = lab_dst;
-    cv::Mat fusion_label = lab_dst;
-    std::vector<Detection> fusion_detections = result.detections;
 
     // ========== 2. 立体匹配 ==========
     if (!right_img.empty()) {
@@ -606,32 +976,26 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
             right_gray,
             false);  // DSG 模式固定不启用 height filter
 
-        if (hardware_mode_.isK100Hardware()) {
-            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-            cv::Mat opened_depth, closed_depth;
-            cv::morphologyEx(depth_480, opened_depth, cv::MORPH_OPEN, kernel);
-            cv::morphologyEx(opened_depth, closed_depth, cv::MORPH_CLOSE, kernel);
-            depth_480 = closed_depth;
-        }
-
         std::cout << "[Process] Depth map computed: " << depth_480.size() << std::endl;
 
         const int fusion_height = hardware_mode_.isK100Hardware() ? 432 : 384;
         fusion_label = lab_dst;
-        fusion_detections = result.detections;
+        fusion_detections = dst_detections;
 
         if (hardware_mode_.isK100Hardware()) {
             cv::resize(lab_dst, fusion_label, cv::Size(640, fusion_height), 0, 0, cv::INTER_NEAREST);
-            fusion_detections = scaleDetectionsY(result.detections, 432.0f / 384.0f, fusion_height);
-        } else {
-            dsg_fusion_img = resized_img;
+            fusion_detections = scaleDetectionsY(dst_detections, 432.0f / 384.0f, fusion_height);
         }
 
-        result.depth = depth_480(cv::Rect(0, 0, 640, fusion_height)).clone();
-        std::cout << "[Process] "
-                  << (hardware_mode_.isK100Hardware() ? "K100" : "bestmow")
-                  << " mode: Depth cropped to " << fusion_height
-                  << " for fusion" << std::endl;
+        // 根据硬件模式裁剪深度图；K100 保持 640x432 与融合图对齐
+        if (hardware_mode_.isK100Hardware()) {
+            result.depth = depth_480(cv::Rect(0, 0, 640, fusion_height)).clone();
+            std::cout << "[Process] K100 mode: Depth cropped to 432 for fusion" << std::endl;
+        } else {
+            // bestmow 模式：直接裁剪到 640x384
+            result.depth = depth_480(cv::Rect(0, 0, 640, fusion_height)).clone();
+            std::cout << "[Process] bestmow mode: Depth cropped to 384" << std::endl;
+        }
     } else {
         std::cout << "[Process] No right image, skipping stereo matching" << std::endl;
     }
@@ -646,6 +1010,7 @@ OfflineProcessor::ProcessResult OfflineProcessor::processModel7(
         pcl::PointCloud<pcl::PointXYZRGBL> xyz_rgbl_cloud;
         pcl::PointCloud<pcl::PointXYZRGBL> out_xyz_rgbl_cloud;
 
+        // DSG 模式使用专用融合函数，与在线逻辑保持一致
         stereo_matcher_.stereo_process_pci_depth_rgb_seg_det_fusion_dsg(
             result.depth, fusion_label, fusion_detections,
             dsg_fusion_img,
@@ -680,16 +1045,18 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
 
         cv::Mat img_seg_show, pure_seg_mat;
         cv::Mat vis_cropped_img, vis_segmentation;
+        std::vector<Detection> vis_detections = result.detections;
 
         // 根据推理模式和硬件模式调整可视化图像尺寸
         if (config_.infer_mode == 6) {
             if (hardware_mode_.isK100Hardware()) {
-                // K100 模式：融合时用 384，展示时再回放到 432
-                std::cout << "[Debug] K100 mode: Resizing Model 6 segmentation from 384 to 432 for visualization" << std::endl;
+                // Model 6 K100: 融合结果保持 384，可视化时还原到 432
+                std::cout << "[Debug] Model 6 K100 mode: Resizing segmentation from 384 to 432 for visualization" << std::endl;
                 cv::resize(result.segmentation, vis_segmentation, cv::Size(640, 432), 0, 0, cv::INTER_NEAREST);
                 vis_cropped_img = result.cropped_img;
+                vis_detections = scaleDetectionsY(result.detections, 432.0f / 384.0f, 432);
             } else {
-                // bestmow 模式：直接使用 384 尺寸
+                // Model 6 bestmow: 直接使用 384 尺度
                 vis_cropped_img = result.cropped_img;
                 vis_segmentation = result.segmentation;
             }
@@ -700,19 +1067,11 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
                 std::cout << "[Debug] K100 mode: Resizing segmentation from 384 to 432 for visualization" << std::endl;
                 cv::resize(result.segmentation, vis_segmentation, cv::Size(640, 432), 0, 0, cv::INTER_NEAREST);
                 vis_cropped_img = result.cropped_img;  // cropped_img 已经是 432
+                vis_detections = scaleDetectionsY(result.detections, 432.0f / 384.0f, 432);
             } else {
                 // bestmow 模式：直接使用 384 尺寸
                 vis_cropped_img = result.cropped_img;
                 vis_segmentation = result.segmentation;
-            }
-        }
-
-        std::vector<Detection> vis_detections = result.detections;
-        if (config_.infer_mode == 6 && hardware_mode_.isK100Hardware()) {
-            const float y_scale = 432.0f / 384.0f;
-            for (auto& det : vis_detections) {
-                det.bbox.ymin = static_cast<int>(det.bbox.ymin * y_scale);
-                det.bbox.ymax = static_cast<int>(det.bbox.ymax * y_scale);
             }
         }
 
@@ -756,39 +1115,47 @@ void OfflineProcessor::saveResults(const ProcessResult& result,
         cv::Mat final_compared;
         cv::vconcat(origin_seg, xyz_rgbl, final_compared);
 
-        // 5. 保存合并图像到输出根目录
-        std::string combined_path = config_.output_dir + "/" + image_name + "_combined.jpg";
+        // 5. 保存合并图像
+        std::string combined_path = config_.output_dir + "/combined/" + image_name + "_combined.jpg";
         cv::imwrite(combined_path, final_compared);
         std::cout << "[Save] Combined visualization saved: " << combined_path << std::endl;
     }
 
+    // ========== 单独保存各项结果（可选） ==========
+    // 保存分割结果
+    if (config_.save_segmentation && !result.segmentation.empty()) {
+        cv::Mat seg_color = labelToColor(result.segmentation);
+        std::string seg_path = config_.output_dir + "/segmentation/" + image_name + "_seg.png";
+        cv::imwrite(seg_path, seg_color);
+        std::cout << "[Save] Segmentation saved: " << seg_path << std::endl;
+    }
+
     // 保存点云
     if (config_.save_pointcloud && !result.pointcloud.empty()) {
-        const std::string& pointcloud_base = config_.pointcloud_dir.empty()
-            ? config_.output_dir + "/pointcloud"
-            : config_.pointcloud_dir;
-        std::string pcd_path = pointcloud_base + "/" + image_name + ".pcd";
-        try {
-            fs::create_directories(pointcloud_base);
-            pcl::io::savePCDFileBinary(pcd_path, result.pointcloud);
-            std::cout << "[Save] Point cloud saved: " << pcd_path << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << "[Warning] Failed to save point cloud to " << pcd_path
-                      << ": " << e.what() << std::endl;
+        std::string pcd_path = config_.output_dir + "/pointcloud/" + image_name + ".pcd";
+        pcl::io::savePCDFileBinary(pcd_path, result.pointcloud);
+        std::cout << "[Save] Point cloud saved: " << pcd_path << std::endl;
+    }
 
-            const std::string fallback_base = config_.output_dir + "/pointcloud";
-            const std::string fallback_path = fallback_base + "/" + image_name + ".pcd";
-            if (fallback_base != pointcloud_base) {
-                try {
-                    fs::create_directories(fallback_base);
-                    pcl::io::savePCDFileBinary(fallback_path, result.pointcloud);
-                    std::cout << "[Save] Point cloud saved to fallback: "
-                              << fallback_path << std::endl;
-                } catch (const std::exception& fallback_error) {
-                    std::cerr << "[Warning] Failed to save fallback point cloud to "
-                              << fallback_path << ": " << fallback_error.what() << std::endl;
-                }
-            }
+    // 保存检测结果（Model 6 或 K100 模式）
+    if (config_.save_detection && !result.detections.empty() &&
+        (config_.infer_mode == 6 || hardware_mode_.isK100Hardware())) {
+        cv::Mat det_img = result.cropped_img.clone();
+        std::vector<Detection> det_detections = result.detections;
+        if (hardware_mode_.isK100Hardware() && result.cropped_img.rows == 432) {
+            det_detections = scaleDetectionsY(result.detections, 432.0f / 384.0f, 432);
         }
+        drawDetections(det_img, det_detections);
+        std::string det_path = config_.output_dir + "/detection/" + image_name + "_det.png";
+        cv::imwrite(det_path, det_img);
+        std::cout << "[Save] Detection saved: " << det_path << std::endl;
+    }
+
+    // 保存深度图
+    if (config_.save_depth && !result.depth.empty()) {
+        cv::Mat depth_color = visualizeDepth(result.depth);
+        std::string depth_path = config_.output_dir + "/depth/" + image_name + "_depth.png";
+        cv::imwrite(depth_path, depth_color);
+        std::cout << "[Save] Depth saved: " << depth_path << std::endl;
     }
 }

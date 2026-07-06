@@ -743,7 +743,7 @@ const camPcdCtx = ref<PcdCtx | null>(null)
 
 // Color map from C++ initColorMap() — RGB values divided by 255
 const LA2_LABEL_COLOR: Record<number, [number, number, number]> = {
-  0:   [0,       0,       200/255],  // background 蓝色
+  0:   [0,       0,       0      ],  // ignore 黑色
   1:   [0,       0,       200/255],  // background 蓝色
   2:   [100/255, 255/255, 102/255],  // grass 绿色
   3:   [118/255, 89/255,  0      ],  // road 褐色
@@ -764,6 +764,7 @@ const LA2_LABEL_COLOR: Record<number, [number, number, number]> = {
   104: [255/255, 0,       0      ],  // stat 红色
   105: [255/255, 255/255, 0      ],  // dyna 黄色
   106: [0,       255/255, 255/255],  // charge_station 青色
+  107: [0,       255/255, 0      ],  // person/small_ball 绿色
 }
 
 function la2LabelColor(label: number): [number, number, number] {

@@ -127,9 +127,37 @@ import {
 import { parsePcdBuffer } from '../utils/pcdParser'
 
 const STEREO_DEBUG_PREFIX = 'data/stereo_debug'
-const nightFolderInput = ref('0115/20260421')
-const dayFolderInput = ref('0016/20260420')
-const snLast4 = ref('0115')
+function formatLocalDateYmd(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+function stereoPortSuffix(port: number | string | null | undefined) {
+  return String(port || '').slice(-4)
+}
+
+const uploadPort = ref<number>(10115)
+const today = formatLocalDateYmd(new Date())
+const threeDaysAgo = formatLocalDateYmd(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
+
+function defaultStereoFolderSuffix(port: number | string | null | undefined = uploadPort.value, dateStr = today) {
+  const portSuffix = stereoPortSuffix(port)
+  return `${portSuffix}/${dateStr}`
+}
+
+function applyDefaultStereoFolders(port: number) {
+  const folder = defaultStereoFolderSuffix(port)
+  nightFolderInput.value = folder
+  dayFolderInput.value = folder
+  snLast4.value = stereoPortSuffix(port)
+  folderPath.value = nightFolderPath.value
+}
+
+const nightFolderInput = ref(defaultStereoFolderSuffix())
+const dayFolderInput = ref(defaultStereoFolderSuffix())
+const snLast4 = ref(stereoPortSuffix(uploadPort.value))
 const useK100Mode = ref(true)  // K100复选框状态，默认选中
 const filterLabel = ref(0)
 const scanning = ref(false)
@@ -147,9 +175,6 @@ const progressCurrent = ref(0)
 const progressTotal = ref(0)
 const progressPercent = computed(() => progressTotal.value > 0 ? Math.round((progressCurrent.value / progressTotal.value) * 100) : 0)
 
-const uploadPort = ref<number>(10115)
-const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
 const uploadDateStart = ref(threeDaysAgo)
 const uploadDateEnd = ref(today)
 const uploadRunning = ref(false)
@@ -212,7 +237,6 @@ watch(folderPath, (p) => { if (p) archiveDir.value = p.replace(/\/+$/, '') + '/s
 function onSnInput() {
   const sn = snLast4.value.trim()
   if (sn.length === 4 && /^\d{4}$/.test(sn)) {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     nightFolderInput.value = `${sn}/${today}`
     uploadPort.value = parseInt('1' + sn)
   }
@@ -258,6 +282,7 @@ onMounted(async () => {
     const data = await readJsonResponse<any>(res, '加载配置')
     if (data.ok && data.default_ports?.stereo_analysis) {
       uploadPort.value = data.default_ports.stereo_analysis
+      applyDefaultStereoFolders(data.default_ports.stereo_analysis)
     }
   } catch (e) {
     console.warn('Failed to load config:', e)

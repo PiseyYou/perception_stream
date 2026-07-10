@@ -40,8 +40,8 @@ assert.match(
 )
 assert.match(
   watchdog,
-  /VITE_URL="\$\{VITE_WATCHDOG_URL:-https:\/\/127\.0\.0\.1:5173\/\}"/,
-  'watchdog should default to the current HTTPS health URL',
+  /VITE_URL="\$\{VITE_WATCHDOG_URL:-http:\/\/127\.0\.0\.1:5173\/\}"/,
+  'watchdog should default to the HTTP health URL that matches the dev server',
 )
 assert.match(
   watchdog,
@@ -58,7 +58,7 @@ assert.match(service, /ExecStart=\/bin\/bash \/media\/sda1\/perception_process\/
 assert.match(service, /Restart=always/, 'service should restart the watchdog if it exits')
 assert.match(service, /RestartSec=10/, 'service should use a short restart delay')
 assert.match(service, /LogsDirectory=perception-streaming/, 'service should let systemd create a writable log directory')
-assert.match(service, /Environment=VITE_WATCHDOG_URL=https:\/\/127\.0\.0\.1:5173\//, 'service should health-check the HTTPS dev server')
+assert.match(service, /Environment=VITE_WATCHDOG_URL=http:\/\/127\.0\.0\.1:5173\//, 'service should health-check the HTTP dev server')
 assert.match(service, /Environment=VITE_WATCHDOG_LOG=\/var\/log\/perception-streaming\/vite-watchdog\.log/, 'service should avoid appending to stale /tmp watchdog logs')
 assert.match(service, /Environment=VITE_DEV_LOG=\/var\/log\/perception-streaming\/vite-dev\.log/, 'service should avoid appending to stale /tmp Vite logs')
 assert.match(service, /^\[Install\]/m, 'service file should have an Install section')

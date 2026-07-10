@@ -49,6 +49,7 @@ const DEFAULT_LABEL_COLOR: Record<number, [number, number, number]> = {
 const DEFAULT_PASSABLE_LABELS = new Set([2, 3])
 
 function defaultLabelColor(label: number): [number, number, number] {
+  if (label === 7) return DEFAULT_LABEL_COLOR[5]
   return DEFAULT_LABEL_COLOR[label] ?? [0.5, 0.5, 0.5]
 }
 

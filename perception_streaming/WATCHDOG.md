@@ -9,7 +9,7 @@
 看门狗每10秒执行以下检查：
 1. **进程检查**：检查vite进程是否存在
 2. **端口检查**：检查192.168.55.247:5173端口是否监听
-3. **HTTPS检查**：检查HTTPS响应是否为200
+3. **HTTP检查**：检查HTTP响应是否为200
 
 任何一项检查失败，立即触发自动重启。
 
@@ -57,7 +57,7 @@ tail -f /tmp/vite-dev.log
 
 ## 开机自启动（推荐 systemd）
 
-长期运行请使用 systemd 管理看门狗。systemd 负责开机启动和守护 `watchdog.sh`，`watchdog.sh` 负责通过 HTTPS 健康检查并重启 Vite。
+长期运行请使用 systemd 管理看门狗。systemd 负责开机启动和守护 `watchdog.sh`，`watchdog.sh` 负责通过 HTTP 健康检查并重启 Vite。
 
 ### 安装并启动
 

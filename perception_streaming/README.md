@@ -74,14 +74,14 @@ export VITE_DEFAULT_MQTT_PASSWORD=<mqtt 密码>
 ./start.sh
 ```
 
-启动后访问 `https://<本机局域网 IP>:5173`。开发证书为自签名证书，浏览器首次访问需要手动信任；如需指定打开地址，可设置 `VITE_DEV_SERVER_HOST`。
+启动后访问 `http://<本机局域网 IP>:5173`；如需指定打开地址，可设置 `VITE_DEV_SERVER_HOST`。
 
 `npm run dev` 会通过 Vite 插件启动并代理：
 - `ssh_bridge.py`（端口 8765，默认监听 `0.0.0.0`，可用 `BRIDGE_WS_HOST` 覆盖）- ROS2 日志 WebSocket 桥
 - SSH 隧道（本地 8768 → 远端 8767）- 点云数据转发
 - `pcl_proxy.mjs`（端口 8766）- 点云代理
 - `offline_server.py`（端口 8769）- 离线测试服务器
-- Vite HTTPS 开发服务器（端口 5173）- 前端界面
+- Vite HTTP 开发服务器（端口 5173）- 前端界面
 
 浏览器侧默认通过当前页面域名访问后端代理：
 - `/bridge-ws` → `ws://localhost:8765`
@@ -176,7 +176,7 @@ export VITE_PCL_WS_URL=wss://your-host/pcl-ws
 
 ### 网页无法访问 (ERR_CONNECTION_REFUSED)
 
-如果访问 `https://<本机局域网 IP>:5173` 时出现连接被拒绝错误，通常是文件监视器数量超限导致 Vite 服务器崩溃：
+如果访问 `http://<本机局域网 IP>:5173` 时出现连接被拒绝错误，通常是文件监视器数量超限导致 Vite 服务器崩溃：
 
 **原因**：项目目录包含大量文件（如 `lib/`、`include/` 目录），超过系统 inotify 监视器限制。
 
@@ -286,7 +286,7 @@ systemctl start monitor_avoiding
 ```
 
 ### Vite 开发服务器看门狗
-自动监控 Vite HTTPS 开发服务器状态，一旦检测到服务掉线，自动重启服务。长期运行推荐使用 systemd：
+自动监控 Vite HTTP 开发服务器状态，一旦检测到服务掉线，自动重启服务。长期运行推荐使用 systemd：
 
 ```bash
 # 安装、开机启用并立即启动看门狗
@@ -301,7 +301,7 @@ tail -f /tmp/vite-watchdog.log
 tail -f /tmp/vite-dev.log
 ```
 
-临时调试仍可使用 `./start-watchdog.sh` 和 `./stop-watchdog.sh`。看门狗默认检查 `https://127.0.0.1:5173/`。由于当前项目冷启动通常需要 50 秒以上，看门狗会轮询等待 Vite 就绪，可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
+临时调试仍可使用 `./start-watchdog.sh` 和 `./stop-watchdog.sh`。看门狗默认检查 `http://127.0.0.1:5173/`。由于当前项目冷启动通常需要 50 秒以上，看门狗会轮询等待 Vite 就绪，可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
 
 详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 

@@ -62,4 +62,23 @@ const asciiPcd = [
 const parsedAscii = parsePcdBuffer(new TextEncoder().encode(asciiPcd).buffer)
 assert.equal(parsedAscii.pointCount, 1, 'ascii PCD behavior should stay intact')
 
+const vehicleObstaclePreviewPcd = [
+  'FIELDS x y z rgb label',
+  'SIZE 4 4 4 4 4',
+  'TYPE F F F F U',
+  'COUNT 1 1 1 1 1',
+  'WIDTH 1',
+  'HEIGHT 1',
+  'POINTS 1',
+  'DATA ascii',
+  '1 -2 3 0 7',
+  '',
+].join('\n')
+const parsedVehicleObstacle = parsePcdBuffer(new TextEncoder().encode(vehicleObstaclePreviewPcd).buffer)
+assert.deepEqual(
+  Array.from(parsedVehicleObstacle.col.slice(0, 3)),
+  [1, 0, 0],
+  'StereoAnalysis preview should render vehicle obstacles like day offline static obstacles',
+)
+
 console.log('pcd-parser test passed')

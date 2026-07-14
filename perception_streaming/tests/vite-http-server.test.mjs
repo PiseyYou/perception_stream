@@ -9,18 +9,18 @@ const source = fs.readFileSync(viteConfigPath, 'utf8')
 
 assert.match(
   source,
-  /open:\s*`http:\/\/\$\{DEV_SERVER_HOST\}:5173\/`/,
-  'dev server open URL should match the HTTP entrypoint users open in the browser',
+  /open:\s*`https:\/\/\$\{DEV_SERVER_HOST\}:5173\/`/,
+  'dev server open URL should match the HTTPS entrypoint users open in the browser',
 )
-assert.doesNotMatch(
+assert.match(
   source,
   /https:\s*command === 'serve' \? ensureDevCertificate\(\) : undefined/,
-  'dev server should not enable HTTPS on the HTTP entrypoint',
+  'dev server should enable HTTPS with the generated development certificate',
 )
-assert.doesNotMatch(
+assert.match(
   source,
   /function ensureDevCertificate\(\)/,
-  'vite config should not require a development HTTPS certificate',
+  'vite config should generate or load the development HTTPS certificate',
 )
 
-console.log('vite-http-server test passed')
+console.log('vite-https-server test passed')

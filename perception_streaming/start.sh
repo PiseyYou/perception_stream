@@ -13,5 +13,6 @@ export CHOKIDAR_USEPOLLING=false
 export VITE_CJS_IGNORE_WARNING=true
 
 echo "Starting Vite dev server..."
-echo "Open http://${VITE_DEV_SERVER_HOST:-192.168.55.247}:5173/"
+echo "Open https://${VITE_DEV_SERVER_HOST:-192.168.55.247}:5173/"
+echo "For HTTP-only Chrome dev debugging: google-chrome --user-data-dir=/tmp/perception-streaming-chrome-http --unsafely-treat-insecure-origin-as-secure=http://${VITE_DEV_SERVER_HOST:-192.168.55.247}:5173"
 npm run dev

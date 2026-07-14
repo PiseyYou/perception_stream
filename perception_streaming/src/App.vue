@@ -399,8 +399,9 @@ function handleStartVideo() {
 
   if (!window.isSecureContext) {
     const secureUrl = `https://${location.host}${location.pathname}${location.search}`
-    const msg = `当前页面不是安全上下文，Agora 视频需要使用 ${secureUrl} 打开`
-    addLog(`✗ ${msg}`)
+    const chromeDevCommand = `google-chrome --user-data-dir=/tmp/perception-streaming-chrome-http --unsafely-treat-insecure-origin-as-secure=${location.origin}`
+    const msg = `当前页面不是安全上下文，Agora 视频需要安全上下文才能工作。\n\n推荐使用 HTTPS 打开：\n${secureUrl}\n\nChrome HTTP 开发白名单（仅用于开发调试）：\n${chromeDevCommand}`
+    addLog(`✗ 当前页面不是安全上下文，Agora 视频需要 HTTPS 或 Chrome HTTP 开发白名单`)
     alert(msg)
     return
   }

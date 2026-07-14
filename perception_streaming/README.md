@@ -74,14 +74,14 @@ export VITE_DEFAULT_MQTT_PASSWORD=<mqtt 密码>
 ./start.sh
 ```
 
-启动后访问 `http://<本机局域网 IP>:5173`；如需指定打开地址，可设置 `VITE_DEV_SERVER_HOST`。
+启动后访问 `https://<本机局域网 IP>:5173`；如需指定打开地址，可设置 `VITE_DEV_SERVER_HOST`。开发服务器使用自签名证书，浏览器首次访问时需要确认继续访问。
 
 `npm run dev` 会通过 Vite 插件启动并代理：
 - `ssh_bridge.py`（端口 8765，默认监听 `0.0.0.0`，可用 `BRIDGE_WS_HOST` 覆盖）- ROS2 日志 WebSocket 桥
 - SSH 隧道（本地 8768 → 远端 8767）- 点云数据转发
 - `pcl_proxy.mjs`（端口 8766）- 点云代理
 - `offline_server.py`（端口 8769）- 离线测试服务器
-- Vite HTTP 开发服务器（端口 5173）- 前端界面
+- Vite HTTPS 开发服务器（端口 5173）- 前端界面
 
 浏览器侧默认通过当前页面域名访问后端代理：
 - `/bridge-ws` → `ws://localhost:8765`
@@ -192,6 +192,26 @@ export VITE_PCL_WS_URL=wss://your-host/pcl-ws
    sudo sysctl -p
    ```
 
+### HTTPS 页面无法打开
+
+本项目的 Vite 开发服务器在 `5173` 端口提供 HTTPS 服务。如果 `http://192.168.55.247:5173/` 可以打开而 `https://192.168.55.247:5173/` 报 TLS 或 `wrong version number` 错误，通常是 HTTPS 配置更新后仍在运行旧的 HTTP Vite 实例。
+
+先确认症状：
+
+```bash
+curl -I http://192.168.55.247:5173/
+curl -k -I https://192.168.55.247:5173/
+```
+
+第一条返回 `200 OK` 而第二条失败时，重启 systemd 托管的看门狗服务，使其按当前 `vite.config.ts` 重新启动 Vite：
+
+```bash
+sudo systemctl restart perception-streaming-watchdog.service
+sudo systemctl status perception-streaming-watchdog.service
+```
+
+重启完成后访问 `https://192.168.55.247:5173/`。证书位于 `.cert/`，包含局域网 IP 的 SAN，但它是自签名证书；浏览器提示证书不受信任时，确认继续访问即可。
+
 ### Bridge 显示"未连接"
 
 如果 Bridge 一直显示"未连接"状态，通常是 Python 依赖未安装、服务未启动或 WebSocket 地址配置不一致：
@@ -286,7 +306,7 @@ systemctl start monitor_avoiding
 ```
 
 ### Vite 开发服务器看门狗
-自动监控 Vite HTTP 开发服务器状态，一旦检测到服务掉线，自动重启服务。长期运行推荐使用 systemd：
+自动监控 Vite HTTPS 开发服务器状态，一旦检测到服务掉线，自动重启服务。长期运行推荐使用 systemd：
 
 ```bash
 # 安装、开机启用并立即启动看门狗
@@ -301,7 +321,7 @@ tail -f /tmp/vite-watchdog.log
 tail -f /tmp/vite-dev.log
 ```
 
-临时调试仍可使用 `./start-watchdog.sh` 和 `./stop-watchdog.sh`。看门狗默认检查 `http://127.0.0.1:5173/`。由于当前项目冷启动通常需要 50 秒以上，看门狗会轮询等待 Vite 就绪，可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
+临时调试仍可使用 `./start-watchdog.sh` 和 `./stop-watchdog.sh`。看门狗默认检查 `https://127.0.0.1:5173/`，并允许自签名证书。由于当前项目冷启动通常需要 50 秒以上，看门狗会轮询等待 Vite 就绪，可通过 `VITE_WATCHDOG_URL`、`VITE_WATCHDOG_STARTUP_TIMEOUT` 和 `VITE_WATCHDOG_STARTUP_CHECK_INTERVAL` 覆盖检测地址与启动等待策略。
 
 详细说明请参考 [WATCHDOG.md](WATCHDOG.md)
 

@@ -9,13 +9,18 @@ const source = fs.readFileSync(startScriptPath, 'utf8')
 
 assert.match(
   source,
-  /http:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173\//,
-  'start.sh should print the HTTP URL that works on the dev server',
+  /https:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173\//,
+  'start.sh should print the HTTPS URL that works on the dev server',
 )
 assert.doesNotMatch(
   source,
-  /https:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173\//,
-  'start.sh should not advertise HTTPS when the dev server is HTTP',
+  /http:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173\//,
+  'start.sh should not advertise HTTP when the dev server is HTTPS-only',
+)
+assert.match(
+  source,
+  /--unsafely-treat-insecure-origin-as-secure=http:\/\/\$\{VITE_DEV_SERVER_HOST:-192\.168\.55\.247\}:5173/,
+  'start.sh should print a Chrome development-only HTTP origin allowlist command',
 )
 
-console.log('start-script-http-url test passed')
+console.log('start-script-https-url test passed')

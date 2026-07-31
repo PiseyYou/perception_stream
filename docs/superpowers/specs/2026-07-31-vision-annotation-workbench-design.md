@@ -43,7 +43,11 @@ An external vision API is a reviewer, not the primary segmenter. It receives onl
 
 ### Candidate contract
 
-All adapters produce a versioned `CandidateAnnotation` record. Masks are stored as compressed RLE artifacts in image pixel coordinates with origin at the top-left; polygons are derived artifacts and use the same coordinate system. Holes are represented as separate rings, and every record carries the source image dimensions and an integrity hash:
+Detection adapters first emit a versioned `Proposal` record, then segmentation adapters convert accepted proposals to `CandidateAnnotation`. A proposal has `image_id`, image hash/dimensions, `proposal_id`, canonical-or-provisional label, normalized image-coordinate box, optional positive/negative points, crop-to-image transform, source/version/config hashes, and a score. Grounding DINO emits only this record.
+
+SAM receives a DINO proposal's box plus its optional points. For a box-only proposal, it samples a positive center point and four negative points just outside the box before prediction; it does not use source-mask IoU. The result becomes a candidate only when the SAM predicted-IoU is at least `0.75`, its area is at least the taxonomy minimum, and contour validation passes. Otherwise it becomes `human_review` with its proposal retained.
+
+All segmentation adapters produce a versioned `CandidateAnnotation` record. Masks are stored as compressed RLE artifacts in image pixel coordinates with origin at the top-left; polygons are derived artifacts and use the same coordinate system. Every record carries the source image dimensions and an integrity hash:
 
 ```json
 {
@@ -61,7 +65,7 @@ All adapters produce a versioned `CandidateAnnotation` record. Masks are stored 
   "sources": ["mask2former", "grounding_dino", "sam"],
   "review_state": "accepted|external_review|human_review|failed",
   "error": null,
-  "provenance": {"run_id": "...", "model_versions": {}, "checkpoint_hashes": {}, "config_hash": "..."}
+ "provenance": {"run_id": "...", "model_versions": {}, "checkpoint_hashes": {}, "config_hash": "..."}
 }
 ```
 
@@ -71,7 +75,7 @@ The canonical label is validated against the existing `labels.csv`, `labels_mapp
 
 1. Calibrate class confidence on the validation split. Default thresholds are config values: `accept_class >= 0.85`, `external_review in [0.55, 0.85)`, and `human_review < 0.55`; per-class overrides are required for high-risk labels.
 2. Fuse candidates deterministically by descending calibrated confidence, then source priority, then stable instance ID. For same-class overlaps, keep the higher-confidence mask and merge only when IoU is at least `0.70`; for different classes, consult the taxonomy exclusivity group and route unresolved overlaps to review.
-3. Grounding DINO contributes boxes only. SAM prompts are generated from the box plus positive points sampled inside the candidate and negative points outside it. A refinement is accepted only if its mask IoU with the source mask is at least `0.50`, its area ratio is within `[0.25, 4.0]`, and contour validation passes.
+3. Grounding DINO contributes proposals, not masks. For an existing-mask proposal, SAM prompts are generated from the box plus positive points sampled inside the candidate and negative points outside it; refinement needs source-mask IoU of at least `0.50`, area ratio within `[0.25, 4.0]`, and contour validation. The separate box-only bootstrap policy is defined in the candidate contract.
 4. Send only difficult crop regions to the external reviewer. Selection is deterministic from the run seed and hard limits: at most 10% of images, 3 regions per image, and a configured daily cost budget. A reviewer may confirm/relabel an existing candidate or propose a box/points for a missed target; it cannot publish a free-form label or polygon.
 5. Apply project policy after model decisions: allowed labels, class exclusivity, minimum area, contour validity, and preserve-high-risk-obstacle rules.
 6. Export accepted candidates; publish neither `failed` nor unresolved `human_review` candidates as final truth. They are linked into the review manifest instead of silently deleted.
@@ -85,12 +89,12 @@ External requests contain an individual image crop or a minimized downscaled ima
 The project maintains a frozen, content-hash-addressed human-labeled evaluation set split by scene conditions, including difficult lighting, vegetation, road boundaries, and small obstacles. Images from the same source sequence stay in one split to prevent leakage. Instance metrics match predictions to ground truth at mask IoU `0.50`; semantic metrics are pixel mIoU. Success is measured by:
 
 - mIoU by class and macro average.
-- Boundary F-score.
+- Boundary F-score, computed using a symmetric boundary-distance transform at a fixed 2-pixel tolerance in the EXIF-normalized source image coordinate system.
 - High-risk obstacle recall and false-negative rate.
 - Review rate and post-review change rate.
 - External API cost and elapsed time per image.
 
-The acceptance gate is set against the current MP-Former baseline: no regression in high-risk recall, at least 10 percentage points improvement in boundary F-score on hard scenes, and a documented API review rate/cost. CVAT corrections are versioned by source task/job and annotation hash, with corrected images excluded from the frozen evaluation split. A hard-example miner prioritizes disagreements, low-confidence regions, and human-corrected candidates for the next Mask2Former training manifest.
+`Post-review change rate` is the number of reviewed, source-linked candidates whose final CVAT label differs or whose final mask IoU with the initial mask is below `0.90`, divided by all reviewed, source-linked candidates; deleted candidates count as changed. The acceptance gate is set against the current MP-Former baseline: no regression in high-risk recall, at least 10 percentage points improvement in boundary F-score on hard scenes, and a documented API review rate/cost. CVAT corrections are versioned by source task/job and annotation hash, with corrected images excluded from the frozen evaluation split. A hard-example miner prioritizes disagreements, low-confidence regions, and human-corrected candidates for the next Mask2Former training manifest.
 
 ## Project layout
 
@@ -116,7 +120,7 @@ Every run has an immutable manifest and per-step status, including input file ha
 
 ## CVAT contract
 
-The exporter is pinned to CVAT for images 1.1. Every `<image>` carries the canonical relative filename, width, and height. Polygon shapes contain closed pixel-coordinate points, with one polygon per ring; holes are emitted as separate supported mask artifacts and are round-tripped through the raster-mask sidecar when CVAT XML cannot represent them without loss. Labels are emitted by canonical name using the taxonomy mapping, attributes include `source`, `confidence`, `review_state`, and `instance_id`, and images/shapes are sorted deterministically. Review manifests link each image to its exported task/job and candidate IDs. Contract tests import and export fixtures and verify dimensions, labels, polygons, masks, holes, and attributes round-trip.
+The exporter is pinned to CVAT for images 1.1 and writes simple polygon shapes only in version 1. Every `<image>` carries the canonical relative filename, width, and height. Polygon shapes contain closed pixel-coordinate points and no holes. Candidates with one or more holes are not automatically exported: the original RLE is retained in the artifact store and the candidate is routed to human review. Labels are emitted by canonical name using the taxonomy mapping, attributes include `source`, `confidence`, `review_state`, and `instance_id`, and images/shapes are sorted deterministically. Review manifests link each image to its exported task/job and candidate IDs. Contract tests import and export fixtures and verify dimensions, labels, polygons, attributes, and the hole-to-review routing behavior.
 
 ## Delivery phases
 

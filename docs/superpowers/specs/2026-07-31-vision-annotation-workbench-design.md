@@ -1,53 +1,57 @@
-# Vision Annotation Workbench Design
+# 视觉自动标注工作台设计规格
 
-## Goal
+## 目标
 
-Build a standalone offline-first image-folder auto-annotation workbench. It produces high-quality CVAT-compatible annotations for the existing perception label taxonomy. Accuracy of both class and mask boundary takes priority over throughput. A small, selected subset of hard samples may be sent to an external vision API.
+建设一个独立、以离线运行为主的图片文件夹自动标注工作台，为现有感知标签体系输出高质量、可被 CVAT 导入的标注。类别判断和掩码边界的准确性优先于吞吐量；少量困难样本允许发送至外部视觉 API 复核。
 
-The workbench is separate from `perception_streaming`, but reuses its CVAT XML contract, label definitions, and corrected CVAT data as training and evaluation input.
+工作台独立于 `perception_streaming`，但复用其 CVAT XML 契约、标签定义和已由人工修订的数据，作为训练与评测输入。
 
-## Scope
+## 范围
 
-Version 1 accepts a folder of independent still images. It does not process video, temporal tracking, stereo matching, ROS Bag ingestion, or robot-side inference. Those are deliberately deferred so the first evaluation is reproducible and isolates image-level annotation quality.
+第一期只处理独立静态图片的文件夹，不处理视频时序跟踪、双目匹配、ROS Bag、机器人端实时推理。该边界可使第一期评测可复现，并将问题聚焦在单图标注质量。
 
-Outputs are:
+输出包括：
 
-- CVAT XML and raster masks for accepted annotations.
-- Per-image and per-instance provenance, confidence, and quality reports in JSON.
-- A review manifest containing samples that need human work in CVAT.
-- A training manifest built from human corrections and high-value errors.
+- 已接受标注的 CVAT XML 与栅格掩码。
+- 每张图片和每个实例的来源、置信度、质量报告 JSON。
+- 需要在 CVAT 人工处理的复核清单。
+- 由人工修订和高价值错误样本构成的训练清单。
 
-## Architecture
+## 语言规范
+
+新增文档、配置说明、命令行帮助、日志、错误信息、测试名称和代码注释均使用中文。程序内部标识符、第三方库参数、标准数据格式字段和目录名保留英文，以保证 Python、PyTorch、CVAT、COCO 等生态接口的可维护性；对用户可见的文字一律提供中文。
+
+## 总体架构
 
 ```text
-Image folder
-  -> ingestion and quality checks
-  -> local semantic/instance proposal workers
-  -> candidate fusion and class mapping
-  -> boundary refinement
-  -> uncertainty scoring
-  -> selective external visual review
-  -> policy validation
-  -> CVAT export, reports, and review queue
+图片文件夹
+  -> 导入与质量检查
+  -> 本地语义/实例候选模型
+  -> 候选融合与类别映射
+  -> 边界精修
+  -> 不确定性评分
+  -> 选择性外部视觉复核
+  -> 规则校验
+  -> CVAT 导出、质量报告与人工复核队列
 ```
 
-### Model roles
+### 模型职责
 
-`Mask2Former` is the principal local model. Version 1 runs it in panoptic mode: configured `thing` labels produce non-overlapping instances and configured `stuff` labels produce semantic regions. It is fine-tuned on the project label taxonomy and emits class logits, masks, and confidence maps. The taxonomy explicitly declares the thing/stuff policy; it is not inferred at runtime.
+`Mask2Former` 是主本地模型。第一期采用全景分割模式：配置为 `thing` 的类别输出互不重叠的实例，配置为 `stuff` 的类别输出语义区域。模型使用项目标签体系微调，输出类别 logits、掩码和置信度图。标签中的 `thing/stuff` 属性必须由配置声明，运行时不得猜测。
 
-`Grounding DINO` is a proposal model. It receives controlled prompt aliases for the existing labels and looks for long-tail or small-object candidates missed by the main model.
+`Grounding DINO` 是候选发现模型。它接收现有标签的受控别名和描述，用于发现主模型可能遗漏的长尾目标或小目标。
 
-`SAM 2`, or a newer SAM-compatible implementation behind the same adapter, refines candidate boundaries from masks, boxes, and positive/negative points. It never invents a project label.
+`SAM 2`，或通过同一适配器接入的更新版 SAM，仅根据掩码、框和正负点精修边界，绝不自行产生项目标签。
 
-An external vision API is a reviewer, not the primary segmenter. It receives only selected crop images, candidate-mask overlays, and the closed project label list. Its required JSON response decides whether a candidate is valid, which allowed label is most likely, whether a possible missed target exists, and whether human review is required. A missed-target response must include a normalized bounding box and, when the provider supports it, positive points or a coarse polygon that can be passed to SAM; otherwise it only creates a human-review proposal.
+外部视觉 API 是复核器，不是主分割器。它只接收选中的图片裁剪、候选掩码叠加图与封闭标签表。其 JSON 响应可确认/纠正已有候选的类别，或为漏检候选提供归一化框及点提示；无法提供可靠定位时，只能创建人工复核建议。
 
-### Candidate contract
+## 数据契约
 
-Detection adapters first emit a versioned `Proposal` record, then segmentation adapters convert accepted proposals to `CandidateAnnotation`. A proposal has `image_id`, image hash/dimensions, `proposal_id`, canonical-or-provisional label, normalized image-coordinate box, optional positive/negative points, crop-to-image transform, source/version/config hashes, and a score. Grounding DINO emits only this record.
+检测类适配器先输出版本化 `Proposal`（候选提议），分割类适配器再将已接受提议转换为 `CandidateAnnotation`（候选标注）。`Proposal` 必须包含 `image_id`、图片哈希和尺寸、`proposal_id`、规范或暂定标签、归一化图片坐标框、可选正负点、裁剪到原图的坐标变换、来源/版本/配置哈希与分数。Grounding DINO 只输出此记录。
 
-SAM receives a DINO proposal's box plus its optional points. For a box-only proposal, it samples a positive center point and four negative points just outside the box before prediction; it does not use source-mask IoU. The result becomes a candidate only when the SAM predicted-IoU is at least `0.75`, its area is at least the taxonomy minimum, and contour validation passes. Otherwise it becomes `human_review` with its proposal retained.
+SAM 对 DINO 提议使用检测框和可选点提示。对于仅有框的提议，SAM 先取框中心作为正点、框外相邻四点作为负点；此路径不使用源掩码 IoU。仅当 SAM 预测 IoU 不低于 `0.75`、面积不低于标签最小面积且轮廓校验通过时，才生成候选标注；否则保留提议并转人工复核。
 
-All segmentation adapters produce a versioned `CandidateAnnotation` record. Masks are stored as compressed RLE artifacts in image pixel coordinates with origin at the top-left; polygons are derived artifacts and use the same coordinate system. Every record carries the source image dimensions and an integrity hash:
+所有分割适配器输出版本化 `CandidateAnnotation`。掩码为图片左上角原点、像素坐标系中的压缩 RLE 工件；多边形是由掩码导出的工件，使用相同坐标系。每条记录都必须携带原图尺寸和完整性哈希：
 
 ```json
 {
@@ -59,80 +63,84 @@ All segmentation adapters produce a versioned `CandidateAnnotation` record. Mask
   "instance_id": "i-0007",
   "mask": {"format": "coco_rle", "artifact": "masks/i-0007.json", "sha256": "..."},
   "polygon": {"rings": [[[12.0, 31.0], [14.0, 33.0]]], "derived": true},
-  "label": "canonical internal label",
+  "label": "规范内部标签",
   "class_confidence": 0.0,
   "boundary_confidence": 0.0,
   "sources": ["mask2former", "grounding_dino", "sam"],
   "review_state": "accepted|external_review|human_review|failed",
   "error": null,
- "provenance": {"run_id": "...", "model_versions": {}, "checkpoint_hashes": {}, "config_hash": "..."}
+  "provenance": {"run_id": "...", "model_versions": {}, "checkpoint_hashes": {}, "config_hash": "..."}
 }
 ```
 
-The canonical label is validated against the existing `labels.csv`, `labels_mapping.yaml`, and export mapping files before export. The taxonomy schema adds canonical name, aliases, ID, `thing_or_stuff`, allowed overlaps, high-risk flag, minimum area, and exclusivity groups. No adapter may emit labels outside the configured taxonomy.
+导出前必须通过现有 `labels.csv`、`labels_mapping.yaml` 与导出映射文件校验规范标签。标签配置新增规范名、别名、ID、`thing_or_stuff`、允许重叠关系、高风险标记、最小面积和互斥组；任一适配器均不得产生配置外标签。
 
-### Fusion and quality policy
+## 融合与质量策略
 
-1. Calibrate class confidence on the validation split. Default thresholds are config values: `accept_class >= 0.85`, `external_review in [0.55, 0.85)`, and `human_review < 0.55`; per-class overrides are required for high-risk labels.
-2. Fuse candidates deterministically by descending calibrated confidence, then source priority, then stable instance ID. For same-class overlaps, keep the higher-confidence mask and merge only when IoU is at least `0.70`; for different classes, consult the taxonomy exclusivity group and route unresolved overlaps to review.
-3. Grounding DINO contributes proposals, not masks. For an existing-mask proposal, SAM prompts are generated from the box plus positive points sampled inside the candidate and negative points outside it; refinement needs source-mask IoU of at least `0.50`, area ratio within `[0.25, 4.0]`, and contour validation. The separate box-only bootstrap policy is defined in the candidate contract.
-4. Send only difficult crop regions to the external reviewer. Selection is deterministic from the run seed and hard limits: at most 10% of images, 3 regions per image, and a configured daily cost budget. A reviewer may confirm/relabel an existing candidate or propose a box/points for a missed target; it cannot publish a free-form label or polygon.
-5. Apply project policy after model decisions: allowed labels, class exclusivity, minimum area, contour validity, and preserve-high-risk-obstacle rules.
-6. Export accepted candidates; publish neither `failed` nor unresolved `human_review` candidates as final truth. They are linked into the review manifest instead of silently deleted.
+1. 在验证集上校准类别置信度。默认配置：`accept_class >= 0.85` 自动接受，`[0.55, 0.85)` 外部复核，低于 `0.55` 人工复核；高风险类别必须有单独阈值。
+2. 候选按校准置信度降序、来源优先级、稳定实例 ID 的顺序确定性处理。同类候选只有在 IoU 不低于 `0.70` 时合并，否则保留高置信候选；异类重叠遵循标签互斥组，无法消解则转复核。
+3. Grounding DINO 只产生提议，不产生掩码。已有掩码的 SAM 精修使用候选框、掩码内部正点和外部负点；仅当源掩码 IoU 不低于 `0.50`、面积比位于 `[0.25, 4.0]` 且轮廓校验通过时接受。仅有框的路径遵循数据契约中的 SAM 引导规则。
+4. 外部复核样本由运行种子确定性选择，硬限制为最多 10% 图片、每张 3 个区域和配置的每日预算。复核器只能确认/改类已有候选，或为漏检给出框/点；不得自由生成标签或直接发布多边形。
+5. 最终执行标签白名单、互斥组、最小面积、轮廓合法性和高风险障碍物保留规则。
+6. 只有 `accepted` 候选可进入最终标注；`failed` 和未解决的 `human_review` 候选不作为真值导出，但必须出现在复核清单中。
 
-## Data and privacy
+## 外部 API 数据安全
 
-External requests contain an individual image crop or a minimized downscaled image, a mask overlay, the crop-to-image transform, and a closed label list; no customer or robot metadata is sent. Requests are capped at 1536 px on the long side and 3 regions per image. Each request includes provider/model/version, an idempotency key, a 20-second timeout, and a bounded retry budget of two attempts. Responses are schema-validated and rejected if they contain unknown labels, out-of-range coordinates, or prompt-injected instructions. API credentials live only in environment variables or a local secret store. Raw requests, credentials, and image bytes are excluded from ordinary logs. The adapter supports a disabled mode; on timeout or budget exhaustion the run continues locally and marks the affected candidate `failed` or `human_review`.
+外部请求只包含单个裁剪图或缩小图片、掩码叠加图、裁剪到原图坐标变换及封闭标签表，不携带客户或机器人元数据。图片长边最大 1536 px，每张最多 3 个区域。请求必须包含供应商/模型/版本、幂等键、20 秒超时和最多两次重试。响应必须经过 Schema 校验；未知标签、越界坐标和包含提示注入指令的响应均拒绝。API 密钥仅可放在环境变量或本地密钥库，普通日志不得保存原始请求、密钥或图片字节。关闭 API、超时或预算耗尽时，流程以本地模式继续，并将受影响候选标为 `failed` 或 `human_review`。
 
-## Evaluation and learning loop
+## 评测与训练闭环
 
-The project maintains a frozen, content-hash-addressed human-labeled evaluation set split by scene conditions, including difficult lighting, vegetation, road boundaries, and small obstacles. Images from the same source sequence stay in one split to prevent leakage. Instance metrics match predictions to ground truth at mask IoU `0.50`; semantic metrics are pixel mIoU. Success is measured by:
+维护一个由内容哈希标识的冻结人工标注评测集，按夜间、植被、道路边界、小障碍物等场景分层；同一来源序列的图片必须位于同一数据集切分，避免泄漏。实例指标以掩码 IoU `0.50` 匹配，语义指标为逐像素 mIoU。关键指标：
 
-- mIoU by class and macro average.
-- Boundary F-score, computed using a symmetric boundary-distance transform at a fixed 2-pixel tolerance in the EXIF-normalized source image coordinate system.
-- High-risk obstacle recall and false-negative rate.
-- Review rate and post-review change rate.
-- External API cost and elapsed time per image.
+- 各类别和宏平均 mIoU。
+- 边界 F-score，使用 EXIF 归正后的原图坐标系和固定 2 像素容差的对称边界距离变换计算。
+- 高风险障碍物召回率与漏检率。
+- 复核率和复核后修改率。
+- 每张图片的外部 API 成本与耗时。
 
-`Post-review change rate` is the number of reviewed, source-linked candidates whose final CVAT label differs or whose final mask IoU with the initial mask is below `0.90`, divided by all reviewed, source-linked candidates; deleted candidates count as changed. The acceptance gate is set against the current MP-Former baseline: no regression in high-risk recall, at least 10 percentage points improvement in boundary F-score on hard scenes, and a documented API review rate/cost. CVAT corrections are versioned by source task/job and annotation hash, with corrected images excluded from the frozen evaluation split. A hard-example miner prioritizes disagreements, low-confidence regions, and human-corrected candidates for the next Mask2Former training manifest.
+复核后修改率定义为：已被人工复核且能关联到源候选的记录中，最终 CVAT 标签不同、最终掩码与初始掩码 IoU 小于 `0.90` 或候选被删除的数量，除以全部已复核且能关联源候选的数量。
 
-## Project layout
+相对当前 MP-Former 基线，验收门槛为：高风险类别召回率不得回退；困难场景的边界 F-score 至少提高 10 个百分点；外部复核率和成本须被记录并满足配置预算。CVAT 修订按来源 task/job 与标注哈希版本化；已修订图片不得进入冻结评测集。困难样本挖掘器优先纳入模型分歧、低置信区域与人工修订候选，生成下一轮 Mask2Former 的可复现训练清单。
 
-The implementation root will be `vision_annotation_workbench/` alongside `perception_streaming/`.
+## 项目结构
+
+实现根目录为 `vision_annotation_workbench/`，与 `perception_streaming/` 同级：
 
 ```text
 vision_annotation_workbench/
-  app/                 CLI and run orchestration
-  adapters/            Mask2Former, Grounding DINO, SAM, external API adapters
-  domain/              candidate schema, taxonomy, policy, scoring
-  pipelines/           ingest, infer, fuse, review, export, train manifests
-  exporters/           CVAT XML and mask output
-  configs/             model profiles and policy profiles
-  tests/               unit, contract, fixture, and end-to-end tests
-  docs/                operator and model documentation
-  schemas/             candidate, run, taxonomy, and review JSON schemas
-  artifacts/           content-addressed masks, overlays, and reports
+  app/                 命令行与运行编排
+  adapters/            Mask2Former、Grounding DINO、SAM、外部 API 适配器
+  domain/              候选 Schema、标签体系、策略和评分
+  pipelines/           导入、推理、融合、复核、导出、训练清单
+  exporters/           CVAT XML 与掩码输出
+  configs/             模型配置与策略配置
+  schemas/             候选、运行、标签和复核 JSON Schema
+  artifacts/           内容寻址的掩码、叠加图和报告
+  tests/               单元、契约、夹具和端到端测试
+  docs/                操作和模型文档
 ```
 
-## Failure handling
+## 运行与失败处理
 
-Every run has an immutable manifest and per-step status, including input file hashes, canonical ordering, model/checkpoint/config hashes, thresholds, random seed, and taxonomy version. Ingestion accepts JPEG/PNG/TIFF/BMP, applies EXIF orientation once, converts to RGB, rejects corrupt files, de-duplicates by content hash, refuses symlinks that escape the selected root, and processes recursively in normalized path order. A single image failure is recorded and continues; an all-failure run is non-publishable. Local-model or API failure cannot discard a candidate: it is retained with an explicit `failed` state and error code and is routed to human review. Runs support cancellation, resume from completed artifacts, bounded GPU batching, disk quotas, and configurable artifact retention.
+每次运行生成不可变清单，记录输入文件哈希、规范顺序、模型/检查点/配置哈希、阈值、随机种子和标签版本。导入层支持 JPEG/PNG/TIFF/BMP，只执行一次 EXIF 方向归正并转换为 RGB；拒绝损坏文件，按内容哈希去重，拒绝逃离所选根目录的符号链接，递归处理并按规范化路径排序。单张失败必须记录且可继续；全部失败的运行不可发布。
 
-## CVAT contract
+本地模型或 API 失败均不得静默丢弃候选：必须记录显式 `failed` 状态和错误码，并导入人工复核。运行支持取消、从已完成工件恢复、受限 GPU 批处理、磁盘配额和可配置工件保留期。
 
-The exporter is pinned to CVAT for images 1.1 and writes simple polygon shapes only in version 1. Every `<image>` carries the canonical relative filename, width, and height. Polygon shapes contain closed pixel-coordinate points and no holes. Candidates with one or more holes are not automatically exported: the original RLE is retained in the artifact store and the candidate is routed to human review. Labels are emitted by canonical name using the taxonomy mapping, attributes include `source`, `confidence`, `review_state`, and `instance_id`, and images/shapes are sorted deterministically. Review manifests link each image to its exported task/job and candidate IDs. Contract tests import and export fixtures and verify dimensions, labels, polygons, attributes, and the hole-to-review routing behavior.
+## CVAT 契约
 
-## Delivery phases
+导出固定使用 CVAT for images 1.1，第一期只写入无孔的简单多边形。每个 `<image>` 使用规范相对文件名、宽度和高度；多边形使用闭合像素坐标。含孔候选不得自动导出：原始 RLE 留在工件库，候选转人工复核。标签按规范名和标签映射导出，属性包括 `source`、`confidence`、`review_state`、`instance_id`；图片和形状必须稳定排序。复核清单关联每张图片、导出 task/job 和候选 ID。契约测试须验证尺寸、标签、多边形、属性与含孔转人工复核的行为。
 
-1. Scaffold the CLI, typed schemas, configuration, taxonomy adapter, content-addressed artifact store, and CVAT exporter with fixtures.
-2. Add Mask2Former inference, confidence calibration, deterministic replay, and evaluation harness.
-3. Add Grounding DINO proposals, SAM boundary refinement, deterministic fusion, policy checks, and GPU-unavailable fallback tests.
-4. Add selective external-review adapter, privacy/log-redaction tests, API contract tests, hard quotas, retries, and review manifests.
-5. Add CVAT correction ingestion, hard-example mining, leakage-safe training manifests, cancellation/resume, and end-to-end recovery tests.
+## 交付阶段
 
-## Non-goals for version 1
+1. 建立 CLI、类型化 Schema、配置、标签适配器、内容寻址工件库和带夹具的 CVAT 导出器。
+2. 实现 Mask2Former 推理、置信度校准、确定性复跑与评测框架。
+3. 实现 Grounding DINO 提议、SAM 边界精修、确定性融合、策略校验和 GPU 不可用降级测试。
+4. 实现选择性外部复核适配器、隐私/日志脱敏测试、API 契约测试、配额、重试和复核清单。
+5. 实现 CVAT 修订导入、困难样本挖掘、避免数据泄漏的训练清单、取消/恢复和端到端故障恢复测试。
 
-- Replacing CVAT.
-- Full-image calls to external APIs by default.
-- Video propagation or multi-view consistency.
-- Real-time robot deployment.
+## 第一阶段非目标
+
+- 替代 CVAT。
+- 默认对整张图片调用外部 API。
+- 视频传播或多视角一致性。
+- 机器人端实时部署。

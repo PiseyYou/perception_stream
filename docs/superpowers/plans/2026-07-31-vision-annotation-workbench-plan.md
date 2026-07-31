@@ -130,39 +130,41 @@ git add vision_annotation_workbench/domain vision_annotation_workbench/schemas v
 git commit -m "feat: 定义标注数据契约和标签体系"
 ```
 
-### 任务 3：实现安全、确定性的图片文件夹导入
+### 任务 3：实现安全导入与内容寻址工件库
 
 **文件：**
 
 - 新建：`vision_annotation_workbench/pipelines/ingest.py`
+- 新建：`vision_annotation_workbench/artifacts/store.py`
 - 新建：`vision_annotation_workbench/tests/conftest.py`
 - 新建：`vision_annotation_workbench/tests/test_ingest.py`
+- 新建：`vision_annotation_workbench/tests/test_artifact_store.py`
 
 - [ ] **步骤 1：编写导入失败测试**
 
-覆盖 JPEG/PNG/TIFF/BMP 接受、EXIF 方向归正、RGB 转换、内容哈希去重、损坏图片跳过、目录外符号链接拒绝、递归目录、规范化路径排序和超大图片拒绝。
+覆盖 JPEG/PNG/TIFF/BMP 接受、EXIF 方向归正、RGB 转换、内容哈希去重、损坏图片跳过、目录外符号链接拒绝、递归目录、规范化路径排序和超大图片拒绝；覆盖 COCO RLE 掩码写入、SHA-256 内容寻址、重复写入去重和重新读取校验。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
-运行：`pytest tests/test_ingest.py -v`
+运行：`pytest tests/test_ingest.py tests/test_artifact_store.py -v`
 
 预期：失败，原因是导入函数不存在。
 
 - [ ] **步骤 3：实现 `ingest_folder`**
 
-返回不可变图片清单及每张图片的相对 ID、SHA-256、EXIF 归正后的宽高、状态和错误码。任何拒绝项都写入清单；不跟随逃离输入根目录的符号链接。
+实现 `ingest_folder` 和内容寻址工件库。导入器返回不可变图片清单及每张图片的相对 ID、SHA-256、EXIF 归正后的宽高、状态和错误码；任何拒绝项都写入清单，且不跟随逃离输入根目录的符号链接。工件库按内容哈希写入/读取 RLE 掩码，供后续候选、导出与运行清单复用。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
-运行：`pytest tests/test_ingest.py -v`
+运行：`pytest tests/test_ingest.py tests/test_artifact_store.py -v`
 
 预期：通过。
 
 - [ ] **步骤 5：提交**
 
 ```bash
-git add vision_annotation_workbench/pipelines/ingest.py vision_annotation_workbench/tests
-git commit -m "feat: 添加安全图片文件夹导入"
+git add vision_annotation_workbench/pipelines/ingest.py vision_annotation_workbench/artifacts vision_annotation_workbench/tests
+git commit -m "feat: 添加安全导入和标注工件库"
 ```
 
 ### 任务 4：实现策略校验、确定性融合与复核路由
@@ -176,7 +178,7 @@ git commit -m "feat: 添加安全图片文件夹导入"
 
 - [ ] **步骤 1：编写融合与复核失败测试**
 
-验证同类 `IoU >= 0.70` 的合并、异类互斥转人工复核、`0.85/0.55` 默认阈值、稳定排序的决胜规则、含孔候选转人工复核、失败候选不发布，以及运行种子下外部复核数量不超过 10% 图片和每图 3 个区域。
+验证同类 `IoU >= 0.70` 的合并、异类互斥转人工复核、`0.85/0.55` 默认阈值与高风险类别单独阈值、稳定排序的决胜规则、标签最小面积、轮廓合法性、高风险障碍物不因低置信度静默删除、含孔候选转人工复核、失败候选不发布，以及运行种子下外部复核数量不超过 10% 图片和每图 3 个区域。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
@@ -186,7 +188,7 @@ git commit -m "feat: 添加安全图片文件夹导入"
 
 - [ ] **步骤 3：实现纯函数策略和融合器**
 
-实现掩码 IoU、状态路由、标签互斥校验、基于运行种子的选择性复核排序。此阶段不调用任何真实模型或 API，使用夹具候选验证业务规则。
+实现掩码 IoU、状态路由、标签互斥、最小面积、轮廓合法性和高风险保留校验，以及基于运行种子的选择性复核排序。此阶段不调用任何真实模型或 API，使用夹具候选验证业务规则。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
@@ -277,40 +279,39 @@ git add vision_annotation_workbench
 git commit -m "feat: 完成标注工作台最小闭环"
 ```
 
-### 任务 7：实现内容寻址工件库与质量报告
+### 任务 7：实现质量报告
 
 **文件：**
 
-- 新建：`vision_annotation_workbench/artifacts/store.py`
 - 新建：`vision_annotation_workbench/pipelines/report.py`
-- 新建：`vision_annotation_workbench/tests/test_artifact_store.py`
 - 新建：`vision_annotation_workbench/tests/test_report.py`
+- 修改：`vision_annotation_workbench/pipelines/run.py`
 
 - [ ] **步骤 1：编写工件库失败测试**
 
-覆盖 COCO RLE 掩码写入、SHA-256 内容寻址、重复写入去重、叠加图生成、质量报告引用完整性，以及含孔候选保留 RLE 后转人工复核。
+覆盖叠加图生成、质量报告引用已存在工件的完整性，以及含孔候选保留 RLE 后转人工复核。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
-运行：`pytest tests/test_artifact_store.py tests/test_report.py -v`
+运行：`pytest tests/test_report.py -v`
 
-预期：失败，原因是工件库尚未实现。
+预期：失败，原因是报告器尚未实现。
 
 - [ ] **步骤 3：实现工件库和报告器**
 
-掩码、叠加图和报告按内容哈希落盘；报告列出每个候选的模型来源、置信度、状态、规则命中和工件引用。写入后重新读取并校验哈希。
+使用任务 3 的内容寻址工件库保存叠加图与报告；报告列出每个候选的模型来源、置信度、状态、规则命中和工件引用。将报告接入运行编排器，并在写入后重新读取校验引用哈希。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
-运行：`pytest tests/test_artifact_store.py tests/test_report.py -v`
+运行：`pytest tests/test_report.py -v`
 
 预期：通过。
 
 - [ ] **步骤 5：提交**
 
 ```bash
-git add vision_annotation_workbench/artifacts vision_annotation_workbench/pipelines/report.py vision_annotation_workbench/tests
-git commit -m "feat: 添加标注工件库与质量报告"
+git add vision_annotation_workbench/pipelines/report.py vision_annotation_workbench/pipelines/run.py vision_annotation_workbench/tests
+git commit -m "feat: 添加标注质量报告"
 ```
 
 ### 任务 8：接入 Mask2Former、校准与评测
@@ -325,7 +326,7 @@ git commit -m "feat: 添加标注工件库与质量报告"
 
 - [ ] **步骤 1：编写适配器和评测失败测试**
 
-使用伪推理后端测试全景 `thing/stuff` 映射、GPU 不可用中文降级、检查点/模型版本 provenance、类别置信度校准、逐像素 mIoU、实例 IoU 0.50 匹配、2 像素容差边界 F-score、高风险召回率与 MP-Former 基线比较。
+使用伪推理后端测试全景 `thing/stuff` 映射、GPU 不可用中文降级、检查点/模型版本 provenance、类别置信度校准、逐像素 mIoU、实例 IoU 0.50 匹配、2 像素容差边界 F-score、高风险召回率与 MP-Former 基线比较；测试验收判定为高风险召回不回退、困难场景边界 F-score 至少提高 10 个百分点；计算复核率、每图 API 成本和耗时。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
@@ -335,7 +336,7 @@ git commit -m "feat: 添加标注工件库与质量报告"
 
 - [ ] **步骤 3：实现模型适配器和评测器**
 
-适配器必须隔离推理框架，支持伪后端和真实 PyTorch 后端；评测集清单按内容哈希、场景分层和来源序列切分。真实 GPU 缺失时不能生成伪标注。
+适配器必须隔离推理框架，支持伪后端和真实 PyTorch 后端；评测集清单按内容哈希、场景分层和来源序列切分。实现基线对比与验收门槛函数，聚合复核率、每图 API 成本和耗时。真实 GPU 缺失时不能生成伪标注。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
@@ -397,7 +398,7 @@ git commit -m "feat: 添加候选发现与边界精修"
 
 - [ ] **步骤 1：编写外部复核失败测试**
 
-验证固定种子选择、10% 图片/每图 3 区域/每日预算限制、1536 px 裁剪、中文日志脱敏、幂等键、20 秒超时和两次重试；验证未知标签、越界坐标、无效 JSON 和 API 失败转 `failed` 或人工复核。
+验证固定种子选择、10% 图片/每图 3 区域/每日预算限制、1536 px 裁剪、中文日志脱敏、幂等键、20 秒超时和两次重试；验证请求必带供应商/模型/版本，密钥只从环境变量或本地密钥库读取；验证未知标签、越界坐标、无效 JSON、直接发布多边形、绕过 DINO/SAM 定位的漏检结果和 API 失败均转 `failed` 或人工复核。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
@@ -407,7 +408,7 @@ git commit -m "feat: 添加候选发现与边界精修"
 
 - [ ] **步骤 3：实现供应商无关适配器**
 
-适配器只接受裁剪图、叠加图、封闭标签表和坐标变换；默认禁用外部网络。所有响应先过 JSON Schema，再进入策略层；预算耗尽和服务错误必须以本地结果继续运行。
+适配器只接受裁剪图、叠加图、封闭标签表和坐标变换；默认禁用外部网络，凭据接口只能读取环境变量或本地密钥库。所有响应先过 JSON Schema；漏检结果必须先变成 `Proposal`，经 DINO/SAM 链路生成候选后才可进入策略层。拒绝直接发布的外部多边形；预算耗尽和服务错误必须以本地结果继续运行。
 
 - [ ] **步骤 4：运行测试并确认通过**
 

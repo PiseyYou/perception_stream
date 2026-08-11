@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import glob
 import hashlib
+import importlib
 import json
 import os
 import shlex
@@ -884,17 +885,51 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         if xml is None:
             raise RuntimeError("baseline inference cancelled")
         return step3_rename(xml, config, lambda _item: None)
-    alpha_runner = config.get("alpha50_runner")
+    candidate_config = config.get("alpha50_candidate")
+    def resolve_runtime() -> Any:
+        """Resolve the pinned Alpha50 loader/predictor from declarative config."""
+        if not isinstance(candidate_config, dict) or not isinstance(candidate_config.get("runtime"), dict):
+            raise RuntimeError("Alpha50 candidate runtime configuration is required")
+        runtime_cfg = candidate_config["runtime"]
+        module_name, loader_name, predictor_name = runtime_cfg.get("module"), runtime_cfg.get("loader"), runtime_cfg.get("predictor")
+        if not all(isinstance(value, str) and value and value.replace("_", "").replace(".", "").isalnum() for value in (module_name, loader_name, predictor_name)):
+            raise RuntimeError("invalid Alpha50 runtime import configuration")
+        module = importlib.import_module(module_name)
+        loader, predictor = getattr(module, loader_name, None), getattr(module, predictor_name, None)
+        if not callable(loader) or not callable(predictor):
+            raise RuntimeError("Alpha50 runtime loader/predictor is unavailable")
+        from .alpha50_batch import Alpha50Runtime
+        return Alpha50Runtime(loader, predictor)
+    alpha_runtime: dict[str, Any] = {}
     def alpha50(input_dir: str | Path, task: Any, snapshot: dict) -> Any:
-        if not callable(alpha_runner):
-            raise RuntimeError("Alpha50 production runner is not configured")
-        return alpha_runner(input_dir, task, snapshot)
+        from .alpha50_batch import build_cvat_images_xml, infer_alpha50_snapshot
+        if "runtime" not in alpha_runtime:
+            alpha_runtime["runtime"] = resolve_runtime()
+        try:
+            import cv2
+        except ImportError as exc:
+            raise RuntimeError("OpenCV is required for Alpha50") from exc
+        images = []
+        for item in _shadow_manifest(snapshot):
+            path = Path(input_dir) / item["path"]
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is None:
+                raise RuntimeError(f"cannot read Alpha50 snapshot image: {item['path']}")
+            result = infer_alpha50_snapshot(image, alpha_runtime["runtime"], candidate_config)
+            width, height = item["original_dimensions"]["width"], item["original_dimensions"]["height"]
+            images.append({"name": item["path"], "width": width, "height": height, "mask": result.mask})
+        output = Path(config.get("output_base", ".")) / f"shadow-{task.id}-B.xml"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(build_cvat_images_xml(images, candidate_config))
+        return output
     def candidate_preflight(_input: str | Path, snapshot: dict, record: dict) -> dict[str, Any]:
         # preflight_candidate is deliberately the sole B task creator: it pins
         # provenance, validates runtime/schema and handles ambiguous creates.
         from .alpha50_batch import CandidatePreflightError, preflight_candidate
-        candidate = config.get("alpha50_candidate")
-        if not isinstance(candidate, dict) or not callable(alpha_runner):
+        candidate = candidate_config
+        # Resolve before preflight_candidate can create a CVAT task.
+        resolve_runtime()
+        if not isinstance(candidate, dict):
             raise CandidatePreflightError("Alpha50 candidate runtime is not configured")
         provenance_dir = Path(config.get("runs_dir") or Path(config.get("output_base", ".")).parent) / "shadow_provenance"
         def create_candidate(labels: list[dict[str, Any]], *, task_identity: str, request_key: str) -> Any:
@@ -908,7 +943,11 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         if not result.ok or not result.task_id:
             raise CandidatePreflightError("; ".join(result.errors) or "candidate preflight failed")
         return {"task": client().tasks.retrieve(result.task_id)}
-    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight}
+    def validate_candidate_xml(xml: Any, files: list[dict[str, Any]], _task: Any) -> None:
+        from .alpha50_batch import validate_cvat_images_xml
+        images = [{"name": item["path"], "width": (item.get("normalized_dimensions") or item["original_dimensions"])["width"], "height": (item.get("normalized_dimensions") or item["original_dimensions"])["height"]} for item in files]
+        validate_cvat_images_xml(Path(xml).read_bytes(), images, candidate_config["expected_cvat_schema"])
+    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml}
 
 
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:

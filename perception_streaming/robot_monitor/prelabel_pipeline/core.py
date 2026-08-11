@@ -908,10 +908,18 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
             if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
                 raise ValueError("CVAT frame metadata exceeds configured limit")
-            body = b"".join(chunk for chunk in response.iter_content(chunk_size=65536) if chunk)
-            if len(body) > maximum:
-                raise ValueError("CVAT frame metadata exceeds configured limit")
-            data = json.loads(body.decode("utf-8"))
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                if not isinstance(chunk, bytes):
+                    raise ValueError("invalid CVAT frame metadata")
+                total += len(chunk)
+                if total > maximum:
+                    raise ValueError("CVAT frame metadata exceeds configured limit")
+                chunks.append(chunk)
+            data = json.loads(b"".join(chunks).decode("utf-8"))
         finally:
             close = getattr(response, "close", None)
             if callable(close):

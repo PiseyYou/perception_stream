@@ -38,6 +38,22 @@ class PrelabelCoreTest(unittest.TestCase):
             adapters = core.build_shadow_adapters(cfg, client_factory=Mock())
             with self.assertRaisesRegex(ValueError, "body exceeds"):
                 adapters["frame_bytes"](Mock(id=1), 0)
+
+    def test_production_shadow_adapter_stops_metadata_stream_at_byte_limit(self):
+        def chunks():
+            yield b"12345"
+            raise AssertionError("metadata reader consumed past its configured limit")
+
+        session = Mock()
+        response = Mock(headers={}, iter_content=Mock(return_value=chunks()))
+        response.raise_for_status.return_value = None
+        session.get.return_value = response
+        cfg = {"labels_csv": "labels.csv", "shadow_max_metadata_bytes": 4, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+        with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
+            adapters = core.build_shadow_adapters(cfg, client_factory=Mock())
+            with self.assertRaisesRegex(ValueError, "metadata exceeds"):
+                adapters["frames"](Mock(id=1))
+        response.close.assert_called_once()
     def _shadow_fakes(self, tmp, raw=b"image", *, alpha=None):
         snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
         created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 10 if branch == "A" else 20})

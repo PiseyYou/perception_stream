@@ -19,7 +19,7 @@ class PrelabelCoreTest(unittest.TestCase):
         client = Mock()
         session = Mock()
         meta = Mock(); meta.json.return_value = {"frames": [{"name": "one.jpg", "width": 4, "height": 3}]}; meta.raise_for_status.return_value = None
-        data = Mock(); data.content = b"actual-frame"; data.raise_for_status.return_value = None
+        data = Mock(); data.content = b"actual-frame"; data.headers = {}; data.raise_for_status.return_value = None
         session.get.side_effect = [meta, data]
         cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
         with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
@@ -29,6 +29,14 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(adapters["frame_bytes"](task, 0), b"actual-frame")
         self.assertEqual(session.get.call_args_list[0].args[0], "http://cvat/api/tasks/12/data/meta")
         self.assertEqual(session.get.call_args_list[1].kwargs["params"], {"number": 0, "quality": "original"})
+
+    def test_production_shadow_adapter_rejects_oversized_frame_body(self):
+        session = Mock(); response = Mock(content=b"12345", headers={"Content-Length": "5"}); response.raise_for_status.return_value = None; session.get.return_value = response
+        cfg = {"labels_csv": "labels.csv", "shadow_max_frame_bytes": 4, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+        with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
+            adapters = core.build_shadow_adapters(cfg, client_factory=Mock())
+            with self.assertRaisesRegex(ValueError, "body exceeds"):
+                adapters["frame_bytes"](Mock(id=1), 0)
     def _shadow_fakes(self, tmp, raw=b"image", *, alpha=None):
         snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
         created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 10 if branch == "A" else 20})

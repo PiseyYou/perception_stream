@@ -875,12 +875,27 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         response.raise_for_status()
         data = response.json()
         raw = data.get("frames", []) if isinstance(data, dict) else []
-        return [{"id": index, "name": item.get("name"), "width": item.get("width"), "height": item.get("height")} for index, item in enumerate(raw)]
+        max_frames = int(config.get("shadow_max_cvat_frames", 10_000))
+        if not isinstance(raw, list) or len(raw) > max_frames:
+            raise ValueError("CVAT frame metadata exceeds configured limit")
+        result = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not isinstance(item.get("width"), int) or not isinstance(item.get("height"), int) or item["width"] <= 0 or item["height"] <= 0:
+                raise ValueError("invalid CVAT frame metadata")
+            result.append({"id": index, "name": item["name"], "width": item["width"], "height": item["height"]})
+        return result
     def frame_bytes(task: Any, frame_id: int, **_kwargs: Any) -> bytes:
         session, base = cvat_session(server)
         response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original"}, timeout=60)
         response.raise_for_status()
-        return response.content
+        maximum = int(config.get("shadow_max_frame_bytes", 64 * 1024 * 1024))
+        declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
+        if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
+            raise ValueError("CVAT frame body exceeds configured limit")
+        body = response.content
+        if not isinstance(body, bytes) or len(body) > maximum:
+            raise ValueError("CVAT frame body exceeds configured limit")
+        return body
     def importer(task: Any, xml: Any) -> Any:
         path = Path(xml)
         task.import_annotations("CVAT 1.1", str(path))

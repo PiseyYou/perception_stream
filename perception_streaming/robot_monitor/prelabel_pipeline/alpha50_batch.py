@@ -24,6 +24,9 @@ class CandidatePreflightError(RuntimeError):
 
 
 MAX_ALPHA50_INPUT_PIXELS = 64_000_000
+# Bounds apply after shortest-edge TTA scaling, before OpenCV can allocate output.
+MAX_ALPHA50_RESIZED_DIMENSION = 16_384
+MAX_ALPHA50_RESIZED_PIXELS = 128_000_000
 
 
 @dataclass(frozen=True)
@@ -56,7 +59,10 @@ class Alpha50Runtime:
             raise CandidatePreflightError("snapshot image exceeds Alpha50 input pixel limit")
         height, width = prepared.shape[:2]
         scale = size / min(height, width)
-        resized = _cv2().resize(prepared, (round(width * scale), round(height * scale)), interpolation=_cv2().INTER_LINEAR)
+        destination_width, destination_height = round(width * scale), round(height * scale)
+        if destination_width <= 0 or destination_height <= 0 or max(destination_width, destination_height) > MAX_ALPHA50_RESIZED_DIMENSION or destination_width * destination_height > MAX_ALPHA50_RESIZED_PIXELS:
+            raise CandidatePreflightError("Alpha50 resized geometry limit exceeded")
+        resized = _cv2().resize(prepared, (destination_width, destination_height), interpolation=_cv2().INTER_LINEAR)
         transformed = np.ascontiguousarray(resized[:, ::-1] if flip else resized)
         logits = np.asarray(self._predictor(self._model, transformed), dtype=np.float32)
         if logits.ndim != 3 or not np.isfinite(logits).all():
@@ -525,6 +531,18 @@ def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable
     return Alpha50InferenceResult(fused, mask, stats)
 
 
+def _exclusive_write(path: Path, payload: bytes) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def save_alpha50_artifacts(result: Alpha50InferenceResult, image_name: str, output_directory: str | Path) -> dict[str, Any]:
     """Persist raw, unmodified mask bytes and per-class pixel statistics."""
     if not isinstance(image_name, str) or not image_name:
@@ -534,13 +552,33 @@ def save_alpha50_artifacts(result: Alpha50InferenceResult, image_name: str, outp
         raise CandidatePreflightError("image identity must be a validated relative path")
     target = Path(output_directory)
     target.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256(image_name.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(image_name.encode("utf-8")).hexdigest()
     stem = identity.stem or "image"
     mask_path = target / f"{stem}-{digest}.png"
     stats_path = target / f"{stem}-{digest}.stats.json"
-    if not _cv2().imwrite(str(mask_path), result.mask):
-        raise CandidatePreflightError(f"failed to save raw mask: {mask_path}")
-    stats_path.write_bytes(_canonical_json(result.class_stats) + b"\n")
+    identity_path = target / f"{stem}-{digest}.identity.json"
+    identity_manifest = _canonical_json({"image_name": image_name, "mask": mask_path.name, "stats": stats_path.name}) + b"\n"
+    try:
+        _exclusive_write(identity_path, identity_manifest)
+    except FileExistsError:
+        try:
+            existing_identity = json.loads(identity_path.read_text(encoding="utf-8")).get("image_name")
+        except (OSError, json.JSONDecodeError):
+            existing_identity = None
+        if existing_identity != image_name:
+            raise CandidatePreflightError("artifact identity conflict")
+        raise CandidatePreflightError("artifact identity already exists")
+    try:
+        encoded_ok, encoded_mask = _cv2().imencode(".png", result.mask)
+        if not encoded_ok:
+            raise CandidatePreflightError(f"failed to encode raw mask: {mask_path}")
+        _exclusive_write(mask_path, encoded_mask.tobytes())
+        _exclusive_write(stats_path, _canonical_json(result.class_stats) + b"\n")
+    except BaseException:
+        mask_path.unlink(missing_ok=True)
+        stats_path.unlink(missing_ok=True)
+        identity_path.unlink(missing_ok=True)
+        raise
     return {"mask_path": str(mask_path), "stats_path": str(stats_path), "class_stats": result.class_stats}
 
 

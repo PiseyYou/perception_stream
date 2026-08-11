@@ -406,6 +406,14 @@ class Alpha50InferenceTest(unittest.TestCase):
         with patch("prelabel_pipeline.alpha50_batch.MAX_ALPHA50_INPUT_PIXELS", 1), self.assertRaisesRegex(CandidatePreflightError, "pixel limit"):
             runtime.predict(np.zeros((1, 2, 3), dtype=np.uint8), size=768, flip=False, input_normalization=self._candidate()["export"]["input_normalization"])
 
+    def test_runtime_rejects_extreme_aspect_ratios_before_resize_allocation(self):
+        runtime = Alpha50Runtime(lambda: "model", lambda *_: np.zeros((2, 1, 1), dtype=np.float32))
+        normalization = self._candidate()["export"]["input_normalization"]
+
+        for image in (np.zeros((1, 65536, 3), dtype=np.uint8), np.zeros((65536, 1, 3), dtype=np.uint8)):
+            with self.subTest(shape=image.shape), self.assertRaisesRegex(CandidatePreflightError, "resized geometry limit"):
+                runtime.predict(image, size=768, flip=False, input_normalization=normalization)
+
     def test_save_artifacts_writes_raw_mask_and_per_class_stats(self):
         result = infer_alpha50_snapshot(np.zeros((1, 2, 3), dtype=np.uint8), Alpha50Runtime(lambda: "model", lambda *_: np.array([[[0, 0]], [[2, 2]]], dtype=np.float32)), self._candidate())
         with tempfile.TemporaryDirectory() as tmp:
@@ -428,6 +436,21 @@ class Alpha50InferenceTest(unittest.TestCase):
             import cv2
             np.testing.assert_array_equal(cv2.imread(first_saved["mask_path"], cv2.IMREAD_UNCHANGED), first.mask)
             np.testing.assert_array_equal(cv2.imread(second_saved["mask_path"], cv2.IMREAD_UNCHANGED), second.mask)
+
+    def test_save_artifacts_detects_forced_identity_hash_collision_without_overwrite(self):
+        class FixedHash:
+            def hexdigest(self):
+                return "f" * 64
+
+        first = Alpha50InferenceResult(np.zeros((2, 1, 1), dtype=np.float32), np.array([[1]], dtype=np.uint8), {"lawn": {"pixels": 1}})
+        second = Alpha50InferenceResult(np.zeros((2, 1, 1), dtype=np.float32), np.array([[0]], dtype=np.uint8), {"lawn": {"pixels": 0}})
+        with tempfile.TemporaryDirectory() as tmp, patch("prelabel_pipeline.alpha50_batch.hashlib.sha256", return_value=FixedHash()):
+            saved = save_alpha50_artifacts(first, "day/a/snap.jpg", tmp)
+            with self.assertRaisesRegex(CandidatePreflightError, "identity conflict"):
+                save_alpha50_artifacts(second, "day/b/snap.png", tmp)
+
+            import cv2
+            np.testing.assert_array_equal(cv2.imread(saved["mask_path"], cv2.IMREAD_UNCHANGED), first.mask)
 
     def test_inference_rejects_unmapped_winning_source_class(self):
         candidate = self._candidate()

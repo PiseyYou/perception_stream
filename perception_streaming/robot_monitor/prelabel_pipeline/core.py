@@ -1127,6 +1127,15 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             persist()
             candidate_result = None
             if branch == "B" and callable(adapters.get("candidate_preflight")):
+                candidate_cfg = params.get("candidate_config") or config.get("alpha50_candidate")
+                if isinstance(candidate_cfg, dict):
+                    from .alpha50_batch import build_candidate_provenance
+                    _manifest, digest = build_candidate_provenance(candidate_cfg, snapshot_hash)
+                    record["candidate_provenance_digest"] = digest
+                    record["candidate_task_identity"] = f"alpha50-{digest[:24]}"
+                    record["candidate_request_key"] = hashlib.sha256(f"alpha50-{digest[:24]}:{digest}".encode("ascii")).hexdigest()
+                    record["candidate_create_status"] = "intent_persisted"
+                    persist()
                 candidate_result = _shadow_call(adapters["candidate_preflight"], branch_input, snapshot, record)
                 record["preflight"] = "passed"
                 persist()

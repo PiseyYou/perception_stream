@@ -1,6 +1,10 @@
 cvat_servers:
   - id: "remote"
     name: "远程服务器"
+    # CVAT currently exposes this private endpoint on HTTP.  This is an explicit
+    # deployment opt-in; change scheme to https and remove this flag after TLS is enabled.
+    scheme: "http"
+    allow_insecure_private_http: true
     host: "192.168.55.246"
     port: 8080
     user: "${CVAT_REMOTE_USER}"

@@ -79,6 +79,14 @@
               <input v-model="serialMode" type="checkbox" :disabled="running" />
               <span>串行执行</span>
             </label>
+            <label class="check-row">
+              <input v-model="pipelineMode" type="radio" value="standard" :disabled="running" />
+              <span>标准预标注</span>
+            </label>
+            <label class="check-row">
+              <input v-model="pipelineMode" type="radio" value="shadow_ab" :disabled="running" />
+              <span>A/B 影子验证</span>
+            </label>
           </div>
         </div>
 
@@ -229,7 +237,33 @@
           <span>{{ selectedDetail.status }}</span>
           <span>{{ selectedDetail.finished_at || selectedDetail.created_at }}</span>
           <a v-if="resultLink" :href="resultLink" target="_blank" rel="noopener">CVAT: {{ resultLink }}</a>
+          <button v-if="shadowReviewReady" class="mini-btn" @click="loadShadowReview(selectedDetail.run_id)">匿名盲评</button>
         </div>
+
+        <section v-if="reviewOpen" class="shadow-review" aria-label="匿名 A/B 盲评">
+          <div class="panel-head">
+            <span>匿名标注盲评 · {{ reviewIndex + 1 }}/{{ reviewSamples.length }}</span>
+            <button class="prelabel-btn ghost" @click="reviewOpen = false">关闭</button>
+          </div>
+          <template v-if="reviewCurrent">
+            <div class="review-pair">
+              <figure><figcaption>X</figcaption><img :src="reviewAssetUrl('X')" alt="标注 X" /></figure>
+              <figure><figcaption>Y</figcaption><img :src="reviewAssetUrl('Y')" alt="标注 Y" /></figure>
+            </div>
+            <div class="review-actions">
+              <button v-for="choice in reviewChoices" :key="choice" class="mini-btn" :class="{ selected: reviewAnswers[reviewCurrent.sample_id] === choice }" @click="reviewAnswers[reviewCurrent.sample_id] = choice">{{ choice }}</button>
+              <button class="mini-btn" :disabled="reviewIndex <= 0" @click="reviewIndex -= 1">上一个</button>
+              <button class="mini-btn" :disabled="reviewIndex >= reviewSamples.length - 1" @click="reviewIndex += 1">下一个</button>
+              <button class="prelabel-btn primary" :disabled="reviewSubmitting || !reviewComplete" @click="submitShadowReview">{{ reviewSubmitting ? '提交中' : '提交本次盲评' }}</button>
+              <button class="prelabel-btn ghost" :disabled="reviewRevealing" @click="revealShadowReview">揭示结果（所有者）</button>
+            </div>
+          </template>
+          <div v-if="reviewDecision" class="review-decision">{{ reviewDecision }}</div>
+          <div v-if="reviewReveal" class="review-decision">{{ reviewReveal }}</div>
+          <div v-if="Object.keys(reviewTaskLinks).length" class="review-actions">
+            <a v-for="(url, branch) in reviewTaskLinks" :key="branch" class="mini-btn" :href="url" target="_blank" rel="noopener">揭示后 CVAT {{ branch }}</a>
+          </div>
+        </section>
       </section>
     </div>
   </div>
@@ -244,6 +278,7 @@ const BATCH_SIZE = 200
 type SourceMode = 'server' | 'files' | 'folder'
 type StepStatus = 'pending' | 'active' | 'done' | 'skipped' | 'failed'
 type RunMode = 'full' | 'uploadOnly'
+type PipelineMode = 'standard' | 'shadow_ab'
 
 interface CvatServer {
   id: string
@@ -313,6 +348,17 @@ interface ContainerStatus {
   docker_error?: string
 }
 
+interface ReviewSample {
+  sample_id: string
+  left: 'X'
+  right: 'Y'
+}
+
+interface ReviewPayload {
+  run_id: string
+  samples: ReviewSample[]
+}
+
 type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: BodyInit | Record<string, unknown> | null
 }
@@ -339,6 +385,7 @@ const assigneeId = ref('')
 const minArea = ref(50)
 const segmentSize = ref(1000)
 const serialMode = ref(true)
+const pipelineMode = ref<PipelineMode>('standard')
 const usersLoading = ref(false)
 const serverSavingId = ref('')
 
@@ -346,6 +393,17 @@ const runs = ref<RunRecord[]>([])
 const runsLoading = ref(false)
 const activeRunId = ref('')
 const selectedDetail = ref<RunRecord | null>(null)
+const reviewOpen = ref(false)
+const reviewRunId = ref('')
+const reviewSamples = ref<ReviewSample[]>([])
+const reviewIndex = ref(0)
+const reviewAnswers = ref<Record<string, string>>({})
+const reviewSubmitting = ref(false)
+const reviewRevealing = ref(false)
+const reviewDecision = ref('')
+const reviewReveal = ref('')
+const reviewTaskLinks = ref<Record<string, string>>({})
+const reviewChoices = ['X better', 'Y better', 'tie', 'undecidable'] as const
 
 const logs = ref<StreamEvent[]>([])
 const steps = ref<StepItem[]>(makeSteps())
@@ -386,6 +444,9 @@ const fileSummary = computed(() => {
   return `${selectedFiles.value.length} 个文件 · ${formatBytes(totalSize)}`
 })
 const resultLink = computed(() => findResultLink(selectedDetail.value?.result))
+const shadowReviewReady = computed(() => Boolean(selectedDetail.value?.result && typeof selectedDetail.value.result === 'object' && (selectedDetail.value.result as Record<string, unknown>).review_ready))
+const reviewCurrent = computed(() => reviewSamples.value[reviewIndex.value] || null)
+const reviewComplete = computed(() => reviewSamples.value.length > 0 && reviewSamples.value.every(item => Boolean(reviewAnswers.value[item.sample_id])))
 
 watch(selectedServerId, () => {
   assigneeId.value = ''
@@ -632,6 +693,7 @@ async function startRun(mode: RunMode): Promise<void> {
       runUploadId = uploadId.value || await uploadSelectedFiles(false)
     }
 
+    const shadowRun = pipelineMode.value === 'shadow_ab' && mode === 'full'
     const body = {
       owner_token: clientToken,
       task_prefix: taskPrefix.value.trim(),
@@ -647,7 +709,7 @@ async function startRun(mode: RunMode): Promise<void> {
 
     resetSteps(body.skip_steps)
     logs.value = []
-    const data = await apiJson<{ run_id: string }>('/prelabel/run', {
+    const data = await apiJson<{ run_id: string }>(shadowRun ? '/prelabel/shadow-run' : '/prelabel/run', {
       method: 'POST',
       headers: ownerHeaders(),
       body,
@@ -763,6 +825,74 @@ async function loadRunDetail(runId: string): Promise<void> {
   } catch (error) {
     pushLog({ type: 'log', level: 'error', msg: `详情加载失败: ${messageOf(error)}` })
   }
+}
+
+async function loadShadowReview(runId: string): Promise<void> {
+  try {
+    const review = await apiJson<ReviewPayload>(`/prelabel/runs/${encodeURIComponent(runId)}/review`)
+    reviewRunId.value = runId
+    reviewSamples.value = review.samples || []
+    reviewIndex.value = 0
+    reviewAnswers.value = {}
+    reviewDecision.value = ''
+    reviewReveal.value = ''
+    reviewTaskLinks.value = {}
+    reviewOpen.value = true
+  } catch (error) {
+    pushLog({ type: 'log', level: 'error', msg: `加载匿名盲评失败: ${messageOf(error)}` })
+  }
+}
+
+function reviewAssetUrl(side: 'X' | 'Y'): string {
+  if (!reviewCurrent.value || !reviewRunId.value) return ''
+  return `/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review/assets/${encodeURIComponent(reviewCurrent.value.sample_id)}/${side}`
+}
+
+async function submitShadowReview(): Promise<void> {
+  if (!reviewRunId.value || !reviewComplete.value) return
+  reviewSubmitting.value = true
+  try {
+    const reviewerId = getReviewerId()
+    const data = await apiJson<{ ok: boolean; decision: { status: string; valid_votes: number } }>(`/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review`, {
+      method: 'POST',
+      body: { reviewer_id: reviewerId, answers: reviewAnswers.value },
+    })
+    reviewDecision.value = reviewDecisionText(data.decision)
+  } catch (error) {
+    pushLog({ type: 'log', level: 'error', msg: `提交盲评失败: ${messageOf(error)}` })
+  } finally {
+    reviewSubmitting.value = false
+  }
+}
+
+async function revealShadowReview(): Promise<void> {
+  if (!reviewRunId.value) return
+  reviewRevealing.value = true
+  try {
+    const data = await apiJson<{ allowed: boolean; decision: { status: string }; mapping: Record<string, { X: string; Y: string }>; task_links: Record<string, string> }>(`/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review/reveal`, {
+      method: 'POST', headers: ownerHeaders(), body: { owner_token: clientToken },
+    })
+    reviewReveal.value = `已揭示：${reviewDecisionText(data.decision)}。X/Y 映射已在所有者视图解锁。`
+    reviewTaskLinks.value = data.task_links || {}
+  } catch (error) {
+    pushLog({ type: 'log', level: 'warn', msg: `暂不能揭示结果: ${messageOf(error)}` })
+  } finally {
+    reviewRevealing.value = false
+  }
+}
+
+function getReviewerId(): string {
+  const key = 'PRELABEL_REVIEWER_ID'
+  const saved = localStorage.getItem(key)
+  if (saved) return saved
+  const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `review_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`
+  localStorage.setItem(key, generated)
+  return generated
+}
+
+function reviewDecisionText(decision: { status: string; valid_votes?: number }): string {
+  const labels: Record<string, string> = { candidate_wins: '候选方案胜出', baseline_wins: '基线方案胜出', no_decision: '无结论', pending: '评审进行中' }
+  return `${labels[decision.status] || decision.status}（有效判断 ${decision.valid_votes ?? 0}）`
 }
 
 async function cancelRun(run: RunRecord): Promise<void> {
@@ -932,6 +1062,28 @@ function findResultLink(result: unknown): string {
   display: grid;
   grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
 }
+
+.shadow-review {
+  margin: 10px 14px;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #080f1f;
+  overflow: hidden;
+}
+
+.review-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+}
+
+.review-pair figure { margin: 0; min-width: 0; }
+.review-pair figcaption { padding: 4px 0; color: #7dd3fc; text-align: center; font-weight: 700; }
+.review-pair img { display: block; width: 100%; max-height: 360px; object-fit: contain; background: #020617; border: 1px solid #334155; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 10px 10px; }
+.review-actions .selected { border-color: #38bdf8; color: #e0f2fe; background: #075985; }
+.review-decision { margin: 0 10px 10px; color: #bae6fd; }
 
 .prelabel-config,
 .prelabel-runtime {

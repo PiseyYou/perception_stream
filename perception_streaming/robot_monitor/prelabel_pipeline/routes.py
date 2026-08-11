@@ -653,6 +653,15 @@ def _handle_shadow_review_reveal(handler, run_id: str) -> None:
     if not payload.get("allowed"):
         _send_json(handler, {"ok": False, "error": "review is not complete"}, status=409)
         return
+    with run_state.runs_lock:
+        run = run_state.runs.get(run_id, {})
+        branches = run.get("shadow", {}).get("branches", {}) if isinstance(run, dict) else {}
+        task_links = {
+            branch_id: branch.get("import_result")
+            for branch_id, branch in branches.items()
+            if branch_id in {"A", "B"} and isinstance(branch, dict) and isinstance(branch.get("import_result"), str)
+        }
+    payload["task_links"] = task_links
     _send_json(handler, payload)
 
 

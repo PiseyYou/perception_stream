@@ -201,6 +201,10 @@ def preflight_candidate(
     occurs only after creation and returns cleanup_task_id plus block_import=True.
     """
     candidate = Alpha50Candidate.from_mapping(candidate_config)
+    if provenance_path is None or not isinstance(branch_record, dict):
+        raise CandidatePreflightError("provenance persistence context is required")
+    if not callable(cleanup_cvat_task):
+        raise CandidatePreflightError("tracked cleanup callback is required")
     for weight in candidate.weights:
         path = Path(weight["path"])
         if not path.is_file():
@@ -223,17 +227,15 @@ def preflight_candidate(
         raise CandidatePreflightError("CVAT create/schema callbacks are required")
 
     manifest, digest = build_candidate_provenance(candidate_config, input_snapshot_hash)
-    if provenance_path is not None:
-        persisted = persist_candidate_provenance(provenance_path, manifest, digest)
-        if branch_record is not None:
-            branch_record["candidate_provenance_digest"] = digest
-            branch_record["candidate_provenance_path"] = str(persisted)
+    persisted = persist_candidate_provenance(provenance_path, manifest, digest)
+    branch_record["candidate_provenance_digest"] = digest
+    branch_record["candidate_provenance_path"] = str(persisted)
     expected_labels = _expected_labels(candidate)
     task = create_cvat_task(expected_labels)
     task_id = task.get("id") if isinstance(task, dict) else getattr(task, "id", None)
     actual_schema = _normalized_schema(get_cvat_schema(task), expected_labels)
     expected_schema = sorted(expected_labels, key=lambda item: item["name"])
     if actual_schema != expected_schema:
-        cleanup_outcome = cleanup_cvat_task(task_id) if cleanup_cvat_task is not None else {"status": "cleanup_callback_missing"}
+        cleanup_outcome = cleanup_cvat_task(task_id)
         return CandidatePreflightResult(False, ("CVAT schema mismatch after task creation",), task_id, task_id, cleanup_outcome, True, manifest, digest)
     return CandidatePreflightResult(True, (), task_id, None, None, False, manifest, digest)

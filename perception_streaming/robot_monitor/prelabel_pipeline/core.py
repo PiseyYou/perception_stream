@@ -963,11 +963,20 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             alpha_runtime["runtime"] = resolve_runtime()
         try:
             import cv2
+            from PIL import Image
         except ImportError as exc:
             raise RuntimeError("OpenCV is required for Alpha50") from exc
         images = []
         for item in _shadow_manifest(snapshot):
             path = Path(input_dir) / item["path"]
+            try:
+                with Image.open(path) as probe:
+                    width, height = probe.size
+                    probe.verify()
+            except Exception as exc:
+                raise RuntimeError(f"cannot validate Alpha50 snapshot image: {item['path']}") from exc
+            if width <= 0 or height <= 0 or width * height > int(config.get("shadow_max_decode_pixels", 64_000_000)):
+                raise RuntimeError("Alpha50 snapshot image exceeds decode pixel limit")
             image = cv2.imread(str(path), cv2.IMREAD_COLOR)
             if image is None:
                 raise RuntimeError(f"cannot read Alpha50 snapshot image: {item['path']}")

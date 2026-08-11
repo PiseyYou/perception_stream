@@ -14,6 +14,10 @@ from prelabel_pipeline import run_state
 
 
 class PrelabelRunStateTest(unittest.TestCase):
+    def test_restored_shadow_orphan_is_marked_cleanup_needed(self):
+        restored = run_state._restore_history_record({"status": "running", "task_prefix": "x", "input_dirs": [], "created_at": "now", "shadow": {"branches": {"B": {"task_id": 9}}}})
+        self.assertEqual(restored["shadow"]["branches"]["B"]["cleanup"]["status"], "needed")
+        self.assertEqual(restored["shadow"]["branches"]["B"]["cleanup"]["reason"], "service_recovery")
     def test_shadow_idempotency_key_uses_batch_branch_and_snapshot(self):
         self.assertEqual(
             run_state.shadow_idempotency_key("batch", "A", "snapshot"),

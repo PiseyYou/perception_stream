@@ -533,15 +533,28 @@ def _handle_shadow_reconcile(handler, run_id: str) -> None:
             _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
             return
         branches = run.get("shadow", {}).get("branches", {})
-    cleanup = core.build_shadow_adapters(cfg)["cleanup"]
+    adapters = core.build_shadow_adapters(cfg)
+    cleanup = adapters["cleanup"]
+    resolver = adapters.get("resolve_task")
     reconciled = []
     for branch in branches.values():
-        if not isinstance(branch, dict) or not branch.get("task_id") or branch.get("cleanup", {}).get("status") not in {"needed", "failed"}:
+        if not isinstance(branch, dict) or branch.get("cleanup", {}).get("status") not in {"needed", "failed"}:
             continue
-        task_id = branch["task_id"]
+        task_id = branch.get("task_id")
+        if not task_id and callable(resolver):
+            identity = branch.get("candidate_task_identity") or branch.get("idempotency_key")
+            resolved = resolver(identity) if isinstance(identity, str) else None
+            task_id = resolved.get("id") if isinstance(resolved, dict) else getattr(resolved, "id", None)
+            if isinstance(task_id, int):
+                branch["task_id"] = task_id
+        if not isinstance(task_id, int):
+            branch["status"] = "failed"
+            branch["cleanup"] = {"status": "reconciled", "reason": "identity_not_found"}
+            continue
         try:
             cleanup(task_id)
             branch["cleanup"] = {"status": "reconciled", "task_id": task_id}
+            branch["status"] = "failed"
             reconciled.append(task_id)
         except Exception as exc:
             branch["cleanup"] = {"status": "failed", "task_id": task_id, "error": str(exc)}

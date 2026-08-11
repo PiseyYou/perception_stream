@@ -3,7 +3,9 @@ import json
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -74,6 +76,63 @@ class PrelabelShadowBatchTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 freeze_batch(source, root / "snapshots")
 
+    def test_freeze_batch_rejects_source_image_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            external_image = root / "external.png"
+            self._image(external_image)
+            (source / "linked.png").symlink_to(external_image)
+
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                freeze_batch(source, root / "snapshots")
+
+    def test_freeze_batch_does_not_publish_when_source_changes_during_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            image = source / "image.png"
+            self._image(image)
+
+            from prelabel_pipeline import shadow_batch
+
+            original_copy2 = shadow_batch.shutil.copy2
+
+            def mutate_before_copy(src, dst, *args, **kwargs):
+                if Path(src) == image:
+                    self._image(image, size=(2, 1))
+                return original_copy2(src, dst, *args, **kwargs)
+
+            with patch.object(shadow_batch.shutil, "copy2", side_effect=mutate_before_copy):
+                with self.assertRaisesRegex(ValueError, "integrity"):
+                    freeze_batch(source, root / "snapshots")
+            self.assertFalse((root / "snapshots").exists() and any((root / "snapshots").iterdir()))
+
+    def test_freeze_batch_is_idempotent_when_snapshot_already_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            self._image(source / "image.png")
+
+            first = freeze_batch(source, root / "snapshots")
+            second = freeze_batch(source, root / "snapshots")
+
+            self.assertEqual(second, first)
+            self.assertEqual([path.name for path in (root / "snapshots").iterdir()], [first["batch_id"]])
+
+    def test_freeze_batch_is_safe_when_two_callers_publish_the_same_batch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            self._image(source / "image.png")
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                snapshots = list(pool.map(lambda _: freeze_batch(source, root / "snapshots"), range(2)))
+
+            self.assertEqual(snapshots[0], snapshots[1])
+            self.assertEqual([path.name for path in (root / "snapshots").iterdir()], [snapshots[0]["batch_id"]])
+
     def test_materialized_branch_inputs_are_writable_copies_isolated_from_snapshot_and_peer(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -125,6 +184,19 @@ class PrelabelShadowBatchTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "symlink"):
                 materialize_branch_input(snapshot, "a", root / "work")
             self.assertEqual(sentinel.read_bytes(), b"must not be overwritten")
+
+    def test_materialize_rejects_symlinked_batch_id_ancestor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            self._image(source / "image.png")
+            snapshot = freeze_batch(source, root / "snapshots")
+            work_root = root / "work"
+            work_root.mkdir()
+            (work_root / snapshot["batch_id"]).symlink_to(root / "elsewhere")
+
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                materialize_branch_input(snapshot, "a", work_root)
 
     def test_materialize_rejects_a_work_root_inside_the_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:

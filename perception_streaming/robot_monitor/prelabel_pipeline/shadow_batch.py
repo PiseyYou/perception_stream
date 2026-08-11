@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -56,6 +57,17 @@ def _atomic_json_write(path: Path, data: dict[str, Any]) -> None:
         raise
 
 
+def _remove_staging(path: Path) -> None:
+    """Remove a staging tree even after its files were made read-only."""
+    if not path.exists():
+        return
+    for directory, _subdirs, files in os.walk(path, topdown=False):
+        for name in files:
+            (Path(directory) / name).chmod(0o600)
+        Path(directory).chmod(0o700)
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str]:
     """Copy images without transformation into an immutable, content-addressed snapshot.
 
@@ -71,6 +83,12 @@ def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str
     seen_hashes: set[str] = set()
     for image_path in sorted((path for path in source_path.rglob("*") if path.is_file()), key=lambda p: p.relative_to(source_path).as_posix()):
         relative = image_path.relative_to(source_path).as_posix()
+        if image_path.is_symlink():
+            raise ValueError(f"source image symlink is not allowed: {relative}")
+        try:
+            image_path.resolve().relative_to(source_path)
+        except ValueError as exc:
+            raise ValueError(f"source image resolves outside source root: {relative}") from exc
         if image_path.suffix.lower() not in SUPPORTED_SUFFIXES:
             raise ValueError(f"unsupported image: {relative}")
         width, height = _image_metadata(image_path)
@@ -92,7 +110,8 @@ def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str
         raise ValueError("source contains no images")
     snapshot_hash = _canonical_hash(files)
     batch_id = snapshot_hash[:16]
-    snapshot_path = Path(snapshot_root).resolve() / batch_id
+    snapshots_path = Path(snapshot_root).resolve()
+    snapshot_path = snapshots_path / batch_id
     manifest_path = snapshot_path / MANIFEST_NAME
     manifest = {"version": 1, "batch_id": batch_id, "snapshot_hash": snapshot_hash, "files": files}
 
@@ -101,18 +120,38 @@ def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str
         if existing != manifest:
             raise ValueError(f"snapshot collision: {snapshot_path}")
     else:
-        images_path = snapshot_path / "images"
-        for item in files:
-            destination = images_path / item["path"]
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_path / item["path"], destination)
-            destination.chmod(0o444)
-        _atomic_json_write(manifest_path, manifest)
-        manifest_path.chmod(0o444)
-        for directory in sorted((path for path in images_path.rglob("*") if path.is_dir()), reverse=True):
-            directory.chmod(0o555)
-        images_path.chmod(0o555)
-        snapshot_path.chmod(0o555)
+        snapshots_path.mkdir(parents=True, exist_ok=True)
+        staging_path = Path(tempfile.mkdtemp(prefix=f".{batch_id}.", dir=snapshots_path))
+        try:
+            images_path = staging_path / "images"
+            for item in files:
+                destination = images_path / item["path"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path / item["path"], destination)
+                staged_dimensions = dict(zip(("width", "height"), _image_metadata(destination)))
+                if (
+                    _sha256(destination) != item["sha256"]
+                    or staged_dimensions != item["original_dimensions"]
+                    or staged_dimensions != item["normalized_dimensions"]
+                ):
+                    raise ValueError(f"snapshot staging integrity check failed: {item['path']}")
+                destination.chmod(0o444)
+            _atomic_json_write(staging_path / MANIFEST_NAME, manifest)
+            (staging_path / MANIFEST_NAME).chmod(0o444)
+            for directory in sorted((path for path in images_path.rglob("*") if path.is_dir()), reverse=True):
+                directory.chmod(0o555)
+            images_path.chmod(0o555)
+            staging_path.chmod(0o555)
+            try:
+                staging_path.rename(snapshot_path)
+            except OSError as exc:
+                if exc.errno not in {errno.EEXIST, errno.ENOTEMPTY}:
+                    raise
+                existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if existing != manifest:
+                    raise ValueError(f"snapshot collision: {snapshot_path}")
+        finally:
+            _remove_staging(staging_path)
 
     return {"batch_id": batch_id, "snapshot_hash": snapshot_hash, "snapshot_path": str(snapshot_path)}
 
@@ -135,16 +174,18 @@ def materialize_branch_input(snapshot: dict[str, Any], branch: str, work_root: s
     if not isinstance(branch, str) or not branch or branch in {".", ".."} or "/" in branch or "\\" in branch:
         raise ValueError("invalid branch")
     snapshot_path, manifest = _load_snapshot(snapshot)
-    destination_root = Path(work_root).resolve() / manifest["batch_id"] / branch
+    work_root_path = Path(work_root).absolute()
+    destination_root = work_root_path / manifest["batch_id"] / branch
     try:
         destination_root.relative_to(snapshot_path)
     except ValueError:
         pass
     else:
         raise ValueError("work root cannot be inside snapshot")
-    destination_root.mkdir(parents=True, exist_ok=True)
-    if destination_root.is_symlink():
-        raise ValueError("symlinked branch output is not allowed")
+    for directory in (work_root_path, work_root_path / manifest["batch_id"], destination_root):
+        if directory.is_symlink():
+            raise ValueError("symlinked branch output is not allowed")
+        directory.mkdir(exist_ok=True)
 
     for item in manifest["files"]:
         relative = PurePosixPath(item["path"])

@@ -3,9 +3,11 @@ import json
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import yaml
 
 TEST_DIR = Path(__file__).resolve().parent
@@ -20,6 +22,11 @@ from prelabel_pipeline.alpha50_batch import (
     persist_candidate_provenance,
     preflight_candidate,
     framework_tree_digest,
+    Alpha50Runtime,
+    build_cvat_images_xml,
+    infer_alpha50_snapshot,
+    save_alpha50_artifacts,
+    validate_cvat_images_xml,
 )
 
 
@@ -325,3 +332,87 @@ class Alpha50CandidateTest(unittest.TestCase):
             with self.assertRaisesRegex(CandidatePreflightError, "idempotency"):
                 preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=legacy_create, get_cvat_schema=lambda _: [])
             self.assertEqual(calls, [])
+
+
+class Alpha50InferenceTest(unittest.TestCase):
+    def _candidate(self):
+        return {
+            "tta": {"scales": [768, 832], "flip": True, "interpolation": "bilinear", "align_corners": False},
+            "fusion": {"method": "mean_logits"},
+            "export": {"background_policy": "exclude", "confidence_policy": "per-class-softmax-threshold", "confidence_threshold": 0.50, "contours": {"min_area": 2, "approx_epsilon": 0.0}},
+            "label_mapping": {"0": {"canonical": "background", "cvat": "background"}, "1": {"canonical": "lawn", "cvat": "lawn草地"}},
+            "expected_cvat_schema": {"version": 1, "labels": [{"name": "background", "type": "polygon", "attributes": []}, {"name": "lawn草地", "type": "polygon", "attributes": []}]},
+        }
+
+    def test_inference_fuses_four_logits_unflips_and_preserves_original_shape(self):
+        image = np.zeros((2, 4, 3), dtype=np.uint8)
+        calls = []
+        normal = np.array([[[0, 0, 0, 0], [0, 0, 0, 0]], [[9, 1, 1, 1], [9, 1, 1, 1]]], dtype=np.float32)
+
+        def predict(_, *, size, flip):
+            calls.append((size, flip))
+            logits = normal + (4 if size == 832 else 0)
+            return logits[:, :, ::-1] if flip else logits
+
+        result = infer_alpha50_snapshot(image, predict, self._candidate())
+
+        self.assertEqual(calls, [(768, False), (768, True), (832, False), (832, True)])
+        self.assertEqual(result.logits.shape, (2, 2, 4))
+        np.testing.assert_allclose(result.logits, normal + 2)
+        self.assertTrue(np.all(result.mask == 1))
+        self.assertEqual(result.class_stats["lawn"]["pixels"], 8)
+
+    def test_inference_applies_background_when_winning_class_confidence_is_below_threshold(self):
+        image = np.zeros((1, 2, 3), dtype=np.uint8)
+        logits = np.array([[[0, 0]], [[0.1, 0.1]]], dtype=np.float32)
+        candidate = self._candidate()
+        candidate["export"]["confidence_threshold"] = 0.75
+
+        result = infer_alpha50_snapshot(image, lambda *_args, **_kwargs: logits, candidate)
+
+        self.assertTrue(np.all(result.mask == 0))
+
+    def test_runtime_loads_model_once_for_repeated_predictions(self):
+        loader = Mock(return_value="model")
+        predictor = Mock(return_value=np.zeros((2, 1, 1), dtype=np.float32))
+        runtime = Alpha50Runtime(loader, predictor)
+
+        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=768, flip=False)
+        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=832, flip=True)
+
+        loader.assert_called_once_with()
+        self.assertEqual(predictor.call_count, 2)
+
+    def test_save_artifacts_writes_raw_mask_and_per_class_stats(self):
+        result = infer_alpha50_snapshot(np.zeros((1, 2, 3), dtype=np.uint8), lambda *_args, **_kwargs: np.array([[[0, 0]], [[2, 2]]], dtype=np.float32), self._candidate())
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = save_alpha50_artifacts(result, "snap.jpg", tmp)
+
+            self.assertTrue(Path(saved["mask_path"]).is_file())
+            self.assertEqual(json.loads(Path(saved["stats_path"]).read_text(encoding="utf-8")), result.class_stats)
+
+    def test_xml_filters_small_components_and_is_deterministic(self):
+        mask = np.array([[1, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 0]], dtype=np.uint8)
+        item = {"name": "snap.png", "width": 4, "height": 3, "mask": mask}
+        first = build_cvat_images_xml([item], self._candidate())
+        second = build_cvat_images_xml([item], self._candidate())
+
+        self.assertEqual(first, second)
+        root = ET.fromstring(first)
+        polygons = root.findall("./image/polygon")
+        self.assertEqual(len(polygons), 1)
+        self.assertEqual(polygons[0].attrib["label"], "lawn草地")
+
+    def test_xml_validator_rejects_invalid_name_size_geometry_and_schema(self):
+        valid = build_cvat_images_xml([{"name": "snap.png", "width": 4, "height": 3, "mask": np.ones((3, 4), dtype=np.uint8)}], self._candidate()).decode("utf-8")
+        validate_cvat_images_xml(valid, [{"name": "snap.png", "width": 4, "height": 3}], self._candidate()["expected_cvat_schema"])
+
+        cases = [
+            (valid.replace('name="snap.png"', 'name="wrong.png"'), "image name"),
+            (valid.replace('width="4"', 'width="5"'), "image dimensions"),
+            (valid.replace('label="lawn草地"', 'label="unknown"'), "label schema"),
+            (valid.replace('points="0.0,0.0', 'points="9.0,0.0'), "polygon bounds"),
+        ]
+        for xml, error in cases:
+            with self.subTest(error=error), self.assertRaisesRegex(CandidatePreflightError, error):
+                validate_cvat_images_xml(xml, [{"name": "snap.png", "width": 4, "height": 3}], self._candidate()["expected_cvat_schema"])

@@ -13,11 +13,41 @@ import inspect
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
+import xml.etree.ElementTree as ET
+
+import numpy as np
 
 
 class CandidatePreflightError(RuntimeError):
     """Raised before a candidate CVAT task can be created."""
+
+
+@dataclass(frozen=True)
+class Alpha50InferenceResult:
+    """Geometry-aligned candidate output for one snapshot."""
+
+    logits: np.ndarray
+    mask: np.ndarray
+    class_stats: dict[str, dict[str, int]]
+
+
+class Alpha50Runtime:
+    """Lazily load one verified model and reuse it across candidate snapshots.
+
+    The predictor is deliberately injected: orchestration owns framework-specific
+    input preparation while this module owns deterministic candidate semantics.
+    """
+
+    def __init__(self, model_loader: Callable[[], Any], predictor: Callable[..., Any]):
+        self._model_loader = model_loader
+        self._predictor = predictor
+        self._model: Any | None = None
+
+    def predict(self, image: np.ndarray, *, size: int, flip: bool) -> np.ndarray:
+        if self._model is None:
+            self._model = self._model_loader()
+        return np.asarray(self._predictor(self._model, image, size=size, flip=flip), dtype=np.float32)
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -375,3 +405,167 @@ def preflight_candidate(
     branch_record.pop("candidate_cleanup_needed_task_id", None)
     branch_record["candidate_preflight_status"] = "schema_verified"
     return CandidatePreflightResult(True, (), task_id, None, None, False, manifest, digest)
+
+
+def _cv2() -> Any:
+    try:
+        import cv2
+    except ImportError as exc:  # pragma: no cover - deployment dependency diagnostic
+        raise CandidatePreflightError("OpenCV is required for Alpha50 candidate export") from exc
+    return cv2
+
+
+def _candidate_value(candidate_config: dict[str, Any], key: str) -> dict[str, Any]:
+    value = candidate_config.get(key)
+    if not isinstance(value, dict):
+        raise CandidatePreflightError(f"candidate {key} configuration is required")
+    return value
+
+
+def _resize_logits(logits: np.ndarray, height: int, width: int, interpolation: str) -> np.ndarray:
+    if logits.ndim != 3:
+        raise CandidatePreflightError("Alpha50 runtime must return CxHxW logits")
+    cv2 = _cv2()
+    interpolation_code = {"nearest": cv2.INTER_NEAREST, "bilinear": cv2.INTER_LINEAR, "bicubic": cv2.INTER_CUBIC}.get(interpolation)
+    if interpolation_code is None:
+        raise CandidatePreflightError(f"unsupported logits interpolation: {interpolation}")
+    return np.stack([cv2.resize(channel, (width, height), interpolation=interpolation_code) for channel in logits], axis=0)
+
+
+def _softmax(logits: np.ndarray) -> np.ndarray:
+    stable = logits - np.max(logits, axis=0, keepdims=True)
+    exponent = np.exp(stable)
+    return exponent / np.sum(exponent, axis=0, keepdims=True)
+
+
+def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable[..., Any], candidate_config: dict[str, Any]) -> Alpha50InferenceResult:
+    """Run the pinned 768/832 plus flipped-logit TTA and return a raw class mask."""
+    if not isinstance(image, np.ndarray) or image.ndim < 2:
+        raise CandidatePreflightError("snapshot image must have height and width")
+    tta = _candidate_value(candidate_config, "tta")
+    if tta.get("scales") != [768, 832] or tta.get("flip") is not True:
+        raise CandidatePreflightError("candidate inference requires pinned scales [768, 832] and flip")
+    if _candidate_value(candidate_config, "fusion").get("method") != "mean_logits":
+        raise CandidatePreflightError("candidate fusion method must be mean_logits")
+    height, width = image.shape[:2]
+    predictor = runtime.predict if isinstance(runtime, Alpha50Runtime) else runtime
+    aligned: list[np.ndarray] = []
+    for size in (768, 832):
+        for flip in (False, True):
+            logits = np.asarray(predictor(image, size=size, flip=flip), dtype=np.float32)
+            resized = _resize_logits(logits, height, width, str(tta.get("interpolation", "bilinear")))
+            aligned.append(resized[:, :, ::-1] if flip else resized)
+    if len({item.shape for item in aligned}) != 1:
+        raise CandidatePreflightError("Alpha50 TTA logits have inconsistent class geometry")
+    fused = np.mean(np.stack(aligned, axis=0), axis=0, dtype=np.float32)
+    probabilities = _softmax(fused)
+    mask = np.argmax(probabilities, axis=0).astype(np.uint8)
+    export = _candidate_value(candidate_config, "export")
+    if export.get("background_policy") != "exclude":
+        raise CandidatePreflightError("candidate background policy must be exclude")
+    if export.get("confidence_policy") != "per-class-softmax-threshold":
+        raise CandidatePreflightError("candidate confidence policy must be per-class-softmax-threshold")
+    threshold = float(export.get("confidence_threshold", 0.50))
+    confidence = np.max(probabilities, axis=0)
+    mask[confidence < threshold] = 0
+    mapping = _candidate_value(candidate_config, "label_mapping")
+    stats: dict[str, dict[str, int]] = {}
+    for source_id, item in sorted(mapping.items(), key=lambda pair: int(pair[0])):
+        canonical = item.get("canonical") if isinstance(item, dict) else None
+        if isinstance(canonical, str):
+            stats[canonical] = {"pixels": int(np.count_nonzero(mask == int(source_id)))}
+    return Alpha50InferenceResult(fused, mask, stats)
+
+
+def save_alpha50_artifacts(result: Alpha50InferenceResult, image_name: str, output_directory: str | Path) -> dict[str, Any]:
+    """Persist raw, unmodified mask bytes and per-class pixel statistics."""
+    target = Path(output_directory)
+    target.mkdir(parents=True, exist_ok=True)
+    stem = Path(image_name).stem
+    mask_path = target / f"{stem}.png"
+    stats_path = target / f"{stem}.stats.json"
+    if not _cv2().imwrite(str(mask_path), result.mask):
+        raise CandidatePreflightError(f"failed to save raw mask: {mask_path}")
+    stats_path.write_bytes(_canonical_json(result.class_stats) + b"\n")
+    return {"mask_path": str(mask_path), "stats_path": str(stats_path), "class_stats": result.class_stats}
+
+
+def _polygon_points(contour: np.ndarray) -> str:
+    return ";".join(f"{float(point[0][0]):.1f},{float(point[0][1]):.1f}" for point in contour)
+
+
+def build_cvat_images_xml(images: Iterable[dict[str, Any]], candidate_config: dict[str, Any]) -> bytes:
+    """Convert raw masks to deterministic CVAT Images 1.1 polygons."""
+    export = _candidate_value(candidate_config, "export")
+    contours_config = _candidate_value(export, "contours")
+    mapping = _candidate_value(candidate_config, "label_mapping")
+    min_area, epsilon = int(contours_config.get("min_area", 0)), float(contours_config.get("approx_epsilon", 0.0))
+    root = ET.Element("annotations")
+    ET.SubElement(root, "version").text = "1.1"
+    cv2 = _cv2()
+    seen: set[str] = set()
+    for index, item in enumerate(images):
+        name, width, height, mask = item.get("name"), item.get("width"), item.get("height"), item.get("mask")
+        if not isinstance(name, str) or name in seen or not isinstance(width, int) or not isinstance(height, int):
+            raise CandidatePreflightError("image name/dimensions must be unique and explicit")
+        seen.add(name)
+        if not isinstance(mask, np.ndarray) or mask.shape != (height, width):
+            raise CandidatePreflightError("raw mask geometry does not match image dimensions")
+        image_element = ET.SubElement(root, "image", {"id": str(index), "name": name, "width": str(width), "height": str(height)})
+        for class_id, label in sorted(((int(key), value.get("cvat")) for key, value in mapping.items() if key != "0" and isinstance(value, dict)), key=lambda pair: pair[0]):
+            if not isinstance(label, str):
+                continue
+            component_count, components, component_stats, _ = cv2.connectedComponentsWithStats((mask == class_id).astype(np.uint8), connectivity=8)
+            contours: list[tuple[int, int, int, np.ndarray]] = []
+            for component_id in range(1, component_count):
+                area = int(component_stats[component_id, cv2.CC_STAT_AREA])
+                if area < min_area:
+                    continue
+                component_mask = (components == component_id).astype(np.uint8)
+                found, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for contour in found:
+                    simplified = cv2.approxPolyDP(contour, epsilon, True) if epsilon > 0 else contour
+                    if len(simplified) >= 3:
+                        contours.append((int(simplified[:, 0, 1].min()), int(simplified[:, 0, 0].min()), area, simplified))
+            for _, _, _, contour in sorted(contours, key=lambda value: (value[0], value[1], value[2], _polygon_points(value[3]))):
+                ET.SubElement(image_element, "polygon", {"label": label, "source": "auto", "occluded": "0", "points": _polygon_points(contour), "z_order": "0"})
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def validate_cvat_images_xml(xml: bytes | str, images: Iterable[dict[str, Any]], expected_schema: dict[str, Any]) -> None:
+    """Reject imports whose image identity, labels, or polygon geometry drifted."""
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError as exc:
+        raise CandidatePreflightError("invalid CVAT XML") from exc
+    if root.findtext("version") != "1.1":
+        raise CandidatePreflightError("CVAT XML must be Images 1.1")
+    image_manifest = tuple(images)
+    expected_images = {item.get("name"): (item.get("width"), item.get("height")) for item in image_manifest}
+    if len(expected_images) != len(image_manifest):
+        raise CandidatePreflightError("expected images must have unique names")
+    labels = {item.get("name") for item in expected_schema.get("labels", []) if isinstance(item, dict) and item.get("type") == "polygon"}
+    actual_images = root.findall("image")
+    if len(actual_images) != len(expected_images):
+        raise CandidatePreflightError("image uniqueness mismatch")
+    seen: set[str] = set()
+    for image in actual_images:
+        name = image.get("name")
+        if name not in expected_images or name in seen:
+            raise CandidatePreflightError("image name mismatch")
+        seen.add(name)
+        try:
+            width, height = int(image.get("width", "")), int(image.get("height", ""))
+        except ValueError as exc:
+            raise CandidatePreflightError("invalid image dimensions") from exc
+        if (width, height) != expected_images[name]:
+            raise CandidatePreflightError("image dimensions mismatch")
+        for polygon in image.findall("polygon"):
+            if polygon.get("label") not in labels:
+                raise CandidatePreflightError("label schema mismatch")
+            try:
+                points = [tuple(map(float, pair.split(","))) for pair in polygon.get("points", "").split(";")]
+            except ValueError as exc:
+                raise CandidatePreflightError("invalid polygon points") from exc
+            if len(points) < 3 or any(len(point) != 2 or not (0 <= point[0] < width and 0 <= point[1] < height) for point in points):
+                raise CandidatePreflightError("polygon bounds mismatch")

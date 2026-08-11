@@ -42,6 +42,9 @@ def handle(handler, parsed) -> None:
         if method == "POST" and path == "/prelabel/shadow-run":
             _handle_shadow_run(handler)
             return
+        if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/shadow-retry"):
+            _handle_shadow_retry(handler, path.split("/")[-2])
+            return
         if method == "GET" and path.startswith("/prelabel/stream/"):
             _handle_stream(handler, path.rsplit("/", 1)[-1], query)
             return
@@ -85,6 +88,8 @@ def _default_method_for_path(path: str) -> str:
     if path in {"/prelabel/upload", "/prelabel/run", "/prelabel/shadow-run", "/prelabel/restart-container"}:
         return "POST"
     if path.startswith("/prelabel/runs/") and path.endswith("/cancel"):
+        return "POST"
+    if path.startswith("/prelabel/runs/") and path.endswith("/shadow-retry"):
         return "POST"
     if path.startswith("/prelabel/settings/cvat-server/"):
         return "PATCH"
@@ -387,7 +392,19 @@ def _handle_shadow_run(handler) -> None:
         run_state.runs[run_id] = runtime
     run_state.save_run(run_id, _runs_dir(cfg))
     params = dict(body)
+    # Never accept executable integration callbacks from JSON.  The route owns
+    # the real CVAT boundary; tests patch this factory with deterministic fakes.
+    params["shadow_adapters"] = core.build_shadow_adapters(cfg)
     params.update({"shadow_snapshot": snapshot, "cancel_fn": lambda: _is_cancelled(run_id), "gpu_semaphore": gpu_semaphore})
+
+    def checkpoint(state: dict) -> None:
+        with run_state.runs_lock:
+            run = run_state.runs.get(run_id)
+            if run:
+                run["shadow"] = _redact(state)
+                run["result"] = _redact(state)
+        run_state.save_run(run_id, _runs_dir(cfg))
+    params["shadow_checkpoint"] = checkpoint
 
     def target() -> None:
         try:
@@ -420,6 +437,53 @@ def _handle_shadow_run(handler) -> None:
 
     threading.Thread(target=target, daemon=True).start()
     _send_json(handler, {"run_id": run_id, "batch_id": snapshot["batch_id"]})
+
+
+def _handle_shadow_retry(handler, run_id: str) -> None:
+    """Retry exactly one durable failed branch; no recovery path creates tasks."""
+    body = _read_json(handler)
+    branch = body.get("branch_id")
+    if branch not in {"A", "B"}:
+        _send_json(handler, {"ok": False, "error": "branch_id A or B required"}, status=400)
+        return
+    try:
+        validate_run_id(run_id)
+        cfg = config_manager.load_config()
+    except (ValueError, InvalidPathError) as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=400)
+        return
+    with run_state.runs_lock:
+        run = run_state.runs.get(run_id)
+        shadow = run.get("shadow") if run else None
+        previous = shadow.get("branches", {}).get(branch, {}) if isinstance(shadow, dict) else {}
+        if not run or not isinstance(shadow, dict) or previous.get("status") != "failed":
+            _send_json(handler, {"ok": False, "error": "only a failed shadow branch may be retried"}, status=409)
+            return
+        run["status"] = "running"
+        run["done"] = False
+        run["event"].clear()
+    params = {"shadow_snapshot": {key: shadow[key] for key in ("batch_id", "snapshot_hash", "snapshot_path")}, "shadow_state": shadow, "retry_branch": branch, "shadow_adapters": core.build_shadow_adapters(cfg), "gpu_semaphore": gpu_semaphore, "cancel_fn": lambda: _is_cancelled(run_id)}
+    def checkpoint(state: dict) -> None:
+        with run_state.runs_lock:
+            current = run_state.runs.get(run_id)
+            if current:
+                current["shadow"] = _redact(state)
+                current["result"] = _redact(state)
+        run_state.save_run(run_id, _runs_dir(cfg))
+    params["shadow_checkpoint"] = checkpoint
+    def target() -> None:
+        try:
+            result = core.run_shadow_pipeline(run_id, run["task_prefix"], run["input_dirs"], params, cfg, lambda item: _append_log(run_id, item))
+            checkpoint(result)
+            with run_state.runs_lock:
+                current = run_state.runs.get(run_id)
+                if current:
+                    current["status"], current["done"], current["finished_at"] = result["status"], True, datetime.now().isoformat(timespec="seconds")
+                    current["event"].set()
+        finally:
+            run_state.save_run(run_id, _runs_dir(cfg))
+    threading.Thread(target=target, daemon=True).start()
+    _send_json(handler, {"run_id": run_id, "retry_branch": branch})
 
 
 def _validated_inputs(body: dict, cfg: dict, owner_token: str) -> tuple[list[str], str | None]:

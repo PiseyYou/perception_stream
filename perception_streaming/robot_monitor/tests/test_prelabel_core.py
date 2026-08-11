@@ -38,6 +38,28 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(result["branches"]["A"]["status"], "failed")
             self.assertIn("frame verification", result["branches"]["A"]["error"])
             adapters["import"].assert_not_called()
+
+    def test_shadow_pipeline_emits_review_manifest_only_after_both_attested_branches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image_bytes = b"original"
+            snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(image_bytes).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
+            imported = Mock()
+            adapters = {
+                "materialize_branch_input": lambda *_: Path(tmp),
+                "create_task": lambda branch, *_args, **_kwargs: {"id": 1 if branch == "A" else 2},
+                "upload": lambda *_: None,
+                "frames": lambda *_: [{"id": 0, "name": "one.jpg", "width": 1, "height": 1}],
+                "frame_bytes": lambda *_args, **_kwargs: image_bytes,
+                "baseline": lambda *_: Path(tmp) / "a.xml",
+                "alpha50": lambda *_: Path(tmp) / "b.xml",
+                "import": imported,
+                "cleanup": lambda *_: None,
+            }
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertTrue(result["review_ready"])
+            self.assertEqual(result["common_success"], ["one.jpg"])
+            self.assertEqual(result["common_success_manifest"]["images"][0]["branches"]["A"]["frame_id"], 0)
+            self.assertEqual(imported.call_count, 2)
     def test_build_predict_cmd_keeps_opts_last(self):
         cfg = {
             "demo_dir": "/demo",

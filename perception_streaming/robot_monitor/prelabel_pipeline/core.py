@@ -831,6 +831,67 @@ def _shadow_frame_outcomes(files: list[dict[str, Any]], frames: list[Any], frame
     return outcomes, valid
 
 
+def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | None = None) -> dict[str, Callable[..., Any]]:
+    """Production CVAT boundary used by the route (tests can inject this factory).
+
+    Frame bytes are fetched from CVAT's data endpoint rather than trusting local
+    upload paths.  That is the only meaningful attestation of what CVAT received.
+    """
+    server = _require_cvat_server(config)
+    client_box: dict[str, Any] = {}
+    def client() -> Any:
+        if "client" not in client_box:
+            if client_factory:
+                client_box["client"] = client_factory()
+            else:
+                from cvat_sdk import make_client
+                client_box["client"] = make_client(host=server["host"], port=server["port"], credentials=(server["user"], server["password"]))
+        return client_box["client"]
+    def create(branch: str, task_prefix: str, _input: str | Path, **_kwargs: Any) -> Any:
+        labels = build_cvat_labels(config["labels_csv"])
+        return client().tasks.create({"name": f"{task_prefix}_{branch}", "labels": labels, "segment_size": config.get("segment_size", 1000)})
+    def upload(task: Any, input_dir: str | Path) -> None:
+        paths = sorted(str(path) for path in Path(input_dir).rglob("*") if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
+        if not paths:
+            raise ValueError("shadow branch has no images")
+        task.upload_data(resources=paths)
+        task.fetch()
+    def frames(task: Any) -> list[dict[str, Any]]:
+        session, base = cvat_session(server)
+        response = session.get(f"{base}/api/tasks/{task.id}/data/meta", timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        raw = data.get("frames", []) if isinstance(data, dict) else []
+        return [{"id": index, "name": item.get("name"), "width": item.get("width"), "height": item.get("height")} for index, item in enumerate(raw)]
+    def frame_bytes(task: Any, frame_id: int, **_kwargs: Any) -> bytes:
+        session, base = cvat_session(server)
+        response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original"}, timeout=60)
+        response.raise_for_status()
+        return response.content
+    def importer(task: Any, xml: Any) -> Any:
+        path = Path(xml)
+        task.import_annotations("CVAT 1.1", str(path))
+        return _cvat_task_url(config, task.id)
+    def cleanup(task_id: int) -> Any:
+        return client().tasks.delete(task_id)
+    def baseline(input_dir: str | Path, task: Any, _snapshot: dict) -> Path:
+        jobs = task.get_jobs()
+        if not jobs:
+            raise RuntimeError("baseline CVAT task has no job")
+        output = Path(config["output_base"]) / f"shadow-{task.id}-A"
+        output.mkdir(parents=True, exist_ok=True)
+        xml = step2_predict(str(input_dir), str(output), jobs[0].id, config, lambda _item: None)
+        if xml is None:
+            raise RuntimeError("baseline inference cancelled")
+        return step3_rename(xml, config, lambda _item: None)
+    alpha_runner = config.get("alpha50_runner")
+    def alpha50(input_dir: str | Path, task: Any, snapshot: dict) -> Any:
+        if not callable(alpha_runner):
+            raise RuntimeError("Alpha50 production runner is not configured")
+        return alpha_runner(input_dir, task, snapshot)
+    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50}
+
+
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:
     """Run isolated baseline/candidate branches from one frozen upload snapshot.
 
@@ -861,7 +922,19 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     gpu_queue = params.get("gpu_semaphore")
     materializer = adapters.get("materialize_branch_input", materialize_branch_input)
     cleanup = adapters.get("cleanup")
+    if not callable(cleanup):
+        raise ValueError("shadow cleanup adapter is required")
+    checkpoint = params.get("shadow_checkpoint")
+    cancel_fn = params.get("cancel_fn") if callable(params.get("cancel_fn")) else (lambda: False)
+    def persist() -> None:
+        if callable(checkpoint):
+            _shadow_call(checkpoint, copy.deepcopy(state))
     for branch in ("A", "B"):
+        if cancel_fn():
+            state["branches"][branch] = {"branch_id": branch, "status": "cancelled", "cleanup": {"status": "not_needed"}}
+            state["status"] = "cancelled"
+            persist()
+            break
         previous = (params.get("shadow_state") or {}).get("branches", {}).get(branch, {})
         if retry_branch and branch != retry_branch:
             state["branches"][branch] = copy.deepcopy(previous)
@@ -876,9 +949,16 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             provenance["candidate_config_sha256"] = hashlib.sha256(json.dumps(candidate_config, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         record = {"branch_id": branch, "idempotency_key": key, "status": "running", "provenance": provenance}
         state["branches"][branch] = record
+        persist()
         task = None
         try:
             branch_input = _shadow_call(materializer, snapshot, branch, config.get("shadow_work_root") or Path(config.get("shadow_root", ".")) / "work")
+            record["input_path"] = str(branch_input)
+            persist()
+            if branch == "B" and callable(adapters.get("candidate_preflight")):
+                _shadow_call(adapters["candidate_preflight"], branch_input, snapshot, record)
+                record["preflight"] = "passed"
+                persist()
             create = adapters.get("create_task")
             if not callable(create):
                 raise ValueError("shadow create_task adapter is required")
@@ -886,20 +966,25 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             record["task_id"] = _shadow_task_id(task)
             if record["task_id"] is None:
                 raise ValueError("shadow CVAT task id is invalid")
+            persist()
             upload = adapters.get("upload")
             frames_fn, bytes_fn = adapters.get("frames"), adapters.get("frame_bytes")
             if not all(callable(fn) for fn in (upload, frames_fn, bytes_fn)):
                 raise ValueError("shadow upload/frame adapters are required")
             _shadow_call(upload, task, branch_input)
+            record["upload_status"] = "success"
+            persist()
             frames = _shadow_call(frames_fn, task)
             record["images"], valid = _shadow_frame_outcomes(files, list(frames), bytes_fn, task)
+            record["attestation_status"] = "success" if valid else "failed"
+            persist()
             if not valid:
                 raise ValueError("frame verification failed; import blocked")
+            if cancel_fn():
+                raise RuntimeError("shadow run cancelled")
             runner = adapters.get("baseline" if branch == "A" else "alpha50")
             if not callable(runner):
                 raise ValueError(f"shadow {branch} inference adapter is required")
-            if branch == "B" and callable(adapters.get("candidate_preflight")):
-                _shadow_call(adapters["candidate_preflight"], task, snapshot, record)
             # Both model paths contend for the same GPU; the queue is deliberately
             # held only around inference, never around CVAT/network side effects.
             if gpu_queue is not None:
@@ -912,13 +997,17 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                 xml = _shadow_call(runner, branch_input, task, snapshot)
             if branch == "B" and callable(adapters.get("validate_candidate_xml")):
                 _shadow_call(adapters["validate_candidate_xml"], xml, files, task)
+            if cancel_fn():
+                raise RuntimeError("shadow run cancelled")
             importer = adapters.get("import")
             if not callable(importer):
                 raise ValueError("shadow import adapter is required")
             record["import_result"] = _shadow_call(importer, task, xml)
+            record["import_status"] = "success"
             record["status"] = "success"
+            persist()
         except Exception as exc:
-            record["status"] = "failed"
+            record["status"] = "cancelled" if cancel_fn() else "failed"
             record["error"] = str(exc)
             record["cleanup"] = {"status": "needed", "task_id": record.get("task_id")}
             if callable(cleanup) and record.get("task_id"):
@@ -926,7 +1015,14 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                     record["cleanup"] = {"status": "attempted", "result": _shadow_call(cleanup, record["task_id"])}
                 except Exception as cleanup_exc:
                     record["cleanup"] = {"status": "failed", "error": str(cleanup_exc), "task_id": record.get("task_id")}
+            persist()
     successful = [set(item["path"] for item in state["branches"][name].get("images", []) if item.get("status") == "success") for name in ("A", "B") if state["branches"].get(name, {}).get("status") == "success"]
     state["common_success"] = sorted(set.intersection(*successful)) if len(successful) == 2 else []
-    state["status"] = "success" if len(successful) == 2 else "failed"
+    state["status"] = "success" if len(successful) == 2 else ("cancelled" if cancel_fn() else "failed")
+    if len(successful) == 2:
+        state["common_success_manifest"] = {"immutable": True, "images": [{"path": path, "branches": {name: next(item for item in state["branches"][name]["images"] if item["path"] == path) for name in ("A", "B")}} for path in state["common_success"]]}
+        state["review_ready"] = True
+    else:
+        state["review_ready"] = False
+    persist()
     return state

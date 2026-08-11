@@ -44,13 +44,14 @@ class Alpha50Candidate:
     fusion: dict[str, Any]
     export: dict[str, Any]
     label_mapping: dict[str, dict[str, str]]
+    expected_cvat_schema: dict[str, Any]
     framework_imports: tuple[str, ...]
     min_vram_gb: float
     min_disk_gb: float
 
     @classmethod
     def from_mapping(cls, candidate: dict[str, Any]) -> "Alpha50Candidate":
-        required = {"framework_root", "framework_revision", "weights", "tta", "fusion", "export", "label_mapping"}
+        required = {"framework_root", "framework_revision", "weights", "tta", "fusion", "export", "label_mapping", "expected_cvat_schema"}
         missing = sorted(required - set(candidate))
         if missing:
             raise CandidatePreflightError(f"candidate config missing: {', '.join(missing)}")
@@ -74,10 +75,22 @@ class Alpha50Candidate:
         for source_id, item in mapping.items():
             if not isinstance(source_id, str) or not isinstance(item, dict) or not item.get("canonical") or not item.get("cvat"):
                 raise CandidatePreflightError("label mapping must be source-ID -> canonical -> CVAT")
+            if not source_id.isdigit() or int(source_id) not in range(13):
+                raise CandidatePreflightError(f"unknown source ID: {source_id}")
+        schema = candidate["expected_cvat_schema"]
+        if not isinstance(schema, dict) or not isinstance(schema.get("version"), int) or not isinstance(schema.get("labels"), list):
+            raise CandidatePreflightError("versioned expected CVAT schema is required")
+        schema_names = {item.get("name") for item in schema["labels"] if isinstance(item, dict)}
+        if len(schema_names) != len(schema["labels"]) or not all(isinstance(item, dict) and item.get("name") and item.get("type") and isinstance(item.get("attributes"), list) for item in schema["labels"]):
+            raise CandidatePreflightError("expected CVAT label definition requires name/type/attributes")
+        for item in mapping.values():
+            if item["cvat"] not in schema_names:
+                raise CandidatePreflightError(f"mapping references missing CVAT label: {item['cvat']}")
         return cls(
             framework_root=candidate["framework_root"], framework_revision=candidate["framework_revision"],
             weights=tuple(copy.deepcopy(weights)), tta=copy.deepcopy(tta), fusion=copy.deepcopy(candidate["fusion"]),
             export=copy.deepcopy(export), label_mapping=copy.deepcopy(mapping),
+            expected_cvat_schema=copy.deepcopy(schema),
             framework_imports=tuple(candidate.get("framework_imports", ["torch", "detectron2"])),
             min_vram_gb=float(candidate.get("min_vram_gb", 0)), min_disk_gb=float(candidate.get("min_disk_gb", 0)),
         )
@@ -89,6 +102,7 @@ class CandidatePreflightResult:
     errors: tuple[str, ...]
     task_id: int | None
     cleanup_task_id: int | None
+    cleanup_outcome: Any | None
     block_import: bool
     manifest: dict[str, Any]
     manifest_digest: str
@@ -107,6 +121,7 @@ def build_candidate_provenance(candidate_config: dict[str, Any], input_snapshot_
         "export": candidate.export,
         "label_mapping": mapping,
         "label_mapping_sha256": hashlib.sha256(_canonical_json(mapping)).hexdigest(),
+        "expected_cvat_schema": candidate.expected_cvat_schema,
         "input_snapshot_hash": input_snapshot_hash,
     })
     return manifest, hashlib.sha256(_canonical_json(manifest)).hexdigest()
@@ -152,20 +167,19 @@ def _default_gpu_checker() -> dict[str, Any]:
     return {"cuda": bool(torch.cuda.is_available()), "vram_gb": (torch.cuda.get_device_properties(0).total_memory / 1024**3 if torch.cuda.is_available() else 0)}
 
 
-def _expected_labels(candidate: Alpha50Candidate) -> list[dict[str, str]]:
-    seen: set[str] = set()
-    labels = []
-    for item in candidate.label_mapping.values():
-        if item["cvat"] not in seen:
-            labels.append({"name": item["cvat"]})
-            seen.add(item["cvat"])
-    return labels
+def _expected_labels(candidate: Alpha50Candidate) -> list[dict[str, Any]]:
+    return _immutable(candidate.expected_cvat_schema["labels"])
 
 
-def _schema_names(schema: Any) -> set[str]:
+def _normalized_schema(schema: Any, expected: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if isinstance(schema, dict):
         schema = schema.get("labels", [])
-    return {item["name"] for item in schema if isinstance(item, dict) and isinstance(item.get("name"), str)}
+    normalized = []
+    for item in schema:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        normalized.append({"name": item["name"], "type": item.get("type"), "attributes": item.get("attributes")})
+    return sorted(normalized, key=lambda item: item["name"])
 
 
 def preflight_candidate(
@@ -177,6 +191,9 @@ def preflight_candidate(
     disk_checker: Callable[[], float] | None = None,
     create_cvat_task: Callable[[list[dict[str, str]]], Any] | None = None,
     get_cvat_schema: Callable[[Any], Any] | None = None,
+    cleanup_cvat_task: Callable[[int | None], Any] | None = None,
+    provenance_path: str | Path | None = None,
+    branch_record: dict[str, Any] | None = None,
 ) -> CandidatePreflightResult:
     """Validate all pre-create conditions, then create and validate the candidate task schema.
 
@@ -206,11 +223,17 @@ def preflight_candidate(
         raise CandidatePreflightError("CVAT create/schema callbacks are required")
 
     manifest, digest = build_candidate_provenance(candidate_config, input_snapshot_hash)
+    if provenance_path is not None:
+        persisted = persist_candidate_provenance(provenance_path, manifest, digest)
+        if branch_record is not None:
+            branch_record["candidate_provenance_digest"] = digest
+            branch_record["candidate_provenance_path"] = str(persisted)
     expected_labels = _expected_labels(candidate)
     task = create_cvat_task(expected_labels)
     task_id = task.get("id") if isinstance(task, dict) else getattr(task, "id", None)
-    actual_names = _schema_names(get_cvat_schema(task))
-    expected_names = {item["name"] for item in expected_labels}
-    if actual_names != expected_names:
-        return CandidatePreflightResult(False, ("CVAT schema mismatch after task creation",), task_id, task_id, True, manifest, digest)
-    return CandidatePreflightResult(True, (), task_id, None, False, manifest, digest)
+    actual_schema = _normalized_schema(get_cvat_schema(task), expected_labels)
+    expected_schema = sorted(expected_labels, key=lambda item: item["name"])
+    if actual_schema != expected_schema:
+        cleanup_outcome = cleanup_cvat_task(task_id) if cleanup_cvat_task is not None else {"status": "cleanup_callback_missing"}
+        return CandidatePreflightResult(False, ("CVAT schema mismatch after task creation",), task_id, task_id, cleanup_outcome, True, manifest, digest)
+    return CandidatePreflightResult(True, (), task_id, None, None, False, manifest, digest)

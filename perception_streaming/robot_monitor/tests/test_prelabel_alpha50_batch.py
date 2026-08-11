@@ -36,6 +36,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             "fusion": {"method": "mean_logits"},
             "export": {"ignore_policy": "drop", "background_policy": "exclude", "contours": {"min_area": 50, "approx_epsilon": 1.5, "smooth": True}},
             "label_mapping": mapping or {"1": {"canonical": "lawn", "cvat": "lawn草地"}},
+            "expected_cvat_schema": {"version": 1, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": []}]},
             "min_vram_gb": 4,
             "min_disk_gb": 1,
         }
@@ -44,7 +45,7 @@ class Alpha50CandidateTest(unittest.TestCase):
     def test_preflight_validates_fixed_assets_runtime_capacity_and_creates_cvat_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = self._candidate(Path(tmp))
-            create_labels = Mock(return_value={"id": 91, "labels": [{"name": "lawn草地"}]})
+            create_labels = Mock(return_value={"id": 91, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": []}]})
 
             result = preflight_candidate(
                 candidate,
@@ -134,3 +135,56 @@ class Alpha50CandidateTest(unittest.TestCase):
         self.assertTrue(validated.tta["flip"])
         self.assertEqual(validated.tta["interpolation"], "bilinear")
         self.assertTrue(validated.label_mapping)
+
+    def test_candidate_config_carries_all_thirteen_source_id_mappings(self):
+        candidate = yaml.safe_load((ROBOT_MONITOR_DIR / "prelabel_pipeline" / "prelabel_config.yaml").read_text(encoding="utf-8"))["alpha50_candidate"]
+
+        self.assertEqual(set(candidate["label_mapping"]), {str(index) for index in range(13)})
+        self.assertEqual(candidate["label_mapping"]["12"]["canonical"], "car")
+
+    def test_precreate_rejects_unknown_source_id_without_creating_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = self._candidate(Path(tmp))
+            candidate["label_mapping"]["99"] = {"canonical": "unknown", "cvat": "missing"}
+            create_task = Mock()
+
+            with self.assertRaisesRegex(CandidatePreflightError, "unknown source ID"):
+                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+            create_task.assert_not_called()
+
+    def test_precreate_rejects_mapping_to_missing_cvat_label_without_creating_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = self._candidate(Path(tmp))
+            candidate["label_mapping"]["1"]["cvat"] = "not-defined"
+            create_task = Mock()
+
+            with self.assertRaisesRegex(CandidatePreflightError, "missing CVAT label"):
+                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+            create_task.assert_not_called()
+
+    def test_postcreate_type_or_attribute_mismatch_blocks_import_and_runs_tracked_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = self._candidate(Path(tmp))
+            candidate["expected_cvat_schema"] = {"version": 1, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": [{"name": "source", "type": "text", "values": []}]}]}
+            cleanup = Mock(return_value={"status": "deleted"})
+
+            result = preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=lambda _: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=cleanup)
+
+            self.assertTrue(result.block_import)
+            self.assertEqual(result.cleanup_task_id, 44)
+            self.assertEqual(result.cleanup_outcome, {"status": "deleted"})
+            cleanup.assert_called_once_with(44)
+
+    def test_preflight_persists_manifest_digest_to_branch_record_before_create(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            branch_record = {}
+            provenance_path = root / "branch" / "provenance.json"
+            create_task = Mock(return_value={"id": 55})
+
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=provenance_path, branch_record=branch_record, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}])
+
+            self.assertTrue(provenance_path.is_file())
+            self.assertEqual(branch_record["candidate_provenance_digest"], result.manifest_digest)
+            self.assertEqual(branch_record["candidate_provenance_path"], str(provenance_path))

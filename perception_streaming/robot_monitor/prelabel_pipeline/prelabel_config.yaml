@@ -50,6 +50,13 @@ alpha50_candidate:
   export:
     ignore_policy: "drop"
     background_policy: "exclude"
+    confidence_policy: "per-class-softmax-threshold"
+    confidence_threshold: 0.50
+    input_normalization:
+      color_order: "RGB"
+      pixel_range: "0_1"
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
     contours:
       min_area: 50
       approx_epsilon: 1.5
@@ -68,3 +75,22 @@ alpha50_candidate:
     "7": {canonical: "obstacle_tree", cvat: "obstacle_tree固定障碍树"}
     "8": {canonical: "curb_step", cvat: "curb,step马路牙子，台阶"}
     "9": {canonical: "fixed_obstacle", cvat: "fixed obstacle固定障碍物"}
+    "10": {canonical: "grass_bush", cvat: "grass_bush类似于草的灌木"}
+    "11": {canonical: "limb_bush", cvat: "limb_bush有枝干结构的灌木"}
+    "12": {canonical: "car", cvat: "car车辆，自行车，电瓶车，摩托车"}
+  expected_cvat_schema:
+    version: 1
+    labels:
+      - {name: "background", type: "polygon", attributes: []}
+      - {name: "lawn草地", type: "polygon", attributes: []}
+      - {name: "sky天空", type: "polygon", attributes: []}
+      - {name: "building,wall建筑，墙体", type: "polygon", attributes: []}
+      - {name: "fence栅栏", type: "polygon", attributes: []}
+      - {name: "back_tree背景树", type: "polygon", attributes: []}
+      - {name: "pole杆子", type: "polygon", attributes: []}
+      - {name: "obstacle_tree固定障碍树", type: "polygon", attributes: []}
+      - {name: "curb,step马路牙子，台阶", type: "polygon", attributes: []}
+      - {name: "fixed obstacle固定障碍物", type: "polygon", attributes: []}
+      - {name: "grass_bush类似于草的灌木", type: "polygon", attributes: []}
+      - {name: "limb_bush有枝干结构的灌木", type: "polygon", attributes: []}
+      - {name: "car车辆，自行车，电瓶车，摩托车", type: "polygon", attributes: []}

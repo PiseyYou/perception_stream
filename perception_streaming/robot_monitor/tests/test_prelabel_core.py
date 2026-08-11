@@ -15,6 +15,20 @@ from prelabel_pipeline import core
 
 
 class PrelabelCoreTest(unittest.TestCase):
+    def test_production_shadow_adapter_downloads_cvat_frame_metadata_and_bytes(self):
+        client = Mock()
+        session = Mock()
+        meta = Mock(); meta.json.return_value = {"frames": [{"name": "one.jpg", "width": 4, "height": 3}]}; meta.raise_for_status.return_value = None
+        data = Mock(); data.content = b"actual-frame"; data.raise_for_status.return_value = None
+        session.get.side_effect = [meta, data]
+        cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+        with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
+            adapters = core.build_shadow_adapters(cfg, client_factory=lambda: client)
+            task = Mock(id=12)
+            self.assertEqual(adapters["frames"](task), [{"id": 0, "name": "one.jpg", "width": 4, "height": 3}])
+            self.assertEqual(adapters["frame_bytes"](task, 0), b"actual-frame")
+        self.assertEqual(session.get.call_args_list[0].args[0], "http://cvat/api/tasks/12/data/meta")
+        self.assertEqual(session.get.call_args_list[1].kwargs["params"], {"number": 0, "quality": "original"})
     def _shadow_fakes(self, tmp, raw=b"image", *, alpha=None):
         snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
         created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 10 if branch == "A" else 20})

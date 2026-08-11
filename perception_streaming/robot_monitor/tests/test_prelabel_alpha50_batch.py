@@ -28,15 +28,18 @@ class Alpha50CandidateTest(unittest.TestCase):
         weight.write_bytes(b"candidate-weights")
         framework = root / "framework"
         framework.mkdir()
+        revision_source = framework / "revision.py"
+        revision_source.write_text("candidate-framework-revision", encoding="utf-8")
         candidate = {
             "framework_root": str(framework),
-            "framework_revision": "git:abc123",
+            "framework_revision": "file-sha256:revision.py:" + hashlib.sha256(revision_source.read_bytes()).hexdigest(),
             "weights": [{"path": str(weight), "sha256": hashlib.sha256(weight.read_bytes()).hexdigest()}],
             "tta": {"scales": [768, 832], "flip": True, "interpolation": "bilinear"},
             "fusion": {"method": "mean_logits"},
             "export": {"ignore_policy": "drop", "background_policy": "exclude", "contours": {"min_area": 50, "approx_epsilon": 1.5, "smooth": True}},
             "label_mapping": mapping or {"1": {"canonical": "lawn", "cvat": "lawn草地"}},
             "expected_cvat_schema": {"version": 1, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": []}]},
+            "output_path": str(root / "candidate-output"),
             "min_vram_gb": 4,
             "min_disk_gb": 1,
         }
@@ -52,7 +55,7 @@ class Alpha50CandidateTest(unittest.TestCase):
                 input_snapshot_hash="input-sha",
                 import_checker=lambda root: ["detectron2", "torch"],
                 gpu_checker=lambda: {"cuda": True, "vram_gb": 8},
-                disk_checker=lambda: 8,
+                disk_checker=lambda _: 8,
                 create_cvat_task=create_labels,
                 get_cvat_schema=lambda task: task["labels"],
                 provenance_path=Path(tmp) / "provenance.json",
@@ -79,7 +82,7 @@ class Alpha50CandidateTest(unittest.TestCase):
                     input_snapshot_hash="input-sha",
                     import_checker=lambda root: ["detectron2"],
                     gpu_checker=lambda: {"cuda": True, "vram_gb": 8},
-                    disk_checker=lambda: 8,
+                    disk_checker=lambda _: 8,
                     create_cvat_task=create_labels,
                     get_cvat_schema=lambda task: [],
                 )
@@ -94,7 +97,7 @@ class Alpha50CandidateTest(unittest.TestCase):
                 input_snapshot_hash="input-sha",
                 import_checker=lambda root: ["detectron2", "torch"],
                 gpu_checker=lambda: {"cuda": True, "vram_gb": 8},
-                disk_checker=lambda: 8,
+                disk_checker=lambda _: 8,
                 create_cvat_task=lambda labels: {"id": 91, "labels": labels},
                 get_cvat_schema=lambda task: [{"name": "wrong"}],
                 provenance_path=Path(tmp) / "provenance.json",
@@ -155,7 +158,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             create_task = Mock()
 
             with self.assertRaisesRegex(CandidatePreflightError, "unknown source ID"):
-                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
             create_task.assert_not_called()
 
     def test_precreate_rejects_mapping_to_missing_cvat_label_without_creating_task(self):
@@ -165,7 +168,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             create_task = Mock()
 
             with self.assertRaisesRegex(CandidatePreflightError, "missing CVAT label"):
-                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
             create_task.assert_not_called()
 
     def test_postcreate_type_or_attribute_mismatch_blocks_import_and_runs_tracked_cleanup(self):
@@ -174,7 +177,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             candidate["expected_cvat_schema"] = {"version": 1, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": [{"name": "source", "type": "text", "values": []}]}]}
             cleanup = Mock(return_value={"status": "deleted"})
 
-            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=lambda _: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=cleanup)
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=cleanup)
 
             self.assertTrue(result.block_import)
             self.assertEqual(result.cleanup_task_id, 44)
@@ -189,7 +192,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             provenance_path = root / "branch" / "provenance.json"
             create_task = Mock(return_value={"id": 55})
 
-            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=provenance_path, branch_record=branch_record, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}], cleanup_cvat_task=lambda _: {"status": "deleted"})
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=provenance_path, branch_record=branch_record, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}], cleanup_cvat_task=lambda _: {"status": "deleted"})
 
             self.assertTrue(provenance_path.is_file())
             self.assertEqual(branch_record["candidate_provenance_digest"], result.manifest_digest)
@@ -201,7 +204,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             create_task = Mock()
 
             with self.assertRaisesRegex(CandidatePreflightError, "provenance persistence"):
-                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+                preflight_candidate(candidate, input_snapshot_hash="input", import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
             create_task.assert_not_called()
 
     def test_preflight_rejects_missing_cleanup_facility_before_create(self):
@@ -211,5 +214,55 @@ class Alpha50CandidateTest(unittest.TestCase):
             create_task = Mock()
 
             with self.assertRaisesRegex(CandidatePreflightError, "cleanup callback"):
-                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
             create_task.assert_not_called()
+
+    def test_preflight_rejects_changed_framework_revision_before_create(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            framework_source = root / "framework" / "train.py"
+            framework_source.write_text("original", encoding="utf-8")
+            candidate["framework_revision"] = "file-sha256:train.py:" + hashlib.sha256(framework_source.read_bytes()).hexdigest()
+            framework_source.write_text("changed", encoding="utf-8")
+            create_task = Mock()
+
+            with self.assertRaisesRegex(CandidatePreflightError, "framework revision mismatch"):
+                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create_task, get_cvat_schema=lambda _: [])
+            create_task.assert_not_called()
+
+    def test_disk_check_uses_configured_output_filesystem(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            output_path = root / "candidate-output"
+            candidate["output_path"] = str(output_path)
+            seen = []
+
+            preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda path: seen.append(Path(path)) or 8, create_cvat_task=lambda _: {"id": 7}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}])
+
+            self.assertEqual(seen, [output_path])
+
+    def test_idless_task_response_is_rejected_before_schema_fetch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            schema = Mock()
+
+            with self.assertRaisesRegex(CandidatePreflightError, "task id"):
+                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {}, get_cvat_schema=schema)
+            schema.assert_not_called()
+
+    def test_schema_fetch_exception_records_cleanup_needed_then_tracks_cleanup_exception(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            record = {}
+
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=Mock(side_effect=RuntimeError("cleanup offline")), import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {"id": 17}, get_cvat_schema=Mock(side_effect=RuntimeError("schema offline")))
+
+            self.assertTrue(result.block_import)
+            self.assertEqual(result.cleanup_task_id, 17)
+            self.assertEqual(result.cleanup_outcome["status"], "cleanup_failed")
+            self.assertEqual(record["candidate_cleanup_needed_task_id"], 17)
+            self.assertEqual(record["candidate_preflight_status"], "schema_failed")

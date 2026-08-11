@@ -30,6 +30,21 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _verify_framework_revision(framework_root: Path, revision: str) -> None:
+    """Verify a pinned, relative source-file digest without allowing path escapes."""
+    prefix = "file-sha256:"
+    if not isinstance(revision, str) or not revision.startswith(prefix):
+        raise CandidatePreflightError("framework revision must be a file-sha256 pin")
+    try:
+        relative, expected = revision[len(prefix):].rsplit(":", 1)
+        source = (framework_root / relative).resolve()
+        source.relative_to(framework_root.resolve())
+    except (ValueError, OSError) as exc:
+        raise CandidatePreflightError("framework revision pin path is invalid") from exc
+    if not source.is_file() or _sha256_file(source) != expected:
+        raise CandidatePreflightError("framework revision mismatch")
+
+
 def _immutable(value: Any) -> Any:
     """Detach persisted provenance from the caller's mutable config object."""
     return json.loads(_canonical_json(value).decode("utf-8"))
@@ -45,13 +60,14 @@ class Alpha50Candidate:
     export: dict[str, Any]
     label_mapping: dict[str, dict[str, str]]
     expected_cvat_schema: dict[str, Any]
+    output_path: str
     framework_imports: tuple[str, ...]
     min_vram_gb: float
     min_disk_gb: float
 
     @classmethod
     def from_mapping(cls, candidate: dict[str, Any]) -> "Alpha50Candidate":
-        required = {"framework_root", "framework_revision", "weights", "tta", "fusion", "export", "label_mapping", "expected_cvat_schema"}
+        required = {"framework_root", "framework_revision", "weights", "tta", "fusion", "export", "label_mapping", "expected_cvat_schema", "output_path"}
         missing = sorted(required - set(candidate))
         if missing:
             raise CandidatePreflightError(f"candidate config missing: {', '.join(missing)}")
@@ -91,6 +107,7 @@ class Alpha50Candidate:
             weights=tuple(copy.deepcopy(weights)), tta=copy.deepcopy(tta), fusion=copy.deepcopy(candidate["fusion"]),
             export=copy.deepcopy(export), label_mapping=copy.deepcopy(mapping),
             expected_cvat_schema=copy.deepcopy(schema),
+            output_path=candidate["output_path"],
             framework_imports=tuple(candidate.get("framework_imports", ["torch", "detectron2"])),
             min_vram_gb=float(candidate.get("min_vram_gb", 0)), min_disk_gb=float(candidate.get("min_disk_gb", 0)),
         )
@@ -115,6 +132,7 @@ def build_candidate_provenance(candidate_config: dict[str, Any], input_snapshot_
         "version": 1,
         "candidate": "alpha50",
         "framework": {"root": candidate.framework_root, "revision_or_image_digest": candidate.framework_revision},
+        "output_path": candidate.output_path,
         "weights": list(candidate.weights),
         "tta": candidate.tta,
         "fusion": candidate.fusion,
@@ -182,13 +200,27 @@ def _normalized_schema(schema: Any, expected: list[dict[str, Any]]) -> list[dict
     return sorted(normalized, key=lambda item: item["name"])
 
 
+def _cleanup_result(cleanup_cvat_task: Callable[[int | None], Any], task_id: int | None) -> Any:
+    try:
+        return cleanup_cvat_task(task_id)
+    except Exception as exc:
+        return {"status": "cleanup_failed", "error": str(exc)}
+
+
+def _disk_target(output_path: Path) -> Path:
+    target = output_path
+    while not target.exists() and target != target.parent:
+        target = target.parent
+    return target
+
+
 def preflight_candidate(
     candidate_config: dict[str, Any],
     *,
     input_snapshot_hash: str,
     import_checker: Callable[[str], list[str]] | None = None,
     gpu_checker: Callable[[], dict[str, Any]] | None = None,
-    disk_checker: Callable[[], float] | None = None,
+    disk_checker: Callable[[Path], float] | None = None,
     create_cvat_task: Callable[[list[dict[str, str]]], Any] | None = None,
     get_cvat_schema: Callable[[Any], Any] | None = None,
     cleanup_cvat_task: Callable[[int | None], Any] | None = None,
@@ -214,13 +246,15 @@ def preflight_candidate(
     root = Path(candidate.framework_root)
     if not root.is_dir():
         raise CandidatePreflightError(f"candidate framework root missing: {root}")
+    _verify_framework_revision(root, candidate.framework_revision)
     checked_imports = (import_checker or (lambda value: _default_import_checker(value, candidate.framework_imports)))(str(root))
     if not set(candidate.framework_imports).issubset(set(checked_imports)):
         raise CandidatePreflightError("candidate framework imports incomplete")
     gpu = (gpu_checker or _default_gpu_checker)()
     if not gpu.get("cuda") or float(gpu.get("vram_gb", 0)) < candidate.min_vram_gb:
         raise CandidatePreflightError("CUDA/VRAM capacity is insufficient")
-    available_disk = (disk_checker or (lambda: shutil.disk_usage(root).free / 1024**3))()
+    output_path = Path(candidate.output_path)
+    available_disk = (disk_checker or (lambda path: shutil.disk_usage(_disk_target(path)).free / 1024**3))(output_path)
     if float(available_disk) < candidate.min_disk_gb:
         raise CandidatePreflightError("disk capacity is insufficient")
     if create_cvat_task is None or get_cvat_schema is None:
@@ -233,9 +267,26 @@ def preflight_candidate(
     expected_labels = _expected_labels(candidate)
     task = create_cvat_task(expected_labels)
     task_id = task.get("id") if isinstance(task, dict) else getattr(task, "id", None)
-    actual_schema = _normalized_schema(get_cvat_schema(task), expected_labels)
+    if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
+        branch_record["candidate_preflight_status"] = "task_id_invalid"
+        branch_record["candidate_cleanup_needed_task_id"] = None
+        branch_record["candidate_cleanup_outcome"] = _cleanup_result(cleanup_cvat_task, None)
+        raise CandidatePreflightError("CVAT task id is invalid")
+    branch_record["candidate_cleanup_needed_task_id"] = task_id
+    branch_record["candidate_preflight_status"] = "schema_pending"
+    try:
+        actual_schema = _normalized_schema(get_cvat_schema(task), expected_labels)
+    except Exception as exc:
+        branch_record["candidate_preflight_status"] = "schema_failed"
+        cleanup_outcome = _cleanup_result(cleanup_cvat_task, task_id)
+        branch_record["candidate_cleanup_outcome"] = cleanup_outcome
+        return CandidatePreflightResult(False, (f"CVAT schema read failed: {exc}",), task_id, task_id, cleanup_outcome, True, manifest, digest)
     expected_schema = sorted(expected_labels, key=lambda item: item["name"])
     if actual_schema != expected_schema:
-        cleanup_outcome = cleanup_cvat_task(task_id)
+        branch_record["candidate_preflight_status"] = "schema_failed"
+        cleanup_outcome = _cleanup_result(cleanup_cvat_task, task_id)
+        branch_record["candidate_cleanup_outcome"] = cleanup_outcome
         return CandidatePreflightResult(False, ("CVAT schema mismatch after task creation",), task_id, task_id, cleanup_outcome, True, manifest, digest)
+    branch_record.pop("candidate_cleanup_needed_task_id", None)
+    branch_record["candidate_preflight_status"] = "schema_verified"
     return CandidatePreflightResult(True, (), task_id, None, None, False, manifest, digest)

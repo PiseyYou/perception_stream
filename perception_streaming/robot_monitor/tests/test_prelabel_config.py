@@ -16,6 +16,17 @@ from prelabel_pipeline.config_manager import load_config, safe_cvat_servers, sav
 
 
 class PrelabelConfigTest(unittest.TestCase):
+    def test_repository_config_uses_env_placeholders_and_loads_without_credentials(self):
+        config_path = ROBOT_MONITOR_DIR / "prelabel_pipeline" / "prelabel_config.yaml"
+        raw = config_path.read_text(encoding="utf-8")
+
+        self.assertNotIn("qazqaz2580", raw)
+        self.assertNotIn("wbmhhh666", raw)
+        with patch.dict(os.environ, {}, clear=True):
+            cfg = load_config(config_path)
+        self.assertEqual(cfg["cvat_servers"][0].get("user", ""), "")
+        self.assertEqual(cfg["cvat_servers"][0].get("password", ""), "")
+
     def _write_config(self, path: Path):
         path.write_text(yaml.safe_dump({
             "cvat_servers": [{"id": "remote", "name": "Remote", "host": "127.0.0.1", "port": 8080}],

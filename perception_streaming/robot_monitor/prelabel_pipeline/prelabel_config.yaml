@@ -3,14 +3,14 @@ cvat_servers:
     name: "远程服务器"
     host: "192.168.55.246"
     port: 8080
-    user: "linghaoxiang"
-    password: "qazqaz2580"
+    user: "${CVAT_REMOTE_USER}"
+    password: "${CVAT_REMOTE_PASSWORD}"
   - id: "local"
     name: "本机服务器"
     host: "localhost"
     port: 8080
-    user: "admin"
-    password: "wbmhhh666"
+    user: "${CVAT_LOCAL_USER}"
+    password: "${CVAT_LOCAL_PASSWORD}"
 
 docker:
   container: "MPformer"
@@ -35,7 +35,8 @@ segment_size: 1000
 # from this snapshot; later orchestration must never re-read this mutable file.
 alpha50_candidate:
   framework_root: "/media/sdc2/lhx/MPformer"
-  framework_revision: "code-sha256:4426f482fa5702bfc4a6c1e07c05ee58b01a382170ce53a5920e7aa38b16b5bc"
+  framework_revision: "file-sha256:MP-Former/train_net.py:4426f482fa5702bfc4a6c1e07c05ee58b01a382170ce53a5920e7aa38b16b5bc"
+  output_path: "${STREAMING_DIR}/data/prelabel_runs/alpha50_candidate"
   framework_imports: ["torch", "detectron2"]
   weights:
     - path: "/media/sdc2/lhx/MPformer/MP-Former/output/model_1884999.pth"

@@ -47,14 +47,22 @@ def load_config(
 
     for server in cfg.get("cvat_servers", []):
         sid = server["id"].upper().replace("-", "_")
-        user = os.environ.get(f"CVAT_{sid}_USER", server.get("user", ""))
-        password = os.environ.get(f"CVAT_{sid}_PASSWORD", server.get("password", ""))
+        user_placeholder = f"${{CVAT_{sid}_USER}}"
+        password_placeholder = f"${{CVAT_{sid}_PASSWORD}}"
+        configured_user = "" if server.get("user") == user_placeholder else server.get("user", "")
+        configured_password = "" if server.get("password") == password_placeholder else server.get("password", "")
+        user = os.environ.get(f"CVAT_{sid}_USER", configured_user)
+        password = os.environ.get(f"CVAT_{sid}_PASSWORD", configured_password)
         if require_credentials and (not user or not password):
             raise ValueError(f"请设置环境变量 CVAT_{sid}_USER 和 CVAT_{sid}_PASSWORD")
         if user:
             server["user"] = user
+        else:
+            server.pop("user", None)
         if password:
             server["password"] = password
+        else:
+            server.pop("password", None)
     return cfg
 
 

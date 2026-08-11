@@ -905,10 +905,19 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
         if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
             raise ValueError("CVAT frame body exceeds configured limit")
-        body = response.content
-        if not isinstance(body, bytes) or len(body) > maximum:
-            raise ValueError("CVAT frame body exceeds configured limit")
-        return body
+        chunks: list[bytes] = []
+        total = 0
+        iterator = response.iter_content(chunk_size=1024 * 1024) if callable(getattr(response, "iter_content", None)) else [response.content]
+        for chunk in iterator:
+            if not chunk:
+                continue
+            if not isinstance(chunk, bytes):
+                raise ValueError("invalid CVAT frame body")
+            total += len(chunk)
+            if total > maximum:
+                raise ValueError("CVAT frame body exceeds configured limit")
+            chunks.append(chunk)
+        return b"".join(chunks)
     def importer(task: Any, xml: Any) -> Any:
         path = Path(xml)
         task.import_annotations("CVAT 1.1", str(path))

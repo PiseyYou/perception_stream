@@ -36,6 +36,14 @@ class ShadowReviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already submitted"):
             submit_review(review, "reviewer-1", answers)
 
+    def test_submit_requires_all_sample_answers_before_review_can_close(self):
+        from prelabel_pipeline.shadow_review import create_review, submit_review
+
+        review = create_review(self._manifest(2), seed="seed")
+        with self.assertRaisesRegex(ValueError, "every review sample"):
+            submit_review(review, "reviewer-1", {"s001": "tie"})
+        self.assertEqual(review["decision"]["status"], "pending")
+
     def test_decision_requires_24_valid_votes_and_20_point_candidate_margin(self):
         from prelabel_pipeline.shadow_review import create_review, submit_review
 

@@ -86,8 +86,8 @@ def submit_review(review: dict[str, Any], reviewer_id: str, answers: Mapping[str
         if sample_id not in private_samples or choice not in CHOICES:
             raise ValueError("invalid review answer")
         normalized[str(sample_id)] = str(choice)
-    if not normalized:
-        raise ValueError("at least one review answer is required")
+    if set(normalized) != set(private_samples):
+        raise ValueError("every review sample requires one answer")
     review.setdefault("submissions", {})[reviewer_id] = {"answers": normalized}
     review["decision"] = _decision(review)
     return dict(review["decision"])

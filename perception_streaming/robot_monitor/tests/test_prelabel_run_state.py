@@ -14,6 +14,14 @@ from prelabel_pipeline import run_state
 
 
 class PrelabelRunStateTest(unittest.TestCase):
+    def test_shadow_serialization_hides_private_result_from_non_owner(self):
+        run = run_state.make_runtime_run("shadow", ["/private/input"], owner_token="owner", shadow={"batch_id": "batch"})
+        run["result"] = {"private_samples": {"s001": {"path": "private/image.png", "X": "A"}}}
+        public = run_state.serialize_run("abcdef123456", run, expose_paths=False)
+        owner = run_state.serialize_run("abcdef123456", run, expose_paths=False, owner_token="owner")
+        self.assertNotIn("result", public)
+        self.assertIn("private/image.png", str(owner["result"]))
+
     def test_restored_shadow_orphan_is_marked_cleanup_needed(self):
         restored = run_state._restore_history_record({"status": "running", "task_prefix": "x", "input_dirs": [], "created_at": "now", "shadow": {"branches": {"B": {"task_id": 9}}}})
         self.assertEqual(restored["shadow"]["branches"]["B"]["cleanup"]["status"], "needed")

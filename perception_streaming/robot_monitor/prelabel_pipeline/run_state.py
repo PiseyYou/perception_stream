@@ -96,6 +96,7 @@ def serialize_run(
     owner_token: str = "",
 ) -> dict:
     input_dirs = list(run_data.get("input_dirs", []))
+    owned_by_client = bool(owner_token and owner_token == run_data.get("owner_token", ""))
     if not expose_paths:
         input_dirs = [Path(d).name for d in input_dirs]
     record = {
@@ -105,9 +106,12 @@ def serialize_run(
         "input_dirs": input_dirs,
         "created_at": run_data["created_at"],
         "finished_at": run_data.get("finished_at"),
-        "result": run_data.get("result"),
-        "owned_by_client": bool(owner_token and owner_token == run_data.get("owner_token", "")),
+        "owned_by_client": owned_by_client,
     }
+    # Shadow state includes the server-only X/Y mapping and snapshot provenance.
+    # A list caller who does not own the run must not receive any result object.
+    if not isinstance(run_data.get("shadow"), dict) or owned_by_client:
+        record["result"] = run_data.get("result")
     if include_logs:
         record["logs"] = run_data.get("logs", [])
     return record

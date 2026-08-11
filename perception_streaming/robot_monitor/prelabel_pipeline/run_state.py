@@ -233,8 +233,13 @@ def _restore_history_record(record: dict) -> dict:
             # Recovery never creates/retries tasks.  It preserves enough durable
             # information for an explicit operator cleanup/retry action.
             for branch in restored["shadow"].get("branches", {}).values():
-                if isinstance(branch, dict) and branch.get("task_id"):
+                if not isinstance(branch, dict):
+                    continue
+                if branch.get("task_id"):
                     branch.setdefault("cleanup", {"status": "needed", "task_id": branch["task_id"], "reason": "service_recovery"})
+                elif branch.get("status") in {"intent_persisted", "running"}:
+                    branch["status"] = "failed"
+                    branch.setdefault("cleanup", {"status": "needed", "reason": "service_recovery_identity_resolution"})
     return restored
 
 

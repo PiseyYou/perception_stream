@@ -536,6 +536,7 @@ def _handle_shadow_reconcile(handler, run_id: str) -> None:
     adapters = core.build_shadow_adapters(cfg)
     cleanup = adapters["cleanup"]
     resolver = adapters.get("resolve_task")
+    candidate_resolver = adapters.get("resolve_candidate_task")
     reconciled = []
     for branch in branches.values():
         if not isinstance(branch, dict) or branch.get("cleanup", {}).get("status") not in {"needed", "failed"}:
@@ -543,7 +544,8 @@ def _handle_shadow_reconcile(handler, run_id: str) -> None:
         task_id = branch.get("task_id")
         if not task_id and callable(resolver):
             identity = branch.get("candidate_task_identity") or branch.get("idempotency_key")
-            resolved = resolver(identity) if isinstance(identity, str) else None
+            selected_resolver = candidate_resolver if branch.get("candidate_task_identity") else resolver
+            resolved = selected_resolver(identity) if callable(selected_resolver) and isinstance(identity, str) else None
             task_id = resolved.get("id") if isinstance(resolved, dict) else getattr(resolved, "id", None)
             if isinstance(task_id, int):
                 branch["task_id"] = task_id

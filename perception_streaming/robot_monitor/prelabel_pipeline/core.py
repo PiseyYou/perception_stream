@@ -876,6 +876,11 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             if getattr(task, "name", None) == expected:
                 return task
         return None
+    def resolve_candidate_task(identity: str) -> Any:
+        for task in client().tasks.list(search=identity):
+            if getattr(task, "name", None) == identity:
+                return task
+        return None
     def upload(task: Any, input_dir: str | Path) -> None:
         paths = sorted(str(path) for path in Path(input_dir).rglob("*") if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
         if not paths:
@@ -1025,7 +1030,7 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         from .alpha50_batch import validate_cvat_images_xml
         images = [{"name": item["path"], "width": (item.get("normalized_dimensions") or item["original_dimensions"])["width"], "height": (item.get("normalized_dimensions") or item["original_dimensions"])["height"]} for item in files]
         validate_cvat_images_xml(Path(xml).read_bytes(), images, candidate_config["expected_cvat_schema"])
-    return {"create_task": create, "resolve_task": resolve_task, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml, "resolve_alpha50_runtime": resolve_runtime}
+    return {"create_task": create, "resolve_task": resolve_task, "resolve_candidate_task": resolve_candidate_task, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml, "resolve_alpha50_runtime": resolve_runtime}
 
 
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:

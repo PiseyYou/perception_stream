@@ -47,6 +47,7 @@ alpha50_candidate:
     predictor: "predict_alpha50_logits"
     framework_root: "/media/sdc2/yf/import_backup/train_data/multiyolov5_framework"
     checkpoint: "/media/sdc2/yf/import_backup/train_data/checkpoints_g9_soup/alpha27_to_g9best_soup_alpha50.pt"
+    checkpoint_sha256: "3da52e51fb054b798f8b388ab4e369b561e39930f6aa2ab879bf0868993d393e"
     device: "auto"
   tta:
     scales: [768, 832]

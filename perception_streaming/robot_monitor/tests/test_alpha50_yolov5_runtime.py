@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -31,10 +32,11 @@ class Alpha50YoloV5RuntimeTest(unittest.TestCase):
         model.to.return_value = model
         attempt_load = Mock(return_value=model)
         select_device = Mock(return_value=torch.device("cpu"))
-        config = {"framework_root": "/framework", "checkpoint": "/weights/alpha50.pt", "device": "auto"}
+        config = {"framework_root": "/framework", "checkpoint": "/weights/alpha50.pt", "checkpoint_sha256": hashlib.sha256(b"").hexdigest(), "device": "auto"}
         image = np.array([[[0.25, -0.5, 1.75]]], dtype=np.float32)
 
-        with patch.object(self.runtime, "_load_backend", return_value=(attempt_load, select_device)):
+        with patch.object(self.runtime, "_load_backend", return_value=(attempt_load, select_device)), \
+             patch.object(self.runtime.Path, "read_bytes", return_value=b""):
             loaded = self.runtime.load_alpha50_model(config)
             logits = self.runtime.predict_alpha50_logits(loaded, image)
             self.assertIs(loaded, self.runtime.load_alpha50_model(config))

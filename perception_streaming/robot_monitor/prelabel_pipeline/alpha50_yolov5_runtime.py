@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -61,6 +62,12 @@ def _runtime_paths(runtime_config: Mapping[str, Any]) -> tuple[str, str, str]:
 def load_alpha50_model(runtime_config: Mapping[str, Any]) -> LoadedAlpha50Model:
     """Load the pinned checkpoint once, selecting CPU safely when CUDA is absent."""
     framework_root, checkpoint, device_request = _runtime_paths(runtime_config)
+    expected_sha = runtime_config.get("checkpoint_sha256")
+    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+        raise ValueError("Alpha50 runtime requires checkpoint_sha256")
+    digest = hashlib.sha256(Path(checkpoint).read_bytes()).hexdigest()
+    if digest != expected_sha:
+        raise ValueError("Alpha50 checkpoint hash mismatch")
     key = (framework_root, checkpoint, device_request)
     with _model_cache_lock:
         cached = _model_cache.get(key)

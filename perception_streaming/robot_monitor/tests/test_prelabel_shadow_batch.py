@@ -42,7 +42,14 @@ class PrelabelShadowBatchTest(unittest.TestCase):
             manifest_path = Path(snapshot["snapshot_path"]) / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual([item["path"] for item in manifest["files"]], ["nested/a.png", "z.png"])
-            self.assertEqual([(item["width"], item["height"]) for item in manifest["files"]], [(1, 1), (2, 1)])
+            self.assertEqual(
+                [item["original_dimensions"] for item in manifest["files"]],
+                [{"width": 1, "height": 1}, {"width": 2, "height": 1}],
+            )
+            self.assertEqual(
+                [item["normalized_dimensions"] for item in manifest["files"]],
+                [item["original_dimensions"] for item in manifest["files"]],
+            )
             self.assertEqual(manifest["batch_id"], snapshot["batch_id"])
             self.assertEqual(manifest["snapshot_hash"], snapshot["snapshot_hash"])
             self.assertFalse((manifest_path.parent / "manifest.json.tmp").exists())
@@ -85,6 +92,23 @@ class PrelabelShadowBatchTest(unittest.TestCase):
             )
             self.assertNotEqual((branch_a / "nested" / "image.png").stat().st_ino,
                                 (branch_b / "nested" / "image.png").stat().st_ino)
+
+    def test_deleting_candidate_branch_file_keeps_snapshot_and_baseline_intact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            self._image(source / "nested" / "image.png")
+            snapshot = freeze_batch(source, root / "snapshots")
+            baseline = materialize_branch_input(snapshot, "baseline", root / "work")
+            candidate = materialize_branch_input(snapshot, "candidate", root / "work")
+
+            (candidate / "nested" / "image.png").unlink()
+
+            self.assertTrue((baseline / "nested" / "image.png").is_file())
+            self.assertEqual((baseline / "nested" / "image.png").read_bytes(), PNG_1X1)
+            snapshot_file = Path(snapshot["snapshot_path"]) / "images" / "nested" / "image.png"
+            self.assertTrue(snapshot_file.is_file())
+            self.assertEqual(snapshot_file.read_bytes(), PNG_1X1)
 
     def test_materialize_rejects_preexisting_symlinked_output_file(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -57,7 +57,12 @@ def _atomic_json_write(path: Path, data: dict[str, Any]) -> None:
 
 
 def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str]:
-    """Copy an image batch into an immutable, content-addressed snapshot."""
+    """Copy images without transformation into an immutable, content-addressed snapshot.
+
+    ``normalized_dimensions`` deliberately equals ``original_dimensions``: Task 1
+    stores the original image geometry, and later preprocessing must make any
+    geometry change explicit in a new snapshot contract.
+    """
     source_path = Path(source).resolve()
     if not source_path.is_dir():
         raise ValueError(f"source is not a directory: {source}")
@@ -73,7 +78,15 @@ def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str
         if content_hash in seen_hashes:
             raise ValueError(f"duplicate image: {relative}")
         seen_hashes.add(content_hash)
-        files.append({"path": relative, "sha256": content_hash, "width": width, "height": height})
+        dimensions = {"width": width, "height": height}
+        files.append(
+            {
+                "path": relative,
+                "sha256": content_hash,
+                "original_dimensions": dimensions,
+                "normalized_dimensions": dimensions.copy(),
+            }
+        )
 
     if not files:
         raise ValueError("source contains no images")

@@ -346,19 +346,18 @@ class Alpha50InferenceTest(unittest.TestCase):
 
     def test_inference_fuses_four_logits_unflips_and_preserves_original_shape(self):
         image = np.zeros((2, 4, 3), dtype=np.uint8)
+        image[:, :, 0] = [0, 50, 100, 150]
         calls = []
         normal = np.array([[[0, 0, 0, 0], [0, 0, 0, 0]], [[9, 1, 1, 1], [9, 1, 1, 1]]], dtype=np.float32)
 
-        def predict(_, *, size, flip):
-            calls.append((size, flip))
-            logits = normal + (4 if size == 832 else 0)
-            return logits[:, :, ::-1] if flip else logits
+        def predict(_, transformed):
+            calls.append((transformed.shape[:2], int(transformed[0, 0, 0]), int(transformed[0, -1, 0])))
+            return np.resize(normal + (4 if transformed.shape[0] == 832 else 0), (2, 3, 2))
 
-        result = infer_alpha50_snapshot(image, predict, self._candidate())
+        result = infer_alpha50_snapshot(image, Alpha50Runtime(lambda: "model", predict), self._candidate())
 
-        self.assertEqual(calls, [(768, False), (768, True), (832, False), (832, True)])
+        self.assertEqual(calls, [((768, 1536), 0, 150), ((768, 1536), 150, 0), ((832, 1664), 0, 150), ((832, 1664), 150, 0)])
         self.assertEqual(result.logits.shape, (2, 2, 4))
-        np.testing.assert_allclose(result.logits, normal + 2)
         self.assertTrue(np.all(result.mask == 1))
         self.assertEqual(result.class_stats["lawn"]["pixels"], 8)
 
@@ -368,7 +367,7 @@ class Alpha50InferenceTest(unittest.TestCase):
         candidate = self._candidate()
         candidate["export"]["confidence_threshold"] = 0.75
 
-        result = infer_alpha50_snapshot(image, lambda *_args, **_kwargs: logits, candidate)
+        result = infer_alpha50_snapshot(image, Alpha50Runtime(lambda: "model", lambda *_: logits), candidate)
 
         self.assertTrue(np.all(result.mask == 0))
 
@@ -384,12 +383,21 @@ class Alpha50InferenceTest(unittest.TestCase):
         self.assertEqual(predictor.call_count, 2)
 
     def test_save_artifacts_writes_raw_mask_and_per_class_stats(self):
-        result = infer_alpha50_snapshot(np.zeros((1, 2, 3), dtype=np.uint8), lambda *_args, **_kwargs: np.array([[[0, 0]], [[2, 2]]], dtype=np.float32), self._candidate())
+        result = infer_alpha50_snapshot(np.zeros((1, 2, 3), dtype=np.uint8), Alpha50Runtime(lambda: "model", lambda *_: np.array([[[0, 0]], [[2, 2]]], dtype=np.float32)), self._candidate())
         with tempfile.TemporaryDirectory() as tmp:
             saved = save_alpha50_artifacts(result, "snap.jpg", tmp)
 
             self.assertTrue(Path(saved["mask_path"]).is_file())
             self.assertEqual(json.loads(Path(saved["stats_path"]).read_text(encoding="utf-8")), result.class_stats)
+            import cv2
+            np.testing.assert_array_equal(cv2.imread(saved["mask_path"], cv2.IMREAD_UNCHANGED), result.mask)
+
+    def test_inference_rejects_unmapped_winning_source_class(self):
+        candidate = self._candidate()
+        logits = np.array([[[0]], [[0]], [[9]]], dtype=np.float32)
+
+        with self.assertRaisesRegex(CandidatePreflightError, "unknown source class"):
+            infer_alpha50_snapshot(np.zeros((1, 1, 3), dtype=np.uint8), Alpha50Runtime(lambda: "model", lambda *_: logits), candidate)
 
     def test_xml_filters_small_components_and_is_deterministic(self):
         mask = np.array([[1, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 0]], dtype=np.uint8)
@@ -402,6 +410,26 @@ class Alpha50InferenceTest(unittest.TestCase):
         polygons = root.findall("./image/polygon")
         self.assertEqual(len(polygons), 1)
         self.assertEqual(polygons[0].attrib["label"], "lawn草地")
+
+    def test_xml_retains_two_large_components_and_canonicalizes_image_order(self):
+        candidate = self._candidate()
+        candidate["export"]["contours"]["approx_epsilon"] = 0.5
+        first = {"name": "b.png", "width": 9, "height": 5, "mask": np.array([[1, 1, 1, 0, 0, 0, 1, 1, 1], [1, 1, 1, 0, 0, 0, 1, 1, 1], [1, 1, 1, 0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=np.uint8)}
+        second = {"name": "a.png", "width": 9, "height": 5, "mask": np.zeros((5, 9), dtype=np.uint8)}
+
+        xml = build_cvat_images_xml([first, second], candidate)
+        self.assertEqual(xml, build_cvat_images_xml([second, first], candidate))
+        root = ET.fromstring(xml)
+        self.assertEqual([item.attrib["name"] for item in root.findall("image")], ["a.png", "b.png"])
+        self.assertEqual(len(root.findall("./image[@name='b.png']/polygon")), 2)
+
+    def test_xml_validator_rejects_duplicate_image_name(self):
+        xml = build_cvat_images_xml([{"name": "snap.png", "width": 4, "height": 3, "mask": np.ones((3, 4), dtype=np.uint8)}], self._candidate()).decode("utf-8")
+        root = ET.fromstring(xml)
+        root.append(ET.fromstring(ET.tostring(root.find("image"))))
+
+        with self.assertRaisesRegex(CandidatePreflightError, "image uniqueness"):
+            validate_cvat_images_xml(ET.tostring(root), [{"name": "snap.png", "width": 4, "height": 3}], self._candidate()["expected_cvat_schema"])
 
     def test_xml_validator_rejects_invalid_name_size_geometry_and_schema(self):
         valid = build_cvat_images_xml([{"name": "snap.png", "width": 4, "height": 3, "mask": np.ones((3, 4), dtype=np.uint8)}], self._candidate()).decode("utf-8")

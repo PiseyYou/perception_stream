@@ -44,10 +44,18 @@ class Alpha50Runtime:
         self._predictor = predictor
         self._model: Any | None = None
 
-    def predict(self, image: np.ndarray, *, size: int, flip: bool) -> np.ndarray:
+    def predict(self, image: np.ndarray, *, size: int, flip: bool, interpolation: str = "bilinear") -> np.ndarray:
         if self._model is None:
             self._model = self._model_loader()
-        return np.asarray(self._predictor(self._model, image, size=size, flip=flip), dtype=np.float32)
+        if image.ndim < 2:
+            raise CandidatePreflightError("snapshot image must have height and width")
+        height, width = image.shape[:2]
+        scale = size / min(height, width)
+        resized = _cv2().resize(image, (round(width * scale), round(height * scale)), interpolation=_cv2().INTER_LINEAR)
+        transformed = np.ascontiguousarray(resized[:, ::-1] if flip else resized)
+        logits = np.asarray(self._predictor(self._model, transformed), dtype=np.float32)
+        aligned = _resize_logits(logits, height, width, interpolation)
+        return aligned[:, :, ::-1] if flip else aligned
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -448,16 +456,19 @@ def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable
     if _candidate_value(candidate_config, "fusion").get("method") != "mean_logits":
         raise CandidatePreflightError("candidate fusion method must be mean_logits")
     height, width = image.shape[:2]
-    predictor = runtime.predict if isinstance(runtime, Alpha50Runtime) else runtime
+    if not isinstance(runtime, Alpha50Runtime):
+        raise CandidatePreflightError("candidate inference requires an Alpha50Runtime")
     aligned: list[np.ndarray] = []
     for size in (768, 832):
         for flip in (False, True):
-            logits = np.asarray(predictor(image, size=size, flip=flip), dtype=np.float32)
-            resized = _resize_logits(logits, height, width, str(tta.get("interpolation", "bilinear")))
-            aligned.append(resized[:, :, ::-1] if flip else resized)
+            aligned.append(runtime.predict(image, size=size, flip=flip, interpolation=str(tta.get("interpolation", "bilinear"))))
     if len({item.shape for item in aligned}) != 1:
         raise CandidatePreflightError("Alpha50 TTA logits have inconsistent class geometry")
     fused = np.mean(np.stack(aligned, axis=0), axis=0, dtype=np.float32)
+    mapping = _candidate_value(candidate_config, "label_mapping")
+    unknown_classes = sorted(set(range(fused.shape[0])) - {int(source_id) for source_id in mapping})
+    if unknown_classes:
+        raise CandidatePreflightError(f"unknown source class IDs: {unknown_classes}")
     probabilities = _softmax(fused)
     mask = np.argmax(probabilities, axis=0).astype(np.uint8)
     export = _candidate_value(candidate_config, "export")
@@ -468,7 +479,6 @@ def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable
     threshold = float(export.get("confidence_threshold", 0.50))
     confidence = np.max(probabilities, axis=0)
     mask[confidence < threshold] = 0
-    mapping = _candidate_value(candidate_config, "label_mapping")
     stats: dict[str, dict[str, int]] = {}
     for source_id, item in sorted(mapping.items(), key=lambda pair: int(pair[0])):
         canonical = item.get("canonical") if isinstance(item, dict) else None
@@ -503,14 +513,17 @@ def build_cvat_images_xml(images: Iterable[dict[str, Any]], candidate_config: di
     root = ET.Element("annotations")
     ET.SubElement(root, "version").text = "1.1"
     cv2 = _cv2()
+    image_items = list(images)
     seen: set[str] = set()
-    for index, item in enumerate(images):
+    for item in image_items:
         name, width, height, mask = item.get("name"), item.get("width"), item.get("height"), item.get("mask")
         if not isinstance(name, str) or name in seen or not isinstance(width, int) or not isinstance(height, int):
             raise CandidatePreflightError("image name/dimensions must be unique and explicit")
         seen.add(name)
         if not isinstance(mask, np.ndarray) or mask.shape != (height, width):
             raise CandidatePreflightError("raw mask geometry does not match image dimensions")
+    for index, item in enumerate(sorted(image_items, key=lambda item: item["name"])):
+        name, width, height, mask = item["name"], item["width"], item["height"], item["mask"]
         image_element = ET.SubElement(root, "image", {"id": str(index), "name": name, "width": str(width), "height": str(height)})
         for class_id, label in sorted(((int(key), value.get("cvat")) for key, value in mapping.items() if key != "0" and isinstance(value, dict)), key=lambda pair: pair[0]):
             if not isinstance(label, str):

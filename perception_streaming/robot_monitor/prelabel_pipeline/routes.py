@@ -793,11 +793,15 @@ def _handle_cancel(handler, run_id: str) -> None:
         except Exception:
             killed = False
     if callable(shadow_cleanup):
-        for task_id in shadow_task_ids:
+        for branch in run.get("shadow", {}).get("branches", {}).values():
+            if not isinstance(branch, dict) or not branch.get("task_id"):
+                continue
+            task_id = branch["task_id"]
             try:
-                shadow_cleanup(task_id)
-            except Exception:
-                pass
+                outcome = shadow_cleanup(task_id)
+                branch["cleanup"] = {"status": "attempted", "task_id": task_id, "result": outcome}
+            except Exception as exc:
+                branch["cleanup"] = {"status": "failed", "task_id": task_id, "error": str(exc)}
     if shadow_task_ids:
         run_state.save_run(run_id, _runs_dir(_try_load_config()))
     _send_json(handler, {

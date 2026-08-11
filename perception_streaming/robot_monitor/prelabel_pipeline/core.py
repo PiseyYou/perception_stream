@@ -947,7 +947,12 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         def schema(task: Any) -> Any:
             task.fetch()
             return getattr(task, "labels", None) or getattr(task, "_model", {}).get("labels", [])
-        result = preflight_candidate(candidate, input_snapshot_hash=snapshot["snapshot_hash"], create_cvat_task=create_candidate, get_cvat_schema=schema, cleanup_cvat_task=cleanup, resolve_cvat_task=lambda _identity, _key: None, provenance_path=provenance_dir / f"{snapshot['batch_id']}-B.json", branch_record=record)
+        def resolve_candidate(identity: str, _request_key: str) -> Any:
+            for existing in client().tasks.list(search=identity):
+                if getattr(existing, "name", None) == identity:
+                    return existing
+            return None
+        result = preflight_candidate(candidate, input_snapshot_hash=snapshot["snapshot_hash"], create_cvat_task=create_candidate, get_cvat_schema=schema, cleanup_cvat_task=cleanup, resolve_cvat_task=resolve_candidate, provenance_path=provenance_dir / f"{snapshot['batch_id']}-B.json", branch_record=record)
         if not result.ok or not result.task_id:
             raise CandidatePreflightError("; ".join(result.errors) or "candidate preflight failed")
         return {"task": client().tasks.retrieve(result.task_id)}

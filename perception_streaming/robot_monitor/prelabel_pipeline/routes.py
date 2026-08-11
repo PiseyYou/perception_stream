@@ -399,7 +399,8 @@ def _handle_shadow_run(handler) -> None:
                 _send_json(handler, {"run_id": existing_id, "idempotent": True})
                 return
         run_id = uuid.uuid4().hex[:12]
-        runtime = run_state.make_runtime_run(task_prefix, input_dirs, owner_token=owner_token, upload_dir=upload_dir, shadow={**snapshot, "status": "running", "branches": {}})
+        intents = {branch: {"branch_id": branch, "status": "intent_persisted", "idempotency_key": run_state.shadow_idempotency_key(snapshot["batch_id"], branch, snapshot["snapshot_hash"])} for branch in ("A", "B")}
+        runtime = run_state.make_runtime_run(task_prefix, input_dirs, owner_token=owner_token, upload_dir=upload_dir, shadow={**snapshot, "status": "running", "branches": intents})
         run_state.runs[run_id] = runtime
     run_state.save_run(run_id, _runs_dir(cfg))
     params = dict(body)

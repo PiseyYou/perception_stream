@@ -5,6 +5,7 @@ import glob
 import hashlib
 import importlib
 import inspect
+import ipaddress
 import json
 import os
 import shlex
@@ -526,7 +527,18 @@ def cvat_session(cvat_server: dict) -> tuple[_requests.Session, str]:
         if cache and now < cache["expires"]:
             return cache["session"], cache["base"]
 
-        base = f"http://{cvat_server['host']}:{cvat_server['port']}"
+        host = str(cvat_server["host"])
+        scheme = str(cvat_server.get("scheme", "http")).lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError("invalid CVAT URL scheme")
+        if scheme == "http":
+            try:
+                allowed_http = ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                allowed_http = host.lower() in {"localhost", "localhost.localdomain"}
+            if not allowed_http:
+                raise ValueError("CVAT HTTP is allowed only for loopback/private hosts")
+        base = f"{scheme}://{host}:{cvat_server['port']}"
         session = _requests.Session()
         session.trust_env = False
         login = session.post(

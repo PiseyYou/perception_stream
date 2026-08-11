@@ -269,6 +269,11 @@ class PrelabelCoreTest(unittest.TestCase):
         self.assertFalse(session.trust_env)
         session.post.assert_called_once()
 
+    def test_cvat_session_rejects_public_plain_http(self):
+        with patch.object(core, "_cvat_session_cache", {}):
+            with self.assertRaisesRegex(ValueError, "HTTP is allowed"):
+                core.cvat_session({"id": "public", "host": "8.8.8.8", "port": 8080, "user": "u", "password": "p"})
+
     def test_upload_only_emits_skipped_steps(self):
         cfg = {
             "segment_size": 1000,

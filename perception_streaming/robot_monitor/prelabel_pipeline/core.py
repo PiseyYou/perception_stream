@@ -533,11 +533,12 @@ def cvat_session(cvat_server: dict) -> tuple[_requests.Session, str]:
             raise ValueError("invalid CVAT URL scheme")
         if scheme == "http":
             try:
-                allowed_http = ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
+                parsed_host = ipaddress.ip_address(host)
+                allowed_http = parsed_host.is_loopback or (parsed_host.is_private and bool(cvat_server.get("allow_insecure_private_http")))
             except ValueError:
                 allowed_http = host.lower() in {"localhost", "localhost.localdomain"}
             if not allowed_http:
-                raise ValueError("CVAT HTTP is allowed only for loopback/private hosts")
+                raise ValueError("CVAT HTTP is allowed only for loopback or explicitly enabled private hosts")
         base = f"{scheme}://{host}:{cvat_server['port']}"
         session = _requests.Session()
         session.trust_env = False

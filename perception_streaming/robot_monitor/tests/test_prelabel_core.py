@@ -274,6 +274,11 @@ class PrelabelCoreTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "HTTP is allowed"):
                 core.cvat_session({"id": "public", "host": "8.8.8.8", "port": 8080, "user": "u", "password": "p"})
 
+    def test_cvat_session_requires_explicit_private_http_opt_in(self):
+        with patch.object(core, "_cvat_session_cache", {}):
+            with self.assertRaisesRegex(ValueError, "explicitly enabled"):
+                core.cvat_session({"id": "private", "host": "192.168.1.3", "port": 8080, "user": "u", "password": "p"})
+
     def test_upload_only_emits_skipped_steps(self):
         cfg = {
             "segment_size": 1000,

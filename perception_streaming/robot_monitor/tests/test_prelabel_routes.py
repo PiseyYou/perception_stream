@@ -39,6 +39,25 @@ def parsed(path, query=""):
 
 
 class PrelabelRoutesTest(unittest.TestCase):
+    def test_shadow_route_builds_production_adapters_not_request_callbacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            body = json.dumps({"task_prefix": "shadow", "input_dirs": [tmp], "shadow_adapters": {"evil": "ignored"}}).encode()
+            handler = FakeHandler(body, {"Content-Length": str(len(body))})
+            snapshot = {"batch_id": "batch", "snapshot_hash": "hash", "snapshot_path": tmp}
+            factory = Mock(return_value={"cleanup": Mock()})
+            class ImmediateThread:
+                def __init__(self, target, daemon): self.target = target
+                def start(self): self.target()
+            with patch.object(routes.config_manager, "load_config", return_value={"browse_roots": [tmp], "runs_dir": str(Path(tmp) / "runs")}), \
+                 patch.object(routes, "_validated_inputs", return_value=([tmp], None)), \
+                 patch.object(routes, "freeze_batch", return_value=snapshot), \
+                 patch.object(routes.core, "build_shadow_adapters", factory), \
+                 patch.object(routes.core, "run_shadow_pipeline", return_value={"status": "failed", "branches": {}}), \
+                 patch.object(routes.threading, "Thread", ImmediateThread):
+                routes.handle(handler, parsed("/prelabel/shadow-run"))
+            self.assertEqual(handler.status, 200, self._json_payload(handler))
+            factory.assert_called_once()
+            self.assertEqual(self._json_payload(handler)["batch_id"], "batch")
     def setUp(self):
         run_state.runs.clear()
 

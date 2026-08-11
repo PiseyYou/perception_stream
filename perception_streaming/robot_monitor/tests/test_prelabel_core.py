@@ -15,6 +15,44 @@ from prelabel_pipeline import core
 
 
 class PrelabelCoreTest(unittest.TestCase):
+    def _shadow_fakes(self, tmp, raw=b"image", *, alpha=None):
+        snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
+        created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 10 if branch == "A" else 20})
+        adapters = {"materialize_branch_input": lambda *_: Path(tmp), "create_task": created, "upload": Mock(), "frames": lambda *_: [{"id": 0, "name": "one.jpg", "width": 1, "height": 1}], "frame_bytes": lambda *_args, **_kwargs: raw, "baseline": lambda *_: "a", "alpha50": alpha or (lambda *_: "b"), "import": Mock(), "cleanup": Mock()}
+        return snapshot, adapters, created
+
+    def test_shadow_creates_distinct_tasks_for_equal_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, created = self._shadow_fakes(tmp)
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual((result["branches"]["A"]["task_id"], result["branches"]["B"]["task_id"]), (10, 20))
+            self.assertEqual(result["branches"]["A"]["provenance"]["snapshot_hash"], result["branches"]["B"]["provenance"]["snapshot_hash"])
+            self.assertEqual(created.call_count, 2)
+
+    def test_shadow_keeps_a_success_when_b_inference_fails_and_disables_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp, alpha=Mock(side_effect=RuntimeError("B failed")))
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["branches"]["A"]["status"], "success")
+            self.assertEqual(result["branches"]["B"]["status"], "failed")
+            self.assertFalse(result["review_ready"])
+            self.assertEqual(result["common_success"], [])
+
+    def test_shadow_reuses_resolved_task_for_full_idempotency_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, created = self._shadow_fakes(tmp)
+            adapters["resolve_task"] = lambda key: {"id": 99} if key == "batch:A:snapshot" else None
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["branches"]["A"]["task_id"], 99)
+            self.assertEqual(created.call_count, 1)
+
+    def test_shadow_cancellation_uses_cleanup_and_terminal_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            calls = [False, False, True]
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "cancel_fn": lambda: calls.pop(0) if calls else True}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["status"], "cancelled")
+            self.assertTrue(adapters["cleanup"].called)
     def test_shadow_pipeline_blocks_import_when_uploaded_frame_bytes_differ(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"

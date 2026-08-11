@@ -253,9 +253,9 @@ def _create_task(create_cvat_task: Callable[..., Any], labels: list[dict[str, An
         supports_named = {"task_identity", "request_key"}.issubset(signature.parameters)
     except (TypeError, ValueError):
         supports_kwargs = supports_named = False
-    if supports_kwargs or supports_named:
-        return create_cvat_task(labels, task_identity=identity, request_key=request_key)
-    return create_cvat_task(labels)
+    if not (supports_kwargs or supports_named):
+        raise CandidatePreflightError("CVAT create adapter must support idempotency task_identity/request_key")
+    return create_cvat_task(labels, task_identity=identity, request_key=request_key)
 
 
 def _resolved_task_id(resolved: Any) -> int | None:
@@ -321,6 +321,8 @@ def preflight_candidate(
     branch_record["candidate_request_key"] = request_key
     try:
         task = _create_task(create_cvat_task, expected_labels, task_identity, request_key)
+    except CandidatePreflightError:
+        raise
     except Exception as exc:
         branch_record["candidate_preflight_status"] = "create_ambiguous"
         try:

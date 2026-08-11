@@ -99,7 +99,7 @@ class Alpha50CandidateTest(unittest.TestCase):
                 import_checker=lambda root: ["detectron2", "torch"],
                 gpu_checker=lambda: {"cuda": True, "vram_gb": 8},
                 disk_checker=lambda _: 8,
-                create_cvat_task=lambda labels: {"id": 91, "labels": labels},
+                create_cvat_task=lambda labels, **_: {"id": 91, "labels": labels},
                 get_cvat_schema=lambda task: [{"name": "wrong"}],
                 provenance_path=Path(tmp) / "provenance.json",
                 branch_record={},
@@ -178,7 +178,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             candidate["expected_cvat_schema"] = {"version": 1, "labels": [{"name": "lawn草地", "type": "polygon", "attributes": [{"name": "source", "type": "text", "values": []}]}]}
             cleanup = Mock(return_value={"status": "deleted"})
 
-            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=cleanup)
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record={}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _, **__: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=cleanup)
 
             self.assertTrue(result.block_import)
             self.assertEqual(result.cleanup_task_id, 44)
@@ -240,7 +240,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             candidate["output_path"] = str(output_path)
             seen = []
 
-            preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda path: seen.append(Path(path)) or 8, create_cvat_task=lambda _: {"id": 7}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}])
+            preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda path: seen.append(Path(path)) or 8, create_cvat_task=lambda _, **__: {"id": 7}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "polygon", "attributes": []}])
 
             self.assertEqual(seen, [output_path])
 
@@ -251,7 +251,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             schema = Mock()
 
             record = {}
-            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {}, get_cvat_schema=schema)
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _, **__: {}, get_cvat_schema=schema)
             self.assertTrue(result.block_import)
             self.assertEqual(record["candidate_preflight_status"], "cleanup_resolution_needed")
             schema.assert_not_called()
@@ -262,7 +262,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             candidate = self._candidate(root)
             record = {}
 
-            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=Mock(side_effect=RuntimeError("cleanup offline")), import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {"id": 17}, get_cvat_schema=Mock(side_effect=RuntimeError("schema offline")))
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=Mock(side_effect=RuntimeError("cleanup offline")), import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _, **__: {"id": 17}, get_cvat_schema=Mock(side_effect=RuntimeError("schema offline")))
 
             self.assertTrue(result.block_import)
             self.assertEqual(result.cleanup_task_id, 17)
@@ -311,3 +311,17 @@ class Alpha50CandidateTest(unittest.TestCase):
             self.assertEqual(record["candidate_preflight_status"], "cleanup_resolution_needed")
             self.assertEqual(record["candidate_cleanup_lookup_key"], record["candidate_request_key"])
             cleanup.assert_not_called()
+
+    def test_preflight_rejects_legacy_create_adapter_before_remote_invocation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            calls = []
+
+            def legacy_create(labels):
+                calls.append(labels)
+                return {"id": 1}
+
+            with self.assertRaisesRegex(CandidatePreflightError, "idempotency"):
+                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=legacy_create, get_cvat_schema=lambda _: [])
+            self.assertEqual(calls, [])

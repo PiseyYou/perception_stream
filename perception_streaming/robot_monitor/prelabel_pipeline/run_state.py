@@ -29,6 +29,7 @@ def make_runtime_run(
     skip_steps: list[int] | tuple[int, ...] | None = None,
     upload_dir: str | Path | None = None,
     created_at: str | None = None,
+    shadow: dict[str, Any] | None = None,
 ) -> dict:
     record = {
         "status": "running",
@@ -47,6 +48,8 @@ def make_runtime_run(
     }
     if upload_dir is not None:
         record["upload_dir"] = str(upload_dir)
+    if shadow is not None:
+        record["shadow"] = copy.deepcopy(shadow)
     return record
 
 
@@ -90,6 +93,8 @@ def _disk_record(run_id: str, run_data: dict) -> dict:
         record["skip_steps"] = copy.deepcopy(run_data.get("skip_steps", []))
     if "upload_dir" in run_data:
         record["upload_dir"] = run_data.get("upload_dir")
+    if isinstance(run_data.get("shadow"), dict):
+        record["shadow"] = copy.deepcopy(run_data["shadow"])
     return record
 
 
@@ -170,7 +175,7 @@ def _restore_history_record(record: dict) -> dict:
 
     event = threading.Event()
     event.set()
-    return {
+    restored = {
         "status": status,
         "task_prefix": _string_field(record, "task_prefix"),
         "input_dirs": _list_field(record, "input_dirs"),
@@ -186,6 +191,9 @@ def _restore_history_record(record: dict) -> dict:
         "cancel": False,
         "proc": None,
     }
+    if isinstance(record.get("shadow"), dict):
+        restored["shadow"] = copy.deepcopy(record["shadow"])
+    return restored
 
 
 def init_runs_from_history(runs_dir: str | Path = RUNS_DIR) -> None:

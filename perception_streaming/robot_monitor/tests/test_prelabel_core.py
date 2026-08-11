@@ -95,6 +95,15 @@ class PrelabelCoreTest(unittest.TestCase):
             result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
             self.assertEqual(result["common_success"], [])
             self.assertFalse(result["review_ready"])
+
+    def test_shadow_retry_runs_only_explicitly_failed_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, created = self._shadow_fakes(tmp)
+            prior = {"branches": {"A": {"branch_id": "A", "status": "failed"}, "B": {"branch_id": "B", "status": "success", "images": [{"path": "one.jpg", "status": "success", "sha256": hashlib.sha256(b"image").hexdigest(), "dimensions": {"width": 1, "height": 1}, "frame_id": 0}]}}}
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "shadow_state": prior, "retry_branch": "A"}, {"shadow_root": tmp}, None)
+            self.assertEqual(created.call_count, 1)
+            self.assertEqual(result["branches"]["B"]["status"], "success")
+            self.assertTrue(result["review_ready"])
     def test_shadow_pipeline_blocks_import_when_uploaded_frame_bytes_differ(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"

@@ -53,6 +53,34 @@ class PrelabelCoreTest(unittest.TestCase):
             result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "cancel_fn": lambda: calls.pop(0) if calls else True}, {"shadow_root": tmp}, None)
             self.assertEqual(result["status"], "cancelled")
             self.assertTrue(adapters["cleanup"].called)
+
+    def test_shadow_successful_frame_metadata_and_bytes_are_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp, raw=b"attested")
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            image = result["branches"]["A"]["images"][0]
+            self.assertEqual((image["path"], image["frame_id"], image["sha256"]), ("one.jpg", 0, hashlib.sha256(b"attested").hexdigest()))
+            self.assertEqual(result["branches"]["A"]["attestation_status"], "success")
+
+    def test_shadow_uses_gpu_queue_for_both_branch_inferences(self):
+        class Queue:
+            def __init__(self): self.acquires = self.releases = 0
+            def acquire(self, timeout=None): self.acquires += 1; return True
+            def release(self): self.releases += 1
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            queue = Queue()
+            core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "gpu_semaphore": queue}, {"shadow_root": tmp}, None)
+            self.assertEqual((queue.acquires, queue.releases), (2, 2))
+
+    def test_shadow_frame_failure_excludes_single_image_from_review_intersection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = b"good"
+            snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
+            adapters = {"materialize_branch_input": lambda *_: Path(tmp), "create_task": lambda branch, *_args, **_kwargs: {"id": 1 if branch == "A" else 2}, "upload": lambda *_: None, "frames": lambda *_: [{"id": 0, "name": "one.jpg", "width": 1, "height": 1}], "frame_bytes": lambda task, *_args, **_kwargs: raw if task["id"] == 1 else b"bad", "baseline": lambda *_: "a", "alpha50": lambda *_: "b", "import": Mock(), "cleanup": lambda *_: None}
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["common_success"], [])
+            self.assertFalse(result["review_ready"])
     def test_shadow_pipeline_blocks_import_when_uploaded_frame_bytes_differ(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"

@@ -12,7 +12,7 @@ import sys
 import inspect
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 import xml.etree.ElementTree as ET
 
@@ -21,6 +21,9 @@ import numpy as np
 
 class CandidatePreflightError(RuntimeError):
     """Raised before a candidate CVAT task can be created."""
+
+
+MAX_ALPHA50_INPUT_PIXELS = 64_000_000
 
 
 @dataclass(frozen=True)
@@ -44,17 +47,23 @@ class Alpha50Runtime:
         self._predictor = predictor
         self._model: Any | None = None
 
-    def predict(self, image: np.ndarray, *, size: int, flip: bool, interpolation: str = "bilinear") -> np.ndarray:
+    def predict(self, image: np.ndarray, *, size: int, flip: bool, interpolation: str = "bilinear", input_normalization: dict[str, Any] | None = None) -> np.ndarray:
+        """Predict from a BGR uint8 HxWx3 snapshot; predictor receives normalized RGB float32 HWC."""
         if self._model is None:
             self._model = self._model_loader()
-        if image.ndim < 2:
-            raise CandidatePreflightError("snapshot image must have height and width")
-        height, width = image.shape[:2]
+        prepared = _prepare_predictor_input(image, input_normalization)
+        if prepared.shape[0] * prepared.shape[1] > MAX_ALPHA50_INPUT_PIXELS:
+            raise CandidatePreflightError("snapshot image exceeds Alpha50 input pixel limit")
+        height, width = prepared.shape[:2]
         scale = size / min(height, width)
-        resized = _cv2().resize(image, (round(width * scale), round(height * scale)), interpolation=_cv2().INTER_LINEAR)
+        resized = _cv2().resize(prepared, (round(width * scale), round(height * scale)), interpolation=_cv2().INTER_LINEAR)
         transformed = np.ascontiguousarray(resized[:, ::-1] if flip else resized)
         logits = np.asarray(self._predictor(self._model, transformed), dtype=np.float32)
+        if logits.ndim != 3 or not np.isfinite(logits).all():
+            raise CandidatePreflightError("Alpha50 runtime returned non-finite logits" if logits.ndim == 3 else "Alpha50 runtime must return CxHxW logits")
         aligned = _resize_logits(logits, height, width, interpolation)
+        if not np.isfinite(aligned).all():
+            raise CandidatePreflightError("Alpha50 runtime returned non-finite logits")
         return aligned[:, :, ::-1] if flip else aligned
 
 
@@ -430,6 +439,21 @@ def _candidate_value(candidate_config: dict[str, Any], key: str) -> dict[str, An
     return value
 
 
+def _prepare_predictor_input(image: np.ndarray, input_normalization: dict[str, Any] | None) -> np.ndarray:
+    """Implement the pinned snapshot contract before any Alpha50 predictor call."""
+    if not isinstance(image, np.ndarray) or image.ndim != 3 or image.shape[0] <= 0 or image.shape[1] <= 0 or image.shape[2] != 3:
+        raise CandidatePreflightError("snapshot image must be a nonempty HxWx3 BGR image")
+    if image.dtype != np.uint8:
+        raise CandidatePreflightError("snapshot image must use uint8 pixels")
+    if not isinstance(input_normalization, dict) or input_normalization.get("color_order") != "RGB" or input_normalization.get("pixel_range") != "0_1":
+        raise CandidatePreflightError("candidate input normalization must pin RGB and 0_1")
+    mean, std = np.asarray(input_normalization.get("mean"), dtype=np.float32), np.asarray(input_normalization.get("std"), dtype=np.float32)
+    if mean.shape != (3,) or std.shape != (3,) or not np.isfinite(mean).all() or not np.isfinite(std).all() or np.any(std <= 0):
+        raise CandidatePreflightError("candidate input normalization mean/std must be three finite positive values")
+    rgb = image[:, :, ::-1].astype(np.float32) / 255.0
+    return (rgb - mean) / std
+
+
 def _resize_logits(logits: np.ndarray, height: int, width: int, interpolation: str) -> np.ndarray:
     if logits.ndim != 3:
         raise CandidatePreflightError("Alpha50 runtime must return CxHxW logits")
@@ -437,7 +461,10 @@ def _resize_logits(logits: np.ndarray, height: int, width: int, interpolation: s
     interpolation_code = {"nearest": cv2.INTER_NEAREST, "bilinear": cv2.INTER_LINEAR, "bicubic": cv2.INTER_CUBIC}.get(interpolation)
     if interpolation_code is None:
         raise CandidatePreflightError(f"unsupported logits interpolation: {interpolation}")
-    return np.stack([cv2.resize(channel, (width, height), interpolation=interpolation_code) for channel in logits], axis=0)
+    resized = np.empty((logits.shape[0], height, width), dtype=np.float32)
+    for index, channel in enumerate(logits):
+        resized[index] = cv2.resize(channel, (width, height), interpolation=interpolation_code)
+    return resized
 
 
 def _softmax(logits: np.ndarray) -> np.ndarray:
@@ -455,23 +482,34 @@ def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable
         raise CandidatePreflightError("candidate inference requires pinned scales [768, 832] and flip")
     if _candidate_value(candidate_config, "fusion").get("method") != "mean_logits":
         raise CandidatePreflightError("candidate fusion method must be mean_logits")
-    height, width = image.shape[:2]
     if not isinstance(runtime, Alpha50Runtime):
         raise CandidatePreflightError("candidate inference requires an Alpha50Runtime")
-    aligned: list[np.ndarray] = []
+    export = _candidate_value(candidate_config, "export")
+    input_normalization = _candidate_value(export, "input_normalization")
+    fused: np.ndarray | None = None
     for size in (768, 832):
         for flip in (False, True):
-            aligned.append(runtime.predict(image, size=size, flip=flip, interpolation=str(tta.get("interpolation", "bilinear"))))
-    if len({item.shape for item in aligned}) != 1:
-        raise CandidatePreflightError("Alpha50 TTA logits have inconsistent class geometry")
-    fused = np.mean(np.stack(aligned, axis=0), axis=0, dtype=np.float32)
+            aligned = runtime.predict(image, size=size, flip=flip, interpolation=str(tta.get("interpolation", "bilinear")), input_normalization=input_normalization)
+            if not np.isfinite(aligned).all():
+                raise CandidatePreflightError("Alpha50 TTA returned non-finite logits")
+            if fused is None:
+                fused = aligned.astype(np.float32, copy=True)
+            elif aligned.shape != fused.shape:
+                raise CandidatePreflightError("Alpha50 TTA logits have inconsistent class geometry")
+            else:
+                fused += aligned
+            del aligned
+    if fused is None:  # pragma: no cover - fixed TTA loop always has four passes
+        raise CandidatePreflightError("Alpha50 TTA produced no logits")
+    fused /= 4.0
+    if not np.isfinite(fused).all():
+        raise CandidatePreflightError("Alpha50 TTA fusion produced non-finite logits")
     mapping = _candidate_value(candidate_config, "label_mapping")
     unknown_classes = sorted(set(range(fused.shape[0])) - {int(source_id) for source_id in mapping})
     if unknown_classes:
         raise CandidatePreflightError(f"unknown source class IDs: {unknown_classes}")
     probabilities = _softmax(fused)
     mask = np.argmax(probabilities, axis=0).astype(np.uint8)
-    export = _candidate_value(candidate_config, "export")
     if export.get("background_policy") != "exclude":
         raise CandidatePreflightError("candidate background policy must be exclude")
     if export.get("confidence_policy") != "per-class-softmax-threshold":
@@ -489,11 +527,17 @@ def infer_alpha50_snapshot(image: np.ndarray, runtime: Alpha50Runtime | Callable
 
 def save_alpha50_artifacts(result: Alpha50InferenceResult, image_name: str, output_directory: str | Path) -> dict[str, Any]:
     """Persist raw, unmodified mask bytes and per-class pixel statistics."""
+    if not isinstance(image_name, str) or not image_name:
+        raise CandidatePreflightError("image identity must be a validated relative path")
+    identity = PurePosixPath(image_name)
+    if identity.is_absolute() or ".." in identity.parts:
+        raise CandidatePreflightError("image identity must be a validated relative path")
     target = Path(output_directory)
     target.mkdir(parents=True, exist_ok=True)
-    stem = Path(image_name).stem
-    mask_path = target / f"{stem}.png"
-    stats_path = target / f"{stem}.stats.json"
+    digest = hashlib.sha256(image_name.encode("utf-8")).hexdigest()[:16]
+    stem = identity.stem or "image"
+    mask_path = target / f"{stem}-{digest}.png"
+    stats_path = target / f"{stem}-{digest}.stats.json"
     if not _cv2().imwrite(str(mask_path), result.mask):
         raise CandidatePreflightError(f"failed to save raw mask: {mask_path}")
     stats_path.write_bytes(_canonical_json(result.class_stats) + b"\n")

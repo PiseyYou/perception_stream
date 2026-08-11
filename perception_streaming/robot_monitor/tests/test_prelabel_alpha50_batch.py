@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import yaml
@@ -23,6 +23,7 @@ from prelabel_pipeline.alpha50_batch import (
     preflight_candidate,
     framework_tree_digest,
     Alpha50Runtime,
+    Alpha50InferenceResult,
     build_cvat_images_xml,
     infer_alpha50_snapshot,
     save_alpha50_artifacts,
@@ -339,7 +340,7 @@ class Alpha50InferenceTest(unittest.TestCase):
         return {
             "tta": {"scales": [768, 832], "flip": True, "interpolation": "bilinear", "align_corners": False},
             "fusion": {"method": "mean_logits"},
-            "export": {"background_policy": "exclude", "confidence_policy": "per-class-softmax-threshold", "confidence_threshold": 0.50, "contours": {"min_area": 2, "approx_epsilon": 0.0}},
+            "export": {"background_policy": "exclude", "confidence_policy": "per-class-softmax-threshold", "confidence_threshold": 0.50, "input_normalization": {"color_order": "RGB", "pixel_range": "0_1", "mean": [0.5, 0.5, 0.5], "std": [0.5, 0.5, 0.5]}, "contours": {"min_area": 2, "approx_epsilon": 0.0}},
             "label_mapping": {"0": {"canonical": "background", "cvat": "background"}, "1": {"canonical": "lawn", "cvat": "lawn草地"}},
             "expected_cvat_schema": {"version": 1, "labels": [{"name": "background", "type": "polygon", "attributes": []}, {"name": "lawn草地", "type": "polygon", "attributes": []}]},
         }
@@ -351,12 +352,12 @@ class Alpha50InferenceTest(unittest.TestCase):
         normal = np.array([[[0, 0, 0, 0], [0, 0, 0, 0]], [[9, 1, 1, 1], [9, 1, 1, 1]]], dtype=np.float32)
 
         def predict(_, transformed):
-            calls.append((transformed.shape[:2], int(transformed[0, 0, 0]), int(transformed[0, -1, 0])))
+            calls.append((transformed.shape[:2], round(float(transformed[0, 0, 2]), 3), round(float(transformed[0, -1, 2]), 3)))
             return np.resize(normal + (4 if transformed.shape[0] == 832 else 0), (2, 3, 2))
 
         result = infer_alpha50_snapshot(image, Alpha50Runtime(lambda: "model", predict), self._candidate())
 
-        self.assertEqual(calls, [((768, 1536), 0, 150), ((768, 1536), 150, 0), ((832, 1664), 0, 150), ((832, 1664), 150, 0)])
+        self.assertEqual(calls, [((768, 1536), -1.0, 0.176), ((768, 1536), 0.176, -1.0), ((832, 1664), -1.0, 0.176), ((832, 1664), 0.176, -1.0)])
         self.assertEqual(result.logits.shape, (2, 2, 4))
         self.assertTrue(np.all(result.mask == 1))
         self.assertEqual(result.class_stats["lawn"]["pixels"], 8)
@@ -376,11 +377,34 @@ class Alpha50InferenceTest(unittest.TestCase):
         predictor = Mock(return_value=np.zeros((2, 1, 1), dtype=np.float32))
         runtime = Alpha50Runtime(loader, predictor)
 
-        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=768, flip=False)
-        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=832, flip=True)
+        normalization = self._candidate()["export"]["input_normalization"]
+        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=768, flip=False, input_normalization=normalization)
+        runtime.predict(np.zeros((1, 1, 3), dtype=np.uint8), size=832, flip=True, input_normalization=normalization)
 
         loader.assert_called_once_with()
         self.assertEqual(predictor.call_count, 2)
+
+    def test_runtime_converts_bgr_uint8_to_normalized_rgb_before_predictor(self):
+        observed = []
+        runtime = Alpha50Runtime(lambda: "model", lambda _, image: observed.append(image.copy()) or np.zeros((2, 1, 1), dtype=np.float32))
+
+        runtime.predict(np.array([[[0, 127, 255]]], dtype=np.uint8), size=768, flip=False, input_normalization=self._candidate()["export"]["input_normalization"])
+
+        self.assertEqual(observed[0].dtype, np.float32)
+        np.testing.assert_allclose(observed[0][0, 0], [1.0, (127 / 255 - 0.5) / 0.5, -1.0], rtol=0, atol=1e-6)
+
+    def test_runtime_rejects_non_bgr_snapshot_geometry(self):
+        runtime = Alpha50Runtime(lambda: "model", lambda *_: np.zeros((2, 1, 1), dtype=np.float32))
+        normalization = self._candidate()["export"]["input_normalization"]
+
+        for image in (np.zeros((2, 2), dtype=np.uint8), np.zeros((2, 2, 4), dtype=np.uint8), np.zeros((0, 2, 3), dtype=np.uint8)):
+            with self.subTest(shape=image.shape), self.assertRaisesRegex(CandidatePreflightError, "HxWx3"):
+                runtime.predict(image, size=768, flip=False, input_normalization=normalization)
+
+    def test_runtime_enforces_documented_input_pixel_bound_before_resize(self):
+        runtime = Alpha50Runtime(lambda: "model", lambda *_: np.zeros((2, 1, 1), dtype=np.float32))
+        with patch("prelabel_pipeline.alpha50_batch.MAX_ALPHA50_INPUT_PIXELS", 1), self.assertRaisesRegex(CandidatePreflightError, "pixel limit"):
+            runtime.predict(np.zeros((1, 2, 3), dtype=np.uint8), size=768, flip=False, input_normalization=self._candidate()["export"]["input_normalization"])
 
     def test_save_artifacts_writes_raw_mask_and_per_class_stats(self):
         result = infer_alpha50_snapshot(np.zeros((1, 2, 3), dtype=np.uint8), Alpha50Runtime(lambda: "model", lambda *_: np.array([[[0, 0]], [[2, 2]]], dtype=np.float32)), self._candidate())
@@ -392,12 +416,41 @@ class Alpha50InferenceTest(unittest.TestCase):
             import cv2
             np.testing.assert_array_equal(cv2.imread(saved["mask_path"], cv2.IMREAD_UNCHANGED), result.mask)
 
+    def test_save_artifacts_uses_collision_resistant_full_image_identity(self):
+        first = Alpha50InferenceResult(np.zeros((2, 1, 1), dtype=np.float32), np.array([[1]], dtype=np.uint8), {"lawn": {"pixels": 1}})
+        second = Alpha50InferenceResult(np.zeros((2, 1, 1), dtype=np.float32), np.array([[0]], dtype=np.uint8), {"lawn": {"pixels": 0}})
+        with tempfile.TemporaryDirectory() as tmp:
+            first_saved = save_alpha50_artifacts(first, "day/a/snap.jpg", tmp)
+            second_saved = save_alpha50_artifacts(second, "day/b/snap.png", tmp)
+
+            self.assertNotEqual(first_saved["mask_path"], second_saved["mask_path"])
+            self.assertNotEqual(first_saved["stats_path"], second_saved["stats_path"])
+            import cv2
+            np.testing.assert_array_equal(cv2.imread(first_saved["mask_path"], cv2.IMREAD_UNCHANGED), first.mask)
+            np.testing.assert_array_equal(cv2.imread(second_saved["mask_path"], cv2.IMREAD_UNCHANGED), second.mask)
+
     def test_inference_rejects_unmapped_winning_source_class(self):
         candidate = self._candidate()
         logits = np.array([[[0]], [[0]], [[9]]], dtype=np.float32)
 
         with self.assertRaisesRegex(CandidatePreflightError, "unknown source class"):
             infer_alpha50_snapshot(np.zeros((1, 1, 3), dtype=np.uint8), Alpha50Runtime(lambda: "model", lambda *_: logits), candidate)
+
+    def test_inference_rejects_nonfinite_or_inconsistent_logits_without_stacking(self):
+        candidate = self._candidate()
+        image = np.zeros((1, 1, 3), dtype=np.uint8)
+        nonfinite = Alpha50Runtime(lambda: "model", lambda *_: np.array([[[np.nan]], [[1]]], dtype=np.float32))
+        with self.assertRaisesRegex(CandidatePreflightError, "non-finite logits"):
+            infer_alpha50_snapshot(image, nonfinite, candidate)
+
+        calls = iter([np.zeros((2, 1, 1), dtype=np.float32), np.zeros((3, 1, 1), dtype=np.float32)])
+        inconsistent = Alpha50Runtime(lambda: "model", lambda *_: next(calls))
+        with self.assertRaisesRegex(CandidatePreflightError, "inconsistent class geometry"):
+            infer_alpha50_snapshot(image, inconsistent, candidate)
+
+        with patch("prelabel_pipeline.alpha50_batch.np.stack", side_effect=AssertionError("full TTA stack")):
+            result = infer_alpha50_snapshot(image, Alpha50Runtime(lambda: "model", lambda *_: np.zeros((2, 1, 1), dtype=np.float32)), candidate)
+        self.assertEqual(result.logits.shape, (2, 1, 1))
 
     def test_xml_filters_small_components_and_is_deterministic(self):
         mask = np.array([[1, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 0]], dtype=np.uint8)

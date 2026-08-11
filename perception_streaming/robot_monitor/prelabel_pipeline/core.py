@@ -889,7 +889,26 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         if not callable(alpha_runner):
             raise RuntimeError("Alpha50 production runner is not configured")
         return alpha_runner(input_dir, task, snapshot)
-    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50}
+    def candidate_preflight(_input: str | Path, snapshot: dict, record: dict) -> dict[str, Any]:
+        # preflight_candidate is deliberately the sole B task creator: it pins
+        # provenance, validates runtime/schema and handles ambiguous creates.
+        from .alpha50_batch import CandidatePreflightError, preflight_candidate
+        candidate = config.get("alpha50_candidate")
+        if not isinstance(candidate, dict) or not callable(alpha_runner):
+            raise CandidatePreflightError("Alpha50 candidate runtime is not configured")
+        provenance_dir = Path(config.get("runs_dir") or Path(config.get("output_base", ".")).parent) / "shadow_provenance"
+        def create_candidate(labels: list[dict[str, Any]], *, task_identity: str, request_key: str) -> Any:
+            # CVAT has no universal idempotency header; identity is embedded in
+            # task name and persisted before the next side effect.
+            return client().tasks.create({"name": task_identity, "labels": labels, "segment_size": config.get("segment_size", 1000)})
+        def schema(task: Any) -> Any:
+            task.fetch()
+            return getattr(task, "labels", None) or getattr(task, "_model", {}).get("labels", [])
+        result = preflight_candidate(candidate, input_snapshot_hash=snapshot["snapshot_hash"], create_cvat_task=create_candidate, get_cvat_schema=schema, cleanup_cvat_task=cleanup, resolve_cvat_task=lambda _identity, _key: None, provenance_path=provenance_dir / f"{snapshot['batch_id']}-B.json", branch_record=record)
+        if not result.ok or not result.task_id:
+            raise CandidatePreflightError("; ".join(result.errors) or "candidate preflight failed")
+        return {"task": client().tasks.retrieve(result.task_id)}
+    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight}
 
 
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:
@@ -955,14 +974,18 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             branch_input = _shadow_call(materializer, snapshot, branch, config.get("shadow_work_root") or Path(config.get("shadow_root", ".")) / "work")
             record["input_path"] = str(branch_input)
             persist()
+            candidate_result = None
             if branch == "B" and callable(adapters.get("candidate_preflight")):
-                _shadow_call(adapters["candidate_preflight"], branch_input, snapshot, record)
+                candidate_result = _shadow_call(adapters["candidate_preflight"], branch_input, snapshot, record)
                 record["preflight"] = "passed"
                 persist()
-            create = adapters.get("create_task")
-            if not callable(create):
-                raise ValueError("shadow create_task adapter is required")
-            task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
+            if branch == "B" and isinstance(candidate_result, dict) and candidate_result.get("task") is not None:
+                task = candidate_result["task"]
+            else:
+                create = adapters.get("create_task")
+                if not callable(create):
+                    raise ValueError("shadow create_task adapter is required")
+                task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
             record["task_id"] = _shadow_task_id(task)
             if record["task_id"] is None:
                 raise ValueError("shadow CVAT task id is invalid")
@@ -1021,6 +1044,18 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     state["status"] = "success" if len(successful) == 2 else ("cancelled" if cancel_fn() else "failed")
     if len(successful) == 2:
         state["common_success_manifest"] = {"immutable": True, "images": [{"path": path, "branches": {name: next(item for item in state["branches"][name]["images"] if item["path"] == path) for name in ("A", "B")}} for path in state["common_success"]]}
+        artifact = json.dumps(state["common_success_manifest"], ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        artifact_path = Path(config.get("shadow_manifest_root") or Path(config.get("shadow_root", ".")) / "manifests") / f"{batch_id}-{snapshot_hash}.json"
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        if artifact_path.exists() and artifact_path.read_bytes() != artifact:
+            raise ValueError("immutable common-success manifest collision")
+        if not artifact_path.exists():
+            temp_path = artifact_path.with_suffix(".tmp")
+            temp_path.write_bytes(artifact)
+            temp_path.replace(artifact_path)
+            artifact_path.chmod(0o444)
+        state["common_success_manifest"]["path"] = str(artifact_path)
+        state["common_success_manifest"]["sha256"] = hashlib.sha256(artifact).hexdigest()
         state["review_ready"] = True
     else:
         state["review_ready"] = False

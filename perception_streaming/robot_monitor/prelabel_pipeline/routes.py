@@ -442,6 +442,7 @@ def _handle_shadow_run(handler) -> None:
 def _handle_shadow_retry(handler, run_id: str) -> None:
     """Retry exactly one durable failed branch; no recovery path creates tasks."""
     body = _read_json(handler)
+    owner_token = _owner_token_from_body_or_header(handler, body)
     branch = body.get("branch_id")
     if branch not in {"A", "B"}:
         _send_json(handler, {"ok": False, "error": "branch_id A or B required"}, status=400)
@@ -458,6 +459,9 @@ def _handle_shadow_retry(handler, run_id: str) -> None:
         previous = shadow.get("branches", {}).get(branch, {}) if isinstance(shadow, dict) else {}
         if not run or not isinstance(shadow, dict) or previous.get("status") != "failed":
             _send_json(handler, {"ok": False, "error": "only a failed shadow branch may be retried"}, status=409)
+            return
+        if not owner_token or owner_token != run.get("owner_token"):
+            _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
             return
         run["status"] = "running"
         run["done"] = False
@@ -479,6 +483,14 @@ def _handle_shadow_retry(handler, run_id: str) -> None:
                 current = run_state.runs.get(run_id)
                 if current:
                     current["status"], current["done"], current["finished_at"] = result["status"], True, datetime.now().isoformat(timespec="seconds")
+                    current["event"].set()
+        except Exception as exc:
+            _append_log(run_id, {"type": "log", "level": "error", "msg": str(exc)})
+            with run_state.runs_lock:
+                current = run_state.runs.get(run_id)
+                if current:
+                    current["status"], current["done"], current["finished_at"] = "failed", True, datetime.now().isoformat(timespec="seconds")
+                    current["result"] = {"error": str(exc)}
                     current["event"].set()
         finally:
             run_state.save_run(run_id, _runs_dir(cfg))

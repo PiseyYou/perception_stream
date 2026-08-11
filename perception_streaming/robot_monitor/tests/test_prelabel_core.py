@@ -60,6 +60,16 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(result["common_success"], ["one.jpg"])
             self.assertEqual(result["common_success_manifest"]["images"][0]["branches"]["A"]["frame_id"], 0)
             self.assertEqual(imported.call_count, 2)
+
+    def test_shadow_candidate_preflight_owns_b_task_creation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = b"image"
+            snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
+            created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 1})
+            adapters = {"materialize_branch_input": lambda *_: Path(tmp), "create_task": created, "candidate_preflight": lambda *_: {"task": {"id": 2}}, "upload": lambda *_: None, "frames": lambda *_: [{"id": 0, "name": "one.jpg", "width": 1, "height": 1}], "frame_bytes": lambda *_args, **_kwargs: raw, "baseline": lambda *_: "a", "alpha50": lambda *_: "b", "import": lambda *_: None, "cleanup": lambda *_: None}
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(created.call_count, 1)
+            self.assertEqual(result["branches"]["B"]["task_id"], 2)
     def test_build_predict_cmd_keeps_opts_last(self):
         cfg = {
             "demo_dir": "/demo",

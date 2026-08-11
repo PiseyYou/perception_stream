@@ -82,6 +82,20 @@ class PrelabelRoutesTest(unittest.TestCase):
             self.assertEqual(self._json_payload(handler)["reconciled_task_ids"], [42])
             self.assertEqual(run_state.runs["abcdef123456"]["shadow"]["branches"]["B"]["cleanup"]["status"], "reconciled")
             cleanup.assert_called_once_with(42)
+
+    def test_shadow_cancel_persists_cleanup_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"branches": {"A": {"task_id": 7}}})
+            cleanup = Mock(return_value="deleted")
+            run["shadow_cleanup"] = cleanup
+            run_state.runs["abcdef123456"] = run
+            body = json.dumps({"token": "owner"}).encode()
+            handler = FakeHandler(body, {"Content-Length": str(len(body))})
+            with patch.object(routes.config_manager, "load_config", return_value={"runs_dir": str(Path(tmp) / "runs")}):
+                routes.handle(handler, parsed("/prelabel/runs/abcdef123456/cancel"))
+            branch = run_state.runs["abcdef123456"]["shadow"]["branches"]["A"]
+            self.assertEqual(branch["cleanup"], {"status": "attempted", "task_id": 7, "result": "deleted"})
+            cleanup.assert_called_once_with(7)
     def setUp(self):
         run_state.runs.clear()
 

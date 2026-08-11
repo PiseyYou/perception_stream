@@ -67,6 +67,21 @@ class PrelabelRoutesTest(unittest.TestCase):
             routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-reconcile"))
         self.assertEqual(handler.status, 403)
         factory.assert_not_called()
+
+    def test_shadow_reconcile_cleans_recorded_orphan_for_owner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"branches": {"B": {"task_id": 42, "cleanup": {"status": "needed"}}}})
+            run_state.runs["abcdef123456"]["status"] = "failed"
+            body = json.dumps({"token": "owner"}).encode()
+            handler = FakeHandler(body, {"Content-Length": str(len(body))})
+            cleanup = Mock(return_value={"deleted": True})
+            with patch.object(routes.config_manager, "load_config", return_value={"runs_dir": str(Path(tmp) / "runs")}), \
+                 patch.object(routes.core, "build_shadow_adapters", return_value={"cleanup": cleanup}):
+                routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-reconcile"))
+            self.assertEqual(handler.status, 200, self._json_payload(handler))
+            self.assertEqual(self._json_payload(handler)["reconciled_task_ids"], [42])
+            self.assertEqual(run_state.runs["abcdef123456"]["shadow"]["branches"]["B"]["cleanup"]["status"], "reconciled")
+            cleanup.assert_called_once_with(42)
     def setUp(self):
         run_state.runs.clear()
 

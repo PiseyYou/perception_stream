@@ -30,3 +30,41 @@ runs_dir: "${STREAMING_DIR}/data/prelabel_runs"
 browse_roots:
   - "${MPFORMER_ROOT}"
 segment_size: 1000
+
+# Immutable contract for the Alpha50 A/B candidate.  A run persists a manifest
+# from this snapshot; later orchestration must never re-read this mutable file.
+alpha50_candidate:
+  framework_root: "/media/sdc2/lhx/MPformer"
+  framework_revision: "code-sha256:4426f482fa5702bfc4a6c1e07c05ee58b01a382170ce53a5920e7aa38b16b5bc"
+  framework_imports: ["torch", "detectron2"]
+  weights:
+    - path: "/media/sdc2/lhx/MPformer/MP-Former/output/model_1884999.pth"
+      sha256: "a6595535ec772aaa011abd738a377ca063815b8320d2acf4acdc91ef54221222"
+  tta:
+    scales: [768, 832]
+    flip: true
+    interpolation: "bilinear"
+  fusion:
+    method: "mean_logits"
+    align_corners: false
+  export:
+    ignore_policy: "drop"
+    background_policy: "exclude"
+    contours:
+      min_area: 50
+      approx_epsilon: 1.5
+      smooth: true
+      fill_holes: true
+  min_vram_gb: 8
+  min_disk_gb: 20
+  label_mapping:
+    "0": {canonical: "background", cvat: "background"}
+    "1": {canonical: "lawn", cvat: "lawn草地"}
+    "2": {canonical: "sky", cvat: "sky天空"}
+    "3": {canonical: "building_wall", cvat: "building,wall建筑，墙体"}
+    "4": {canonical: "fence", cvat: "fence栅栏"}
+    "5": {canonical: "back_tree", cvat: "back_tree背景树"}
+    "6": {canonical: "pole", cvat: "pole杆子"}
+    "7": {canonical: "obstacle_tree", cvat: "obstacle_tree固定障碍树"}
+    "8": {canonical: "curb_step", cvat: "curb,step马路牙子，台阶"}
+    "9": {canonical: "fixed_obstacle", cvat: "fixed obstacle固定障碍物"}

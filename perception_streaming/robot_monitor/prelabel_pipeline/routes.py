@@ -390,6 +390,11 @@ def _handle_shadow_run(handler) -> None:
         _send_json(handler, {"ok": False, "error": str(exc)}, status=403)
         return
     with run_state.runs_lock:
+        indexed = run_state.load_shadow_index(_runs_dir(cfg))
+        index_key = f"{owner_token}:{snapshot['batch_id']}:{snapshot['snapshot_hash']}"
+        if index_key in indexed:
+            _send_json(handler, {"run_id": indexed[index_key]["run_id"], "idempotent": True, "retained": True})
+            return
         for existing_id, existing in run_state.runs.items():
             shadow = existing.get("shadow", {})
             if shadow.get("batch_id") == snapshot["batch_id"] and shadow.get("snapshot_hash") == snapshot["snapshot_hash"]:

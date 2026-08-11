@@ -15,6 +15,7 @@ STREAMING_DIR = Path(__file__).resolve().parents[2]
 RUNS_DIR = STREAMING_DIR / "data" / "prelabel_runs"
 UPLOADS_DIR = STREAMING_DIR / "data" / "prelabel_uploads"
 UPLOAD_META_NAME = ".upload_meta.json"
+SHADOW_INDEX_NAME = "shadow_snapshot_index.json"
 TERMINAL_STATUSES = {"success", "failed", "cancelled"}
 INTERRUPTED_RESTART_MSG = "服务重启，运行中任务已中断"
 
@@ -27,6 +28,33 @@ def shadow_idempotency_key(batch_id: str, branch_id: str, snapshot_hash: str) ->
     if not all(isinstance(value, str) and value for value in (batch_id, branch_id, snapshot_hash)):
         raise ValueError("shadow idempotency identity is required")
     return f"{batch_id}:{branch_id}:{snapshot_hash}"
+
+
+def shadow_index_path(runs_dir: str | Path = RUNS_DIR) -> Path:
+    return Path(runs_dir) / SHADOW_INDEX_NAME
+
+
+def load_shadow_index(runs_dir: str | Path = RUNS_DIR) -> dict[str, dict]:
+    try:
+        data = json.loads(shadow_index_path(runs_dir).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def update_shadow_index(run_id: str, run_data: dict, runs_dir: str | Path = RUNS_DIR) -> None:
+    shadow = run_data.get("shadow")
+    if not isinstance(shadow, dict) or not shadow.get("batch_id") or not shadow.get("snapshot_hash"):
+        return
+    owner = run_data.get("owner_token", "")
+    key = f"{owner}:{shadow['batch_id']}:{shadow['snapshot_hash']}"
+    index = load_shadow_index(runs_dir)
+    index[key] = {"run_id": run_id, "owner_token": owner, "batch_id": shadow["batch_id"], "snapshot_hash": shadow["snapshot_hash"], "status": run_data.get("status"), "branches": copy.deepcopy(shadow.get("branches", {})), "updated_at": datetime.now().isoformat(timespec="seconds")}
+    path = shadow_index_path(runs_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(path)
 
 
 def make_runtime_run(
@@ -116,6 +144,7 @@ def save_run(run_id: str, runs_dir: str | Path = RUNS_DIR) -> None:
     tmp_path = path.with_suffix(".json.tmp")
     tmp_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp_path.replace(path)
+    update_shadow_index(run_id, run, runs_dir)
     cleanup_old_runs(runs_dir)
     cleanup_old_runs_in_memory()
 

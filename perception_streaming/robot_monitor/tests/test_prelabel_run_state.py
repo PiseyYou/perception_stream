@@ -27,6 +27,16 @@ class PrelabelRunStateTest(unittest.TestCase):
             run_state.save_run("abcdef123456", tmp)
             run_state.runs.clear(); run_state.init_runs_from_history(tmp)
             self.assertEqual(run_state.runs["abcdef123456"]["shadow"]["branches"]["A"]["attempt"], 2)
+
+    def test_shadow_snapshot_index_survives_run_history_pruning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = run_state.make_runtime_run("x", [], owner_token="owner", shadow={"batch_id": "batch", "snapshot_hash": "hash", "branches": {"A": {"task_id": 3, "import_status": "success"}}})
+            run["status"] = "success"; run["done"] = True
+            run_state.runs["abcdef123456"] = run
+            run_state.save_run("abcdef123456", tmp)
+            (Path(tmp) / "abcdef123456.json").unlink()
+            index = run_state.load_shadow_index(tmp)
+            self.assertEqual(index["owner:batch:hash"]["branches"]["A"]["import_status"], "success")
     def test_shadow_idempotency_key_uses_batch_branch_and_snapshot(self):
         self.assertEqual(
             run_state.shadow_idempotency_key("batch", "A", "snapshot"),

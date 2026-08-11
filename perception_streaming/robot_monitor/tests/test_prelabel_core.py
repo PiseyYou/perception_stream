@@ -96,6 +96,13 @@ class PrelabelCoreTest(unittest.TestCase):
             core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "gpu_semaphore": queue}, {"shadow_root": tmp}, None)
             self.assertEqual((queue.acquires, queue.releases), (2, 2))
 
+    def test_shadow_persists_upload_intent_before_remote_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            states = []
+            core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "shadow_checkpoint": states.append}, {"shadow_root": tmp}, None)
+            self.assertTrue(any(state["branches"].get("A", {}).get("upload_status") == "intent_persisted" for state in states))
+
     def test_shadow_frame_failure_excludes_single_image_from_review_intersection(self):
         with tempfile.TemporaryDirectory() as tmp:
             raw = b"good"

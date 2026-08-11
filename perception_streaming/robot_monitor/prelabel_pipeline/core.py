@@ -856,6 +856,18 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
     upload paths.  That is the only meaningful attestation of what CVAT received.
     """
     server = _require_cvat_server(config)
+    scheme = str(server.get("scheme", "http")).lower()
+    host = str(server.get("host", ""))
+    if scheme not in {"http", "https"}:
+        raise ValueError("invalid CVAT URL scheme")
+    if scheme == "http":
+        try:
+            parsed_host = ipaddress.ip_address(host)
+            allowed_http = parsed_host.is_loopback or (parsed_host.is_private and bool(server.get("allow_insecure_private_http")))
+        except ValueError:
+            allowed_http = host.lower() in {"localhost", "localhost.localdomain"}
+        if not allowed_http:
+            raise ValueError("CVAT HTTP is allowed only for loopback or explicitly enabled private hosts")
     client_box: dict[str, Any] = {}
     def client() -> Any:
         if "client" not in client_box:
@@ -1124,6 +1136,8 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             frames_fn, bytes_fn = adapters.get("frames"), adapters.get("frame_bytes")
             if not all(callable(fn) for fn in (upload, frames_fn, bytes_fn)):
                 raise ValueError("shadow upload/frame adapters are required")
+            record["upload_status"] = "intent_persisted"
+            persist()
             _shadow_call(upload, task, branch_input)
             record["upload_status"] = "success"
             persist()

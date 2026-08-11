@@ -18,6 +18,15 @@ class PrelabelRunStateTest(unittest.TestCase):
         restored = run_state._restore_history_record({"status": "running", "task_prefix": "x", "input_dirs": [], "created_at": "now", "shadow": {"branches": {"B": {"task_id": 9}}}})
         self.assertEqual(restored["shadow"]["branches"]["B"]["cleanup"]["status"], "needed")
         self.assertEqual(restored["shadow"]["branches"]["B"]["cleanup"]["reason"], "service_recovery")
+
+    def test_shadow_attempt_history_survives_disk_restore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = run_state.make_runtime_run("x", [], shadow={"branches": {"A": {"attempt": 2, "attempt_history": [{"status": "failed"}]}}})
+            run["status"] = "failed"; run["done"] = True
+            run_state.runs["abcdef123456"] = run
+            run_state.save_run("abcdef123456", tmp)
+            run_state.runs.clear(); run_state.init_runs_from_history(tmp)
+            self.assertEqual(run_state.runs["abcdef123456"]["shadow"]["branches"]["A"]["attempt"], 2)
     def test_shadow_idempotency_key_uses_batch_branch_and_snapshot(self):
         self.assertEqual(
             run_state.shadow_idempotency_key("batch", "A", "snapshot"),

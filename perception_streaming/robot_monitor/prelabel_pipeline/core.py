@@ -907,7 +907,14 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         if not callable(loader) or not callable(predictor):
             raise RuntimeError("Alpha50 runtime loader/predictor is unavailable")
         from .alpha50_batch import Alpha50Runtime
-        return Alpha50Runtime(loader, predictor)
+        # Runtime paths are declarative configuration, not Python callable
+        # injection.  Existing zero-argument loaders remain supported.
+        if any(key in runtime_cfg for key in ("framework_root", "checkpoint", "device")):
+            def configured_loader() -> Any:
+                return loader(runtime_cfg)
+        else:
+            configured_loader = loader
+        return Alpha50Runtime(configured_loader, predictor)
     alpha_runtime: dict[str, Any] = {}
     def alpha50(input_dir: str | Path, task: Any, snapshot: dict) -> Any:
         from .alpha50_batch import build_cvat_images_xml, infer_alpha50_snapshot
@@ -960,7 +967,7 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         from .alpha50_batch import validate_cvat_images_xml
         images = [{"name": item["path"], "width": (item.get("normalized_dimensions") or item["original_dimensions"])["width"], "height": (item.get("normalized_dimensions") or item["original_dimensions"])["height"]} for item in files]
         validate_cvat_images_xml(Path(xml).read_bytes(), images, candidate_config["expected_cvat_schema"])
-    return {"create_task": create, "resolve_task": resolve_task, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml}
+    return {"create_task": create, "resolve_task": resolve_task, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml, "resolve_alpha50_runtime": resolve_runtime}
 
 
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:

@@ -34,13 +34,20 @@ segment_size: 1000
 # Immutable contract for the Alpha50 A/B candidate.  A run persists a manifest
 # from this snapshot; later orchestration must never re-read this mutable file.
 alpha50_candidate:
-  framework_root: "/media/sdc2/lhx/MPformer/MP-Former"
-  framework_revision: "git-head:a71f504a467d7079cf02726a05ff23bbb933607d"
+  framework_root: "/media/sdc2/yf/import_backup/train_data/multiyolov5_framework"
+  framework_revision: "tree-sha256:69612f9bdff887a74c84546c503ac7618c59d142a7e1dca5276c222e8bbece7b"
   output_path: "${STREAMING_DIR}/data/prelabel_runs/alpha50_candidate"
-  framework_imports: ["torch", "detectron2"]
+  framework_imports: ["torch"]
   weights:
-    - path: "/media/sdc2/lhx/MPformer/MP-Former/output/model_1884999.pth"
-      sha256: "a6595535ec772aaa011abd738a377ca063815b8320d2acf4acdc91ef54221222"
+    - path: "/media/sdc2/yf/import_backup/train_data/checkpoints_g9_soup/alpha27_to_g9best_soup_alpha50.pt"
+      sha256: "3da52e51fb054b798f8b388ab4e369b561e39930f6aa2ab879bf0868993d393e"
+  runtime:
+    module: "prelabel_pipeline.alpha50_yolov5_runtime"
+    loader: "load_alpha50_model"
+    predictor: "predict_alpha50_logits"
+    framework_root: "/media/sdc2/yf/import_backup/train_data/multiyolov5_framework"
+    checkpoint: "/media/sdc2/yf/import_backup/train_data/checkpoints_g9_soup/alpha27_to_g9best_soup_alpha50.pt"
+    device: "auto"
   tta:
     scales: [768, 832]
     flip: true

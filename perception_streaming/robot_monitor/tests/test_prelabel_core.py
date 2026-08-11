@@ -18,7 +18,7 @@ class PrelabelCoreTest(unittest.TestCase):
     def test_production_shadow_adapter_downloads_cvat_frame_metadata_and_bytes(self):
         client = Mock()
         session = Mock()
-        meta = Mock(); meta.json.return_value = {"frames": [{"name": "one.jpg", "width": 4, "height": 3}]}; meta.raise_for_status.return_value = None
+        meta = Mock(); meta.headers = {}; meta.iter_content.return_value = [b'{"frames":[{"name":"one.jpg","width":4,"height":3}]}']; meta.raise_for_status.return_value = None
         data = Mock(); data.content = b"actual-frame"; data.iter_content.return_value = [b"actual-", b"frame"]; data.headers = {}; data.raise_for_status.return_value = None
         session.get.side_effect = [meta, data]
         cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}

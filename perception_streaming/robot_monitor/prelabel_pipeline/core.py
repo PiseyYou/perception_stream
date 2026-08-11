@@ -875,7 +875,7 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
                 client_box["client"] = client_factory()
             else:
                 from cvat_sdk import make_client
-                client_box["client"] = make_client(host=server["host"], port=server["port"], credentials=(server["user"], server["password"]))
+                client_box["client"] = make_client(host=f"{scheme}://{host}", port=server["port"], credentials=(server["user"], server["password"]))
         return client_box["client"]
     def create(branch: str, task_prefix: str, _input: str | Path, **kwargs: Any) -> Any:
         labels = build_cvat_labels(config["labels_csv"])
@@ -901,9 +901,21 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         task.fetch()
     def frames(task: Any) -> list[dict[str, Any]]:
         session, base = cvat_session(server)
-        response = session.get(f"{base}/api/tasks/{task.id}/data/meta", timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        response = session.get(f"{base}/api/tasks/{task.id}/data/meta", timeout=30, stream=True)
+        try:
+            response.raise_for_status()
+            maximum = int(config.get("shadow_max_metadata_bytes", 4 * 1024 * 1024))
+            declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
+            if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
+                raise ValueError("CVAT frame metadata exceeds configured limit")
+            body = b"".join(chunk for chunk in response.iter_content(chunk_size=65536) if chunk)
+            if len(body) > maximum:
+                raise ValueError("CVAT frame metadata exceeds configured limit")
+            data = json.loads(body.decode("utf-8"))
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
         raw = data.get("frames", []) if isinstance(data, dict) else []
         max_frames = int(config.get("shadow_max_cvat_frames", 10_000))
         max_pixels = int(config.get("shadow_max_frame_pixels", 64_000_000))

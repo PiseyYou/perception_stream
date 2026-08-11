@@ -45,6 +45,9 @@ def handle(handler, parsed) -> None:
         if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/shadow-retry"):
             _handle_shadow_retry(handler, path.split("/")[-2])
             return
+        if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/shadow-reconcile"):
+            _handle_shadow_reconcile(handler, path.split("/")[-2])
+            return
         if method == "GET" and path.startswith("/prelabel/stream/"):
             _handle_stream(handler, path.rsplit("/", 1)[-1], query)
             return
@@ -90,6 +93,8 @@ def _default_method_for_path(path: str) -> str:
     if path.startswith("/prelabel/runs/") and path.endswith("/cancel"):
         return "POST"
     if path.startswith("/prelabel/runs/") and path.endswith("/shadow-retry"):
+        return "POST"
+    if path.startswith("/prelabel/runs/") and path.endswith("/shadow-reconcile"):
         return "POST"
     if path.startswith("/prelabel/settings/cvat-server/"):
         return "PATCH"
@@ -405,6 +410,8 @@ def _handle_shadow_run(handler) -> None:
                 run["result"] = _redact(state)
         run_state.save_run(run_id, _runs_dir(cfg))
     params["shadow_checkpoint"] = checkpoint
+    with run_state.runs_lock:
+        run_state.runs[run_id]["shadow_cleanup"] = params["shadow_adapters"]["cleanup"]
 
     def target() -> None:
         try:
@@ -496,6 +503,38 @@ def _handle_shadow_retry(handler, run_id: str) -> None:
             run_state.save_run(run_id, _runs_dir(cfg))
     threading.Thread(target=target, daemon=True).start()
     _send_json(handler, {"run_id": run_id, "retry_branch": branch})
+
+
+def _handle_shadow_reconcile(handler, run_id: str) -> None:
+    """Authorized cleanup of durable orphan tasks; it never creates work."""
+    body = _read_json(handler)
+    token = _owner_token_from_body_or_header(handler, body)
+    try:
+        validate_run_id(run_id)
+        cfg = config_manager.load_config()
+    except ValueError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=400)
+        return
+    with run_state.runs_lock:
+        run = run_state.runs.get(run_id)
+        if not run or not token or token != run.get("owner_token"):
+            _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
+            return
+        branches = run.get("shadow", {}).get("branches", {})
+    cleanup = core.build_shadow_adapters(cfg)["cleanup"]
+    reconciled = []
+    for branch in branches.values():
+        if not isinstance(branch, dict) or not branch.get("task_id") or branch.get("cleanup", {}).get("status") not in {"needed", "failed"}:
+            continue
+        task_id = branch["task_id"]
+        try:
+            cleanup(task_id)
+            branch["cleanup"] = {"status": "reconciled", "task_id": task_id}
+            reconciled.append(task_id)
+        except Exception as exc:
+            branch["cleanup"] = {"status": "failed", "task_id": task_id, "error": str(exc)}
+    run_state.save_run(run_id, _runs_dir(cfg))
+    _send_json(handler, {"ok": True, "reconciled_task_ids": reconciled})
 
 
 def _validated_inputs(body: dict, cfg: dict, owner_token: str) -> tuple[list[str], str | None]:
@@ -735,6 +774,13 @@ def _handle_cancel(handler, run_id: str) -> None:
             _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
             return
         run["cancel"] = True
+        shadow_cleanup = run.get("shadow_cleanup")
+        shadow_task_ids = [branch.get("task_id") for branch in run.get("shadow", {}).get("branches", {}).values() if isinstance(branch, dict) and branch.get("task_id")]
+        if isinstance(run.get("shadow"), dict):
+            for branch in run["shadow"].get("branches", {}).values():
+                if isinstance(branch, dict) and branch.get("task_id"):
+                    branch["status"] = "cancelled"
+                    branch["cleanup"] = {"status": "needed", "task_id": branch["task_id"], "reason": "cancel"}
         proc = run.get("proc")
         event = run.get("event")
         if event:
@@ -746,6 +792,14 @@ def _handle_cancel(handler, run_id: str) -> None:
             killed = True
         except Exception:
             killed = False
+    if callable(shadow_cleanup):
+        for task_id in shadow_task_ids:
+            try:
+                shadow_cleanup(task_id)
+            except Exception:
+                pass
+    if shadow_task_ids:
+        run_state.save_run(run_id, _runs_dir(_try_load_config()))
     _send_json(handler, {
         "ok": True,
         "msg": "已立即终止当前步骤" if killed else "已设置取消标志（无进行中的子进程）",

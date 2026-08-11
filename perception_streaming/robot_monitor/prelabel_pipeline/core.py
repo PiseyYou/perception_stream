@@ -848,9 +848,17 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
                 from cvat_sdk import make_client
                 client_box["client"] = make_client(host=server["host"], port=server["port"], credentials=(server["user"], server["password"]))
         return client_box["client"]
-    def create(branch: str, task_prefix: str, _input: str | Path, **_kwargs: Any) -> Any:
+    def create(branch: str, task_prefix: str, _input: str | Path, **kwargs: Any) -> Any:
         labels = build_cvat_labels(config["labels_csv"])
-        return client().tasks.create({"name": f"{task_prefix}_{branch}", "labels": labels, "segment_size": config.get("segment_size", 1000)})
+        identity = kwargs.get("idempotency_key") or f"{task_prefix}_{branch}"
+        return client().tasks.create({"name": f"shadow-{identity}", "labels": labels, "segment_size": config.get("segment_size", 1000)})
+    def resolve_task(identity: str) -> Any:
+        expected = f"shadow-{identity}"
+        matches = client().tasks.list(search=expected)
+        for task in matches:
+            if getattr(task, "name", None) == expected:
+                return task
+        return None
     def upload(task: Any, input_dir: str | Path) -> None:
         paths = sorted(str(path) for path in Path(input_dir).rglob("*") if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
         if not paths:
@@ -947,7 +955,7 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         from .alpha50_batch import validate_cvat_images_xml
         images = [{"name": item["path"], "width": (item.get("normalized_dimensions") or item["original_dimensions"])["width"], "height": (item.get("normalized_dimensions") or item["original_dimensions"])["height"]} for item in files]
         validate_cvat_images_xml(Path(xml).read_bytes(), images, candidate_config["expected_cvat_schema"])
-    return {"create_task": create, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml}
+    return {"create_task": create, "resolve_task": resolve_task, "upload": upload, "frames": frames, "frame_bytes": frame_bytes, "import": importer, "cleanup": cleanup, "baseline": baseline, "alpha50": alpha50, "candidate_preflight": candidate_preflight, "validate_candidate_xml": validate_candidate_xml}
 
 
 def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:
@@ -1024,7 +1032,10 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                 create = adapters.get("create_task")
                 if not callable(create):
                     raise ValueError("shadow create_task adapter is required")
-                task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
+                resolver = adapters.get("resolve_task")
+                task = _shadow_call(resolver, key) if callable(resolver) else None
+                if task is None:
+                    task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
             record["task_id"] = _shadow_task_id(task)
             if record["task_id"] is None:
                 raise ValueError("shadow CVAT task id is invalid")
@@ -1050,7 +1061,12 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             # Both model paths contend for the same GPU; the queue is deliberately
             # held only around inference, never around CVAT/network side effects.
             if gpu_queue is not None:
-                gpu_queue.acquire()
+                while not gpu_queue.acquire(timeout=0.1):
+                    if cancel_fn():
+                        raise RuntimeError("shadow run cancelled while waiting for GPU")
+                if cancel_fn():
+                    gpu_queue.release()
+                    raise RuntimeError("shadow run cancelled before inference")
                 try:
                     xml = _shadow_call(runner, branch_input, task, snapshot)
                 finally:

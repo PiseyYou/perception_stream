@@ -8,6 +8,7 @@ from .core import (
     list_cvat_users,
     run_pipeline,
     run_prelabel_pipeline,
+    run_shadow_pipeline,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "list_cvat_users",
     "run_pipeline",
     "run_prelabel_pipeline",
+    "run_shadow_pipeline",
 ]

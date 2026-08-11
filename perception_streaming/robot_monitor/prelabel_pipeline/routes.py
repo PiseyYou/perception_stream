@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from . import config_manager, core, run_state
+from .shadow_batch import freeze_batch
 from .path_utils import InvalidPathError, resolve_under, safe_filename, unique_path, validate_run_id, validate_upload_id
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
@@ -37,6 +38,9 @@ def handle(handler, parsed) -> None:
             return
         if method == "POST" and path == "/prelabel/run":
             _handle_run(handler)
+            return
+        if method == "POST" and path == "/prelabel/shadow-run":
+            _handle_shadow_run(handler)
             return
         if method == "GET" and path.startswith("/prelabel/stream/"):
             _handle_stream(handler, path.rsplit("/", 1)[-1], query)
@@ -78,7 +82,7 @@ def handle(handler, parsed) -> None:
 
 
 def _default_method_for_path(path: str) -> str:
-    if path in {"/prelabel/upload", "/prelabel/run", "/prelabel/restart-container"}:
+    if path in {"/prelabel/upload", "/prelabel/run", "/prelabel/shadow-run", "/prelabel/restart-container"}:
         return "POST"
     if path.startswith("/prelabel/runs/") and path.endswith("/cancel"):
         return "POST"
@@ -349,6 +353,73 @@ def _handle_run(handler) -> None:
     thread = threading.Thread(target=thread_target, daemon=True)
     thread.start()
     _send_json(handler, {"run_id": run_id})
+
+
+def _handle_shadow_run(handler) -> None:
+    """Submit one frozen A/B job; duplicate snapshots return the existing run."""
+    body = _read_json(handler)
+    task_prefix = str(body.get("task_prefix", "")).strip()
+    if not task_prefix:
+        _send_json(handler, {"ok": False, "error": "task_prefix required"}, status=400)
+        return
+    owner_token = _owner_token_from_body_or_header(handler, body)
+    try:
+        cfg = config_manager.load_config()
+        input_dirs, upload_dir = _validated_inputs(body, cfg, owner_token)
+        if len(input_dirs) != 1:
+            raise ValueError("shadow run requires exactly one input directory")
+        snapshot_root = cfg.get("shadow_snapshot_root") or str(_runs_dir(cfg).parent / "shadow_snapshots")
+        snapshot = freeze_batch(input_dirs[0], snapshot_root)
+    except (ValueError, InvalidPathError) as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=400)
+        return
+    except PermissionError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=403)
+        return
+    with run_state.runs_lock:
+        for existing_id, existing in run_state.runs.items():
+            shadow = existing.get("shadow", {})
+            if shadow.get("batch_id") == snapshot["batch_id"] and shadow.get("snapshot_hash") == snapshot["snapshot_hash"]:
+                _send_json(handler, {"run_id": existing_id, "idempotent": True})
+                return
+        run_id = uuid.uuid4().hex[:12]
+        runtime = run_state.make_runtime_run(task_prefix, input_dirs, owner_token=owner_token, upload_dir=upload_dir, shadow={**snapshot, "status": "running", "branches": {}})
+        run_state.runs[run_id] = runtime
+    run_state.save_run(run_id, _runs_dir(cfg))
+    params = dict(body)
+    params.update({"shadow_snapshot": snapshot, "cancel_fn": lambda: _is_cancelled(run_id), "gpu_semaphore": gpu_semaphore})
+
+    def target() -> None:
+        try:
+            result = core.run_shadow_pipeline(run_id, task_prefix, input_dirs, params, cfg, lambda item: _append_log(run_id, item))
+            with run_state.runs_lock:
+                run = run_state.runs.get(run_id)
+                if run:
+                    run["result"] = _redact(result)
+                    run["shadow"] = _redact(result)
+                    run["status"] = result.get("status", "failed")
+        except Exception as exc:
+            _append_log(run_id, {"type": "log", "level": "error", "msg": str(exc)})
+            with run_state.runs_lock:
+                run = run_state.runs.get(run_id)
+                if run:
+                    run["status"] = "failed"
+                    run["result"] = {"error": str(exc)}
+        finally:
+            with run_state.runs_lock:
+                run = run_state.runs.get(run_id)
+                if run:
+                    run["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                    run["done"] = True
+                    run["event"].set()
+            run_state.save_run(run_id, _runs_dir(cfg))
+            # A snapshot is immutable and deliberately retained for audit/retry;
+            # uploaded staging data can be removed only after it has been frozen.
+            if upload_dir:
+                _safe_remove_upload_dir(upload_dir, cfg)
+
+    threading.Thread(target=target, daemon=True).start()
+    _send_json(handler, {"run_id": run_id, "batch_id": snapshot["batch_id"]})
 
 
 def _validated_inputs(body: dict, cfg: dict, owner_token: str) -> tuple[list[str], str | None]:

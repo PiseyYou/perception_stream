@@ -2,6 +2,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import hashlib
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
@@ -14,6 +15,29 @@ from prelabel_pipeline import core
 
 
 class PrelabelCoreTest(unittest.TestCase):
+    def test_shadow_pipeline_blocks_import_when_uploaded_frame_bytes_differ(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            source.mkdir()
+            image = source / "one.jpg"
+            image.write_bytes(b"not-a-real-image")
+            adapters = {
+                "freeze_batch": lambda *_: {"batch_id": "batch", "snapshot_hash": "snapshot", "snapshot_path": str(source)},
+                "materialize_branch_input": lambda *_: source,
+                "create_task": lambda branch, *_args, **_kwargs: {"id": 1 if branch == "A" else 2},
+                "upload": lambda *_: None,
+                "frames": lambda *_: [{"id": 7, "name": "one.jpg", "width": 1, "height": 1}],
+                "frame_bytes": lambda *_: b"changed",
+                "baseline": lambda *_: b"<annotations/>",
+                "alpha50": lambda *_: b"<annotations/>",
+                "import": Mock(),
+                "cleanup": lambda *_: None,
+            }
+            snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(b"original").hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
+            result = core.run_shadow_pipeline("rid", "task", [str(source)], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["branches"]["A"]["status"], "failed")
+            self.assertIn("frame verification", result["branches"]["A"]["error"])
+            adapters["import"].assert_not_called()
     def test_build_predict_cmd_keeps_opts_last(self):
         cfg = {
             "demo_dir": "/demo",

@@ -14,6 +14,11 @@ from prelabel_pipeline import run_state
 
 
 class PrelabelRunStateTest(unittest.TestCase):
+    def test_shadow_idempotency_key_uses_batch_branch_and_snapshot(self):
+        self.assertEqual(
+            run_state.shadow_idempotency_key("batch", "A", "snapshot"),
+            "batch:A:snapshot",
+        )
     def setUp(self):
         run_state.runs.clear()
 

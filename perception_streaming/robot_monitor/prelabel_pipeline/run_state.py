@@ -22,6 +22,13 @@ runs: dict = {}
 runs_lock = threading.RLock()
 
 
+def shadow_idempotency_key(batch_id: str, branch_id: str, snapshot_hash: str) -> str:
+    """The complete durable identity for one shadow branch side effect."""
+    if not all(isinstance(value, str) and value for value in (batch_id, branch_id, snapshot_hash)):
+        raise ValueError("shadow idempotency identity is required")
+    return f"{batch_id}:{branch_id}:{snapshot_hash}"
+
+
 def make_runtime_run(
     task_prefix: str,
     input_dirs: list[str] | tuple[str, ...],

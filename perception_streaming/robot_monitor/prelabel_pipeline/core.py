@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import glob
+import hashlib
+import json
 import os
 import shlex
 import subprocess
@@ -774,3 +776,157 @@ def run_pipeline(
 
 
 run_prelabel_pipeline = run_pipeline
+
+
+# Shadow A/B runs intentionally do not reuse ``run_pipeline``: the legacy path
+# imports immediately after upload, while the shadow contract must attest CVAT's
+# real frames (including bytes) before an import can occur.
+def _shadow_call(adapter: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Call narrow test/deployment adapters without imposing one SDK signature."""
+    try:
+        return adapter(*args, **kwargs)
+    except TypeError:
+        return adapter(*args)
+
+
+def _shadow_manifest(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    files = snapshot.get("files")
+    if not isinstance(files, list):
+        try:
+            files = json.loads((Path(snapshot["snapshot_path"]) / "manifest.json").read_text(encoding="utf-8"))["files"]
+        except (KeyError, OSError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("shadow snapshot manifest is required") from exc
+    if not files:
+        raise ValueError("shadow snapshot contains no images")
+    return copy.deepcopy(files)
+
+
+def _shadow_task_id(task: Any) -> int | None:
+    value = task.get("id") if isinstance(task, dict) else getattr(task, "id", None)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def _shadow_frame_outcomes(files: list[dict[str, Any]], frames: list[Any], frame_bytes: Callable[..., Any], task: Any) -> tuple[list[dict[str, Any]], bool]:
+    """Attest CVAT frame identity and raw bytes against the frozen snapshot."""
+    outcomes: list[dict[str, Any]] = []
+    valid = len(frames) == len(files)
+    for index, source in enumerate(files):
+        frame = frames[index] if index < len(frames) else {}
+        info = frame if isinstance(frame, dict) else vars(frame)
+        frame_id = info.get("id")
+        raw = _shadow_call(frame_bytes, task, frame_id, frame=frame)
+        if not isinstance(raw, bytes):
+            raw = bytes(raw)
+        dimensions = {"width": info.get("width"), "height": info.get("height")}
+        expected_dims = source.get("normalized_dimensions") or source.get("original_dimensions") or {}
+        actual_hash = hashlib.sha256(raw).hexdigest()
+        ok = (
+            isinstance(frame_id, int)
+            and info.get("name") == source.get("path")
+            and dimensions == expected_dims
+            and actual_hash == source.get("sha256")
+        )
+        outcomes.append({"path": source.get("path"), "sha256": actual_hash, "dimensions": dimensions, "frame_id": frame_id, "status": "success" if ok else "failed"})
+        valid = valid and ok
+    return outcomes, valid
+
+
+def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], params: dict, config: dict, log_fn: LogFn | None) -> dict[str, Any]:
+    """Run isolated baseline/candidate branches from one frozen upload snapshot.
+
+    All external effects are explicit adapters.  This makes recovery safe: callers
+    persist the returned record and may retry only a branch whose status is failed.
+    """
+    from .shadow_batch import freeze_batch, materialize_branch_input
+    from .run_state import shadow_idempotency_key
+
+    adapters = params.get("shadow_adapters") or {}
+    if not isinstance(adapters, dict):
+        raise ValueError("shadow_adapters are required")
+    snapshot = params.get("shadow_snapshot")
+    if not isinstance(snapshot, dict):
+        if len(input_dirs) != 1:
+            raise ValueError("shadow run requires exactly one input directory")
+        freezer = adapters.get("freeze_batch", freeze_batch)
+        snapshot = _shadow_call(freezer, input_dirs[0], config.get("shadow_snapshot_root") or Path(config.get("shadow_root", ".")) / "snapshots")
+    files = _shadow_manifest(snapshot)
+    snapshot_hash = snapshot.get("snapshot_hash")
+    batch_id = snapshot.get("batch_id")
+    if not isinstance(batch_id, str) or not isinstance(snapshot_hash, str):
+        raise ValueError("shadow snapshot identity is required")
+    state = {"run_id": run_id, "batch_id": batch_id, "snapshot_hash": snapshot_hash, "branches": {}, "common_success": []}
+    retry_branch = params.get("retry_branch")
+    if retry_branch not in (None, "A", "B"):
+        raise ValueError("retry_branch must be A or B")
+    gpu_queue = params.get("gpu_semaphore")
+    materializer = adapters.get("materialize_branch_input", materialize_branch_input)
+    cleanup = adapters.get("cleanup")
+    for branch in ("A", "B"):
+        previous = (params.get("shadow_state") or {}).get("branches", {}).get(branch, {})
+        if retry_branch and branch != retry_branch:
+            state["branches"][branch] = copy.deepcopy(previous)
+            continue
+        if retry_branch == branch and previous.get("status") != "failed":
+            raise ValueError("only an explicitly failed branch may be retried")
+        key = shadow_idempotency_key(batch_id, branch, snapshot_hash)
+        provenance = {"batch_id": batch_id, "branch_id": branch, "snapshot_hash": snapshot_hash}
+        if branch == "B" and isinstance(params.get("candidate_config"), dict):
+            candidate_config = copy.deepcopy(params["candidate_config"])
+            provenance["candidate_config"] = candidate_config
+            provenance["candidate_config_sha256"] = hashlib.sha256(json.dumps(candidate_config, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        record = {"branch_id": branch, "idempotency_key": key, "status": "running", "provenance": provenance}
+        state["branches"][branch] = record
+        task = None
+        try:
+            branch_input = _shadow_call(materializer, snapshot, branch, config.get("shadow_work_root") or Path(config.get("shadow_root", ".")) / "work")
+            create = adapters.get("create_task")
+            if not callable(create):
+                raise ValueError("shadow create_task adapter is required")
+            task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
+            record["task_id"] = _shadow_task_id(task)
+            if record["task_id"] is None:
+                raise ValueError("shadow CVAT task id is invalid")
+            upload = adapters.get("upload")
+            frames_fn, bytes_fn = adapters.get("frames"), adapters.get("frame_bytes")
+            if not all(callable(fn) for fn in (upload, frames_fn, bytes_fn)):
+                raise ValueError("shadow upload/frame adapters are required")
+            _shadow_call(upload, task, branch_input)
+            frames = _shadow_call(frames_fn, task)
+            record["images"], valid = _shadow_frame_outcomes(files, list(frames), bytes_fn, task)
+            if not valid:
+                raise ValueError("frame verification failed; import blocked")
+            runner = adapters.get("baseline" if branch == "A" else "alpha50")
+            if not callable(runner):
+                raise ValueError(f"shadow {branch} inference adapter is required")
+            if branch == "B" and callable(adapters.get("candidate_preflight")):
+                _shadow_call(adapters["candidate_preflight"], task, snapshot, record)
+            # Both model paths contend for the same GPU; the queue is deliberately
+            # held only around inference, never around CVAT/network side effects.
+            if gpu_queue is not None:
+                gpu_queue.acquire()
+                try:
+                    xml = _shadow_call(runner, branch_input, task, snapshot)
+                finally:
+                    gpu_queue.release()
+            else:
+                xml = _shadow_call(runner, branch_input, task, snapshot)
+            if branch == "B" and callable(adapters.get("validate_candidate_xml")):
+                _shadow_call(adapters["validate_candidate_xml"], xml, files, task)
+            importer = adapters.get("import")
+            if not callable(importer):
+                raise ValueError("shadow import adapter is required")
+            record["import_result"] = _shadow_call(importer, task, xml)
+            record["status"] = "success"
+        except Exception as exc:
+            record["status"] = "failed"
+            record["error"] = str(exc)
+            record["cleanup"] = {"status": "needed", "task_id": record.get("task_id")}
+            if callable(cleanup) and record.get("task_id"):
+                try:
+                    record["cleanup"] = {"status": "attempted", "result": _shadow_call(cleanup, record["task_id"])}
+                except Exception as cleanup_exc:
+                    record["cleanup"] = {"status": "failed", "error": str(cleanup_exc), "task_id": record.get("task_id")}
+    successful = [set(item["path"] for item in state["branches"][name].get("images", []) if item.get("status") == "success") for name in ("A", "B") if state["branches"].get(name, {}).get("status") == "success"]
+    state["common_success"] = sorted(set.intersection(*successful)) if len(successful) == 2 else []
+    state["status"] = "success" if len(successful) == 2 else "failed"
+    return state

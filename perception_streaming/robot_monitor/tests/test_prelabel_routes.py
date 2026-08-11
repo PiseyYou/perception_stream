@@ -58,6 +58,15 @@ class PrelabelRoutesTest(unittest.TestCase):
             self.assertEqual(handler.status, 200, self._json_payload(handler))
             factory.assert_called_once()
             self.assertEqual(self._json_payload(handler)["batch_id"], "batch")
+
+    def test_shadow_reconcile_requires_owner_token_before_orphan_cleanup(self):
+        run_state.runs["abcdef123456"] = {"owner_token": "owner", "shadow": {"branches": {"B": {"task_id": 42, "cleanup": {"status": "needed"}}}}}
+        body = json.dumps({"token": "wrong"}).encode()
+        handler = FakeHandler(body, {"Content-Length": str(len(body))})
+        with patch.object(routes.core, "build_shadow_adapters") as factory:
+            routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-reconcile"))
+        self.assertEqual(handler.status, 403)
+        factory.assert_not_called()
     def setUp(self):
         run_state.runs.clear()
 

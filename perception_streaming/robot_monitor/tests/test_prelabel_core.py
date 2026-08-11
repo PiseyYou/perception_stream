@@ -104,6 +104,22 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(created.call_count, 1)
             self.assertEqual(result["branches"]["B"]["status"], "success")
             self.assertTrue(result["review_ready"])
+
+    def test_shadow_retry_increments_attempt_and_retains_prior_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            prior = {"branches": {"A": {"branch_id": "A", "status": "failed", "task_id": 4, "error": "old"}, "B": {"status": "success", "images": []}}}
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "shadow_state": prior, "retry_branch": "A"}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["branches"]["A"]["attempt"], 2)
+            self.assertEqual(result["branches"]["A"]["attempt_history"][0]["task_id"], 4)
+
+    def test_shadow_retry_blocks_unreconciled_cleanup_before_creator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, created = self._shadow_fakes(tmp)
+            prior = {"branches": {"B": {"status": "failed", "cleanup": {"status": "needed", "task_id": 9}}}}
+            with self.assertRaisesRegex(ValueError, "cleanup must be reconciled"):
+                core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot, "shadow_state": prior, "retry_branch": "B"}, {"shadow_root": tmp}, None)
+            created.assert_not_called()
     def test_shadow_pipeline_blocks_import_when_uploaded_frame_bytes_differ(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"

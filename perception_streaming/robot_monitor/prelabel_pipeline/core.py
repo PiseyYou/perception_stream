@@ -1019,13 +1019,18 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             continue
         if retry_branch == branch and previous.get("status") != "failed":
             raise ValueError("only an explicitly failed branch may be retried")
+        if retry_branch == branch and previous.get("cleanup", {}).get("status") in {"needed", "failed"}:
+            raise ValueError("shadow branch cleanup must be reconciled before retry")
         key = shadow_idempotency_key(batch_id, branch, snapshot_hash)
         provenance = {"batch_id": batch_id, "branch_id": branch, "snapshot_hash": snapshot_hash}
         if branch == "B" and isinstance(params.get("candidate_config"), dict):
             candidate_config = copy.deepcopy(params["candidate_config"])
             provenance["candidate_config"] = candidate_config
             provenance["candidate_config_sha256"] = hashlib.sha256(json.dumps(candidate_config, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-        record = {"branch_id": branch, "idempotency_key": key, "status": "running", "provenance": provenance}
+        history = copy.deepcopy(previous.get("attempt_history", [])) if isinstance(previous, dict) else []
+        if isinstance(previous, dict) and previous:
+            history.append({key: copy.deepcopy(value) for key, value in previous.items() if key not in {"attempt_history", "input_path"}})
+        record = {"branch_id": branch, "idempotency_key": key, "attempt": len(history) + 1, "attempt_history": history, "status": "running", "provenance": provenance}
         state["branches"][branch] = record
         persist()
         task = None

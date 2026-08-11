@@ -4,6 +4,7 @@ import copy
 import glob
 import hashlib
 import importlib
+import inspect
 import json
 import os
 import shlex
@@ -783,11 +784,14 @@ run_prelabel_pipeline = run_pipeline
 # imports immediately after upload, while the shadow contract must attest CVAT's
 # real frames (including bytes) before an import can occur.
 def _shadow_call(adapter: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Call narrow test/deployment adapters without imposing one SDK signature."""
+    """Invoke an adapter exactly once; a TypeError may be its real side effect error."""
     try:
-        return adapter(*args, **kwargs)
-    except TypeError:
-        return adapter(*args)
+        signature = inspect.signature(adapter)
+        if not any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values()):
+            kwargs = {key: value for key, value in kwargs.items() if key in signature.parameters}
+    except (TypeError, ValueError):
+        pass
+    return adapter(*args, **kwargs)
 
 
 def _shadow_manifest(snapshot: dict[str, Any]) -> list[dict[str, Any]]:

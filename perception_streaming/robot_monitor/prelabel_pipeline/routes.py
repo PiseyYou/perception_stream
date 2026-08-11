@@ -373,6 +373,9 @@ def _handle_shadow_run(handler) -> None:
         _send_json(handler, {"ok": False, "error": "task_prefix required"}, status=400)
         return
     owner_token = _owner_token_from_body_or_header(handler, body)
+    if not owner_token:
+        _send_json(handler, {"ok": False, "error": "owner token required"}, status=403)
+        return
     try:
         cfg = config_manager.load_config()
         input_dirs, upload_dir = _validated_inputs(body, cfg, owner_token)
@@ -390,6 +393,9 @@ def _handle_shadow_run(handler) -> None:
         for existing_id, existing in run_state.runs.items():
             shadow = existing.get("shadow", {})
             if shadow.get("batch_id") == snapshot["batch_id"] and shadow.get("snapshot_hash") == snapshot["snapshot_hash"]:
+                if existing.get("owner_token") != owner_token:
+                    _send_json(handler, {"ok": False, "error": "shadow batch already exists"}, status=409)
+                    return
                 _send_json(handler, {"run_id": existing_id, "idempotent": True})
                 return
         run_id = uuid.uuid4().hex[:12]
@@ -728,6 +734,9 @@ def _handle_run_detail(handler, run_id: str) -> None:
     with run_state.runs_lock:
         run = run_state.runs.get(run_id)
         if not run:
+            _send_json(handler, {"ok": False, "error": "run not found"}, status=404)
+            return
+        if isinstance(run.get("shadow"), dict) and (not token or token != run.get("owner_token")):
             _send_json(handler, {"ok": False, "error": "run not found"}, status=404)
             return
         record = run_state.serialize_run(run_id, run, expose_paths=False, include_logs=True, owner_token=token)

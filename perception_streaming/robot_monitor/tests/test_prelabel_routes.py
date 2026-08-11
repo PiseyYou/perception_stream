@@ -41,7 +41,7 @@ def parsed(path, query=""):
 class PrelabelRoutesTest(unittest.TestCase):
     def test_shadow_route_builds_production_adapters_not_request_callbacks(self):
         with tempfile.TemporaryDirectory() as tmp:
-            body = json.dumps({"task_prefix": "shadow", "input_dirs": [tmp], "shadow_adapters": {"evil": "ignored"}}).encode()
+            body = json.dumps({"task_prefix": "shadow", "owner_token": "owner", "input_dirs": [tmp], "shadow_adapters": {"evil": "ignored"}}).encode()
             handler = FakeHandler(body, {"Content-Length": str(len(body))})
             snapshot = {"batch_id": "batch", "snapshot_hash": "hash", "snapshot_path": tmp}
             factory = Mock(return_value={"cleanup": Mock()})

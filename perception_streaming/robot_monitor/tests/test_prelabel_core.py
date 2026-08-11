@@ -29,6 +29,7 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(adapters["frame_bytes"](task, 0), b"actual-frame")
         self.assertEqual(session.get.call_args_list[0].args[0], "http://cvat/api/tasks/12/data/meta")
         self.assertEqual(session.get.call_args_list[1].kwargs["params"], {"number": 0, "quality": "original"})
+        self.assertTrue(session.get.call_args_list[1].kwargs["stream"])
 
     def test_production_shadow_adapter_rejects_oversized_frame_body(self):
         session = Mock(); response = Mock(content=b"12345", headers={"Content-Length": "5"}); response.iter_content.return_value = [b"12345"]; response.raise_for_status.return_value = None; session.get.return_value = response

@@ -889,35 +889,43 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         data = response.json()
         raw = data.get("frames", []) if isinstance(data, dict) else []
         max_frames = int(config.get("shadow_max_cvat_frames", 10_000))
+        max_pixels = int(config.get("shadow_max_frame_pixels", 64_000_000))
         if not isinstance(raw, list) or len(raw) > max_frames:
             raise ValueError("CVAT frame metadata exceeds configured limit")
         result = []
         for index, item in enumerate(raw):
             if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not isinstance(item.get("width"), int) or not isinstance(item.get("height"), int) or item["width"] <= 0 or item["height"] <= 0:
                 raise ValueError("invalid CVAT frame metadata")
+            if item["width"] * item["height"] > max_pixels:
+                raise ValueError("CVAT frame metadata exceeds configured pixel limit")
             result.append({"id": index, "name": item["name"], "width": item["width"], "height": item["height"]})
         return result
     def frame_bytes(task: Any, frame_id: int, **_kwargs: Any) -> bytes:
         session, base = cvat_session(server)
-        response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original"}, timeout=60)
-        response.raise_for_status()
-        maximum = int(config.get("shadow_max_frame_bytes", 64 * 1024 * 1024))
-        declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
-        if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
-            raise ValueError("CVAT frame body exceeds configured limit")
-        chunks: list[bytes] = []
-        total = 0
-        iterator = response.iter_content(chunk_size=1024 * 1024) if callable(getattr(response, "iter_content", None)) else [response.content]
-        for chunk in iterator:
-            if not chunk:
-                continue
-            if not isinstance(chunk, bytes):
-                raise ValueError("invalid CVAT frame body")
-            total += len(chunk)
-            if total > maximum:
+        response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original"}, timeout=60, stream=True)
+        try:
+            response.raise_for_status()
+            maximum = int(config.get("shadow_max_frame_bytes", 64 * 1024 * 1024))
+            declared = response.headers.get("Content-Length") if hasattr(response, "headers") else None
+            if declared is not None and (not str(declared).isdigit() or int(declared) > maximum):
                 raise ValueError("CVAT frame body exceeds configured limit")
-            chunks.append(chunk)
-        return b"".join(chunks)
+            chunks: list[bytes] = []
+            total = 0
+            iterator = response.iter_content(chunk_size=1024 * 1024)
+            for chunk in iterator:
+                if not chunk:
+                    continue
+                if not isinstance(chunk, bytes):
+                    raise ValueError("invalid CVAT frame body")
+                total += len(chunk)
+                if total > maximum:
+                    raise ValueError("CVAT frame body exceeds configured limit")
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
     def importer(task: Any, xml: Any) -> Any:
         path = Path(xml)
         task.import_annotations("CVAT 1.1", str(path))

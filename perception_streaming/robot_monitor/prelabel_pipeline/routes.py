@@ -8,11 +8,13 @@ import subprocess
 import threading
 import time
 import uuid
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs
+from xml.etree import ElementTree
 
-from . import config_manager, core, run_state
+from . import config_manager, core, run_state, shadow_review
 from .shadow_batch import freeze_batch
 from .path_utils import InvalidPathError, resolve_under, safe_filename, unique_path, validate_run_id, validate_upload_id
 
@@ -47,6 +49,19 @@ def handle(handler, parsed) -> None:
             return
         if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/shadow-reconcile"):
             _handle_shadow_reconcile(handler, path.split("/")[-2])
+            return
+        if method == "GET" and path.startswith("/prelabel/runs/") and "/review/assets/" in path:
+            pieces = path.split("/")
+            _handle_shadow_review_asset(handler, pieces[-5], pieces[-2], pieces[-1])
+            return
+        if method == "GET" and path.startswith("/prelabel/runs/") and path.endswith("/review"):
+            _handle_shadow_review(handler, path.split("/")[-2])
+            return
+        if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/review"):
+            _handle_shadow_review_submit(handler, path.split("/")[-2])
+            return
+        if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/review/reveal"):
+            _handle_shadow_review_reveal(handler, path.split("/")[-3])
             return
         if method == "GET" and path.startswith("/prelabel/stream/"):
             _handle_stream(handler, path.rsplit("/", 1)[-1], query)
@@ -96,6 +111,8 @@ def _default_method_for_path(path: str) -> str:
         return "POST"
     if path.startswith("/prelabel/runs/") and path.endswith("/shadow-reconcile"):
         return "POST"
+    if path.startswith("/prelabel/runs/") and (path.endswith("/review") or path.endswith("/review/reveal")):
+        return "POST" if path.endswith("/review/reveal") else "GET"
     if path.startswith("/prelabel/settings/cvat-server/"):
         return "PATCH"
     return "GET"
@@ -562,6 +579,173 @@ def _handle_shadow_reconcile(handler, run_id: str) -> None:
             branch["cleanup"] = {"status": "failed", "task_id": task_id, "error": str(exc)}
     run_state.save_run(run_id, _runs_dir(cfg))
     _send_json(handler, {"ok": True, "reconciled_task_ids": reconciled})
+
+
+def _shadow_review_for_run(run_id: str) -> tuple[dict, dict]:
+    """Return the mutable shadow/review records while holding ``runs_lock``."""
+    run = run_state.runs.get(validate_run_id(run_id))
+    shadow = run.get("shadow") if isinstance(run, dict) else None
+    if not isinstance(shadow, dict) or not shadow.get("review_ready"):
+        raise LookupError("shadow review is not ready")
+    review = shadow.get("review")
+    if not isinstance(review, dict):
+        manifest = shadow.get("common_success_manifest")
+        batch_id, snapshot_hash = shadow.get("batch_id"), shadow.get("snapshot_hash")
+        if not isinstance(manifest, dict) or not isinstance(batch_id, str) or not isinstance(snapshot_hash, str):
+            raise ValueError("shadow review manifest is invalid")
+        review = shadow_review.create_review(manifest, seed=f"{batch_id}:{snapshot_hash}")
+        shadow["review"] = review
+    return run, review
+
+
+def _save_shadow_review(run_id: str) -> None:
+    run_state.save_run(run_id, _runs_dir(_try_load_config()))
+
+
+def _handle_shadow_review(handler, run_id: str) -> None:
+    try:
+        with run_state.runs_lock:
+            _run, review = _shadow_review_for_run(run_id)
+            payload = shadow_review.public_payload(run_id, review)
+    except ValueError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=404)
+        return
+    except LookupError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=409)
+        return
+    _save_shadow_review(run_id)
+    _send_json(handler, payload)
+
+
+def _handle_shadow_review_submit(handler, run_id: str) -> None:
+    body = _read_json(handler)
+    try:
+        with run_state.runs_lock:
+            _run, review = _shadow_review_for_run(run_id)
+            decision = shadow_review.submit_review(review, body.get("reviewer_id"), body.get("answers"))
+    except ValueError as exc:
+        status = 409 if "already submitted" in str(exc) else 400
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=status)
+        return
+    except LookupError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=409)
+        return
+    _save_shadow_review(run_id)
+    _send_json(handler, {"ok": True, "decision": decision})
+
+
+def _handle_shadow_review_reveal(handler, run_id: str) -> None:
+    body = _read_json(handler)
+    token = _owner_token_from_body_or_header(handler, body)
+    try:
+        with run_state.runs_lock:
+            run, review = _shadow_review_for_run(run_id)
+            if not token or token != run.get("owner_token"):
+                _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
+                return
+            payload = shadow_review.reveal(review)
+    except ValueError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=404)
+        return
+    except LookupError as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=409)
+        return
+    if not payload.get("allowed"):
+        _send_json(handler, {"ok": False, "error": "review is not complete"}, status=409)
+        return
+    _send_json(handler, payload)
+
+
+def _send_png(handler, body: bytes) -> None:
+    handler.send_response(200)
+    handler.send_header("Content-Type", "image/png")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "no-store")
+    _send_cors(handler)
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _safe_review_snapshot_image(snapshot_path: str, relative_path: str) -> Path:
+    root = (Path(snapshot_path) / "images").resolve()
+    image = (root / relative_path).resolve()
+    if root != image and root not in image.parents:
+        raise ValueError("review image path escapes snapshot")
+    if not image.is_file():
+        raise ValueError("review image is unavailable")
+    return image
+
+
+def _annotation_polygons(xml_path: str, image_name: str) -> list[list[tuple[float, float]]]:
+    path = Path(xml_path)
+    if not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("review annotation is unavailable")
+    raw = path.read_bytes()
+    if b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
+        raise ValueError("unsafe review annotation XML")
+    try:
+        root = ElementTree.fromstring(raw)
+    except ElementTree.ParseError as exc:
+        raise ValueError("invalid review annotation XML") from exc
+    image = next((item for item in root.findall("image") if item.get("name") == image_name), None)
+    if image is None:
+        raise ValueError("review annotation image is unavailable")
+    polygons: list[list[tuple[float, float]]] = []
+    for polygon in image.findall("polygon"):
+        points = polygon.get("points", "").split(";")
+        try:
+            parsed = [tuple(float(value) for value in point.split(",")) for point in points]
+        except ValueError as exc:
+            raise ValueError("invalid review polygon") from exc
+        if len(parsed) >= 3 and all(len(point) == 2 for point in parsed):
+            polygons.append(parsed)
+    return polygons
+
+
+def _render_review_asset(image_path: Path, xml_path: str, image_name: str) -> bytes:
+    try:
+        from PIL import Image, ImageDraw
+        with Image.open(image_path) as source:
+            width, height = source.size
+            if width <= 0 or height <= 0 or width * height > 64_000_000:
+                raise ValueError("review image exceeds pixel limit")
+            canvas = source.convert("RGB")
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("review image is unavailable") from exc
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    for polygon in _annotation_polygons(xml_path, image_name):
+        bounded = [(min(max(x, 0.0), width - 1), min(max(y, 0.0), height - 1)) for x, y in polygon]
+        draw.polygon(bounded, fill=(32, 180, 255, 48))
+        draw.line([*bounded, bounded[0]], fill=(32, 180, 255, 255), width=max(1, min(width, height) // 200))
+    output = BytesIO()
+    canvas.save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
+def _handle_shadow_review_asset(handler, run_id: str, sample_id: str, side: str) -> None:
+    if side not in {"X", "Y"}:
+        _send_json(handler, {"ok": False, "error": "invalid review side"}, status=404)
+        return
+    try:
+        with run_state.runs_lock:
+            run, review = _shadow_review_for_run(run_id)
+            private = review.get("private_samples", {}).get(sample_id)
+            shadow = run.get("shadow", {})
+            if not isinstance(private, dict) or not isinstance(shadow, dict):
+                raise LookupError("review sample is not available")
+            branch_id = private[side]
+            branch = shadow.get("branches", {}).get(branch_id)
+            snapshot_path = shadow.get("snapshot_path")
+            if not isinstance(branch, dict) or not isinstance(snapshot_path, str) or not isinstance(branch.get("annotation_path"), str):
+                raise LookupError("review artifact is not available")
+            image_path = _safe_review_snapshot_image(snapshot_path, private["path"])
+            body = _render_review_asset(image_path, branch["annotation_path"], private["path"])
+    except (ValueError, LookupError, KeyError) as exc:
+        _send_json(handler, {"ok": False, "error": str(exc)}, status=404)
+        return
+    _send_png(handler, body)
 
 
 def _validated_inputs(body: dict, cfg: dict, owner_token: str) -> tuple[list[str], str | None]:

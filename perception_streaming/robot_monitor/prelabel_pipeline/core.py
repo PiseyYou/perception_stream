@@ -1196,6 +1196,8 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                     gpu_queue.release()
             else:
                 xml = _shadow_call(runner, branch_input, task, snapshot)
+            record["annotation_path"] = str(xml)
+            persist()
             if branch == "B" and callable(adapters.get("validate_candidate_xml")):
                 _shadow_call(adapters["validate_candidate_xml"], xml, files, task)
             if cancel_fn():

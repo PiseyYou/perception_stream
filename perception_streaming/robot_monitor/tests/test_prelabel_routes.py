@@ -39,6 +39,56 @@ def parsed(path, query=""):
 
 
 class PrelabelRoutesTest(unittest.TestCase):
+    def test_shadow_review_asset_proxies_rendered_x_or_y_without_private_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from PIL import Image
+            root = Path(tmp); image = root / "images" / "private.png"; image.parent.mkdir()
+            Image.new("RGB", (4, 3), "black").save(image)
+            xml_a = root / "a.xml"; xml_b = root / "b.xml"
+            xml_a.write_text('<annotations><image id="0" name="private.png" width="4" height="3"><polygon label="a" points="0,0;3,0;3,2"/></image></annotations>')
+            xml_b.write_text('<annotations><image id="0" name="private.png" width="4" height="3"><polygon label="b" points="0,2;3,2;3,0"/></image></annotations>')
+            run_state.runs.clear()
+            shadow = {"review_ready": True, "batch_id": "batch", "snapshot_hash": "hash", "snapshot_path": str(root), "common_success_manifest": {"images": [{"path": "private.png", "branches": {"A": {}, "B": {}}}]}, "branches": {"A": {"annotation_path": str(xml_a)}, "B": {"annotation_path": str(xml_b)}}}
+            run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow=shadow)
+            handler = FakeHandler()
+            routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/assets/s001/X"))
+            self.assertEqual(handler.status, 200, handler.wfile.getvalue())
+            self.assertIn(("Content-Type", "image/png"), handler.sent_headers)
+            self.assertTrue(handler.wfile.getvalue().startswith(b"\x89PNG"))
+            self.assertNotIn(b"private.png", handler.wfile.getvalue())
+
+    def test_shadow_review_public_payload_is_anonymous_and_submission_is_single_use(self):
+        run_state.runs.clear()
+        manifest = {"images": [{"path": "private/image.jpg", "branches": {"A": {"task_id": 1}, "B": {"task_id": 2}}} for _ in range(2)]}
+        run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"review_ready": True, "batch_id": "batch", "snapshot_hash": "hash", "common_success_manifest": manifest})
+        handler = FakeHandler()
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))
+        payload = self._json_payload(handler)
+        self.assertEqual(handler.status, 200, payload)
+        self.assertNotIn("private", json.dumps(payload))
+        answers = {item["sample_id"]: "tie" for item in payload["samples"]}
+        body = json.dumps({"reviewer_id": "reviewer-1", "answers": answers}).encode()
+        handler = FakeHandler(body, {"Content-Length": str(len(body))})
+        handler.command = "POST"
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))
+        self.assertEqual(handler.status, 200, self._json_payload(handler))
+        handler = FakeHandler(body, {"Content-Length": str(len(body))})
+        handler.command = "POST"
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))
+        self.assertEqual(handler.status, 409, self._json_payload(handler))
+
+    def test_shadow_review_reveal_requires_owner_and_completed_submission(self):
+        run_state.runs.clear()
+        manifest = {"images": [{"path": "private/image.jpg", "branches": {"A": {}, "B": {}}}]}
+        run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"review_ready": True, "batch_id": "batch", "snapshot_hash": "hash", "common_success_manifest": manifest})
+        handler = FakeHandler()
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/reveal"))
+        self.assertEqual(handler.status, 403, self._json_payload(handler))
+        body = json.dumps({"owner_token": "owner"}).encode()
+        handler = FakeHandler(body, {"Content-Length": str(len(body))})
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/reveal"))
+        self.assertEqual(handler.status, 409, self._json_payload(handler))
+
     def test_shadow_route_builds_production_adapters_not_request_callbacks(self):
         with tempfile.TemporaryDirectory() as tmp:
             body = json.dumps({"task_prefix": "shadow", "owner_token": "owner", "input_dirs": [tmp], "shadow_adapters": {"evil": "ignored"}}).encode()

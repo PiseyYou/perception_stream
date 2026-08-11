@@ -9,6 +9,8 @@ import json
 import os
 import shutil
 import sys
+import inspect
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -30,18 +32,47 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _verify_framework_revision(framework_root: Path, revision: str) -> None:
-    """Verify a pinned, relative source-file digest without allowing path escapes."""
-    prefix = "file-sha256:"
-    if not isinstance(revision, str) or not revision.startswith(prefix):
-        raise CandidatePreflightError("framework revision must be a file-sha256 pin")
+FRAMEWORK_SOURCE_SUFFIXES = {".py", ".yaml", ".yml", ".json"}
+FRAMEWORK_ARTIFACT_DIRS = {".git", "__pycache__", "output", "outputs", "data", "datasets", "logs", "log"}
+
+
+def framework_tree_digest(framework_root: str | Path) -> str:
+    """Hash every relevant framework source file using a stable relative-path manifest."""
+    root = Path(framework_root).resolve()
     try:
-        relative, expected = revision[len(prefix):].rsplit(":", 1)
-        source = (framework_root / relative).resolve()
-        source.relative_to(framework_root.resolve())
-    except (ValueError, OSError) as exc:
-        raise CandidatePreflightError("framework revision pin path is invalid") from exc
-    if not source.is_file() or _sha256_file(source) != expected:
+        listed = subprocess.run(["git", "-C", str(root), "ls-files", "-co", "--exclude-standard"], check=True, capture_output=True, text=True).stdout.splitlines()
+        files = [root / relative for relative in listed if Path(relative).suffix.lower() in FRAMEWORK_SOURCE_SUFFIXES and not (set(Path(relative).parts[:-1]) & FRAMEWORK_ARTIFACT_DIRS) and not any(part.startswith("output") for part in Path(relative).parts[:-1])]
+        files = [path for path in files if path.is_file()]
+    except (OSError, subprocess.CalledProcessError):
+        files = []
+        for directory, subdirectories, names in os.walk(root):
+            subdirectories[:] = [name for name in subdirectories if name not in FRAMEWORK_ARTIFACT_DIRS and not name.startswith("output")]
+            files.extend(Path(directory) / name for name in names if Path(name).suffix.lower() in FRAMEWORK_SOURCE_SUFFIXES)
+    files.sort(key=lambda path: path.relative_to(root).as_posix())
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(_sha256_file(path).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _verify_framework_revision(framework_root: Path, revision: str) -> None:
+    if isinstance(revision, str) and revision.startswith("tree-sha256:"):
+        expected = revision.removeprefix("tree-sha256:")
+        matches = len(expected) == 64 and framework_tree_digest(framework_root) == expected
+    elif isinstance(revision, str) and revision.startswith("git-head:"):
+        expected = revision.removeprefix("git-head:")
+        try:
+            head = subprocess.run(["git", "-C", str(framework_root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+            dirty = subprocess.run(["git", "-C", str(framework_root), "status", "--porcelain"], check=True, capture_output=True, text=True).stdout.strip()
+            matches = head == expected and not dirty
+        except (OSError, subprocess.CalledProcessError):
+            matches = False
+    else:
+        raise CandidatePreflightError("framework revision must be a tree-sha256 or git-head pin")
+    if not matches:
         raise CandidatePreflightError("framework revision mismatch")
 
 
@@ -214,6 +245,24 @@ def _disk_target(output_path: Path) -> Path:
     return target
 
 
+def _create_task(create_cvat_task: Callable[..., Any], labels: list[dict[str, Any]], identity: str, request_key: str) -> Any:
+    """Pass idempotency data to integrations that explicitly support it."""
+    try:
+        signature = inspect.signature(create_cvat_task)
+        supports_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
+        supports_named = {"task_identity", "request_key"}.issubset(signature.parameters)
+    except (TypeError, ValueError):
+        supports_kwargs = supports_named = False
+    if supports_kwargs or supports_named:
+        return create_cvat_task(labels, task_identity=identity, request_key=request_key)
+    return create_cvat_task(labels)
+
+
+def _resolved_task_id(resolved: Any) -> int | None:
+    candidate = resolved.get("id") if isinstance(resolved, dict) else getattr(resolved, "id", None)
+    return candidate if isinstance(candidate, int) and not isinstance(candidate, bool) and candidate > 0 else None
+
+
 def preflight_candidate(
     candidate_config: dict[str, Any],
     *,
@@ -224,6 +273,7 @@ def preflight_candidate(
     create_cvat_task: Callable[[list[dict[str, str]]], Any] | None = None,
     get_cvat_schema: Callable[[Any], Any] | None = None,
     cleanup_cvat_task: Callable[[int | None], Any] | None = None,
+    resolve_cvat_task: Callable[[str, str], Any] | None = None,
     provenance_path: str | Path | None = None,
     branch_record: dict[str, Any] | None = None,
 ) -> CandidatePreflightResult:
@@ -265,13 +315,46 @@ def preflight_candidate(
     branch_record["candidate_provenance_digest"] = digest
     branch_record["candidate_provenance_path"] = str(persisted)
     expected_labels = _expected_labels(candidate)
-    task = create_cvat_task(expected_labels)
-    task_id = task.get("id") if isinstance(task, dict) else getattr(task, "id", None)
+    task_identity = f"alpha50-{digest[:24]}"
+    request_key = hashlib.sha256(f"{task_identity}:{digest}".encode("ascii")).hexdigest()
+    branch_record["candidate_task_identity"] = task_identity
+    branch_record["candidate_request_key"] = request_key
+    try:
+        task = _create_task(create_cvat_task, expected_labels, task_identity, request_key)
+    except Exception as exc:
+        branch_record["candidate_preflight_status"] = "create_ambiguous"
+        try:
+            task = resolve_cvat_task(task_identity, request_key) if callable(resolve_cvat_task) else None
+        except Exception as resolve_exc:
+            branch_record["candidate_preflight_status"] = "cleanup_resolution_needed"
+            branch_record["candidate_cleanup_lookup_key"] = request_key
+            branch_record["candidate_cleanup_resolution_error"] = str(resolve_exc)
+            return CandidatePreflightResult(False, (f"CVAT task create failed: {exc}",), None, None, {"status": "resolution_failed", "error": str(resolve_exc)}, True, manifest, digest)
+        task_id = _resolved_task_id(task)
+        if task_id is None:
+            branch_record["candidate_preflight_status"] = "cleanup_resolution_needed"
+            branch_record["candidate_cleanup_lookup_key"] = request_key
+            return CandidatePreflightResult(False, (f"CVAT task create failed: {exc}",), None, None, {"status": "resolution_needed"}, True, manifest, digest)
+        branch_record["candidate_cleanup_needed_task_id"] = task_id
+        branch_record["candidate_preflight_status"] = "create_failed_resolved"
+        cleanup_outcome = _cleanup_result(cleanup_cvat_task, task_id)
+        branch_record["candidate_cleanup_outcome"] = cleanup_outcome
+        return CandidatePreflightResult(False, (f"CVAT task create failed: {exc}",), task_id, task_id, cleanup_outcome, True, manifest, digest)
+    task_id = _resolved_task_id(task)
     if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
         branch_record["candidate_preflight_status"] = "task_id_invalid"
-        branch_record["candidate_cleanup_needed_task_id"] = None
-        branch_record["candidate_cleanup_outcome"] = _cleanup_result(cleanup_cvat_task, None)
-        raise CandidatePreflightError("CVAT task id is invalid")
+        try:
+            task = resolve_cvat_task(task_identity, request_key) if callable(resolve_cvat_task) else None
+        except Exception as exc:
+            branch_record["candidate_preflight_status"] = "cleanup_resolution_needed"
+            branch_record["candidate_cleanup_lookup_key"] = request_key
+            branch_record["candidate_cleanup_resolution_error"] = str(exc)
+            return CandidatePreflightResult(False, ("CVAT task id is invalid",), None, None, {"status": "resolution_failed", "error": str(exc)}, True, manifest, digest)
+        task_id = _resolved_task_id(task)
+        if task_id is None:
+            branch_record["candidate_preflight_status"] = "cleanup_resolution_needed"
+            branch_record["candidate_cleanup_lookup_key"] = request_key
+            return CandidatePreflightResult(False, ("CVAT task id is invalid",), None, None, {"status": "resolution_needed"}, True, manifest, digest)
     branch_record["candidate_cleanup_needed_task_id"] = task_id
     branch_record["candidate_preflight_status"] = "schema_pending"
     try:

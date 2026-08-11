@@ -19,6 +19,7 @@ from prelabel_pipeline.alpha50_batch import (
     build_candidate_provenance,
     persist_candidate_provenance,
     preflight_candidate,
+    framework_tree_digest,
 )
 
 
@@ -32,7 +33,7 @@ class Alpha50CandidateTest(unittest.TestCase):
         revision_source.write_text("candidate-framework-revision", encoding="utf-8")
         candidate = {
             "framework_root": str(framework),
-            "framework_revision": "file-sha256:revision.py:" + hashlib.sha256(revision_source.read_bytes()).hexdigest(),
+            "framework_revision": "tree-sha256:" + framework_tree_digest(framework),
             "weights": [{"path": str(weight), "sha256": hashlib.sha256(weight.read_bytes()).hexdigest()}],
             "tta": {"scales": [768, 832], "flip": True, "interpolation": "bilinear"},
             "fusion": {"method": "mean_logits"},
@@ -223,7 +224,7 @@ class Alpha50CandidateTest(unittest.TestCase):
             candidate = self._candidate(root)
             framework_source = root / "framework" / "train.py"
             framework_source.write_text("original", encoding="utf-8")
-            candidate["framework_revision"] = "file-sha256:train.py:" + hashlib.sha256(framework_source.read_bytes()).hexdigest()
+            candidate["framework_revision"] = "tree-sha256:" + framework_tree_digest(root / "framework")
             framework_source.write_text("changed", encoding="utf-8")
             create_task = Mock()
 
@@ -243,14 +244,16 @@ class Alpha50CandidateTest(unittest.TestCase):
 
             self.assertEqual(seen, [output_path])
 
-    def test_idless_task_response_is_rejected_before_schema_fetch(self):
+    def test_idless_task_response_records_durable_resolution_needed_without_schema_fetch(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             candidate = self._candidate(root)
             schema = Mock()
 
-            with self.assertRaisesRegex(CandidatePreflightError, "task id"):
-                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {}, get_cvat_schema=schema)
+            record = {}
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _: {}, get_cvat_schema=schema)
+            self.assertTrue(result.block_import)
+            self.assertEqual(record["candidate_preflight_status"], "cleanup_resolution_needed")
             schema.assert_not_called()
 
     def test_schema_fetch_exception_records_cleanup_needed_then_tracks_cleanup_exception(self):
@@ -266,3 +269,45 @@ class Alpha50CandidateTest(unittest.TestCase):
             self.assertEqual(result.cleanup_outcome["status"], "cleanup_failed")
             self.assertEqual(record["candidate_cleanup_needed_task_id"], 17)
             self.assertEqual(record["candidate_preflight_status"], "schema_failed")
+
+    def test_framework_tree_pin_rejects_changed_non_pinned_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            (root / "framework" / "other.py").write_text("changed source", encoding="utf-8")
+
+            with self.assertRaisesRegex(CandidatePreflightError, "framework revision mismatch"):
+                preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record={}, cleanup_cvat_task=lambda _: {}, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=Mock(), get_cvat_schema=lambda _: [])
+
+    def test_missing_id_resolves_task_by_persisted_identity_and_cleans_it_up(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            record = {}
+            cleanup = Mock(return_value={"status": "deleted"})
+            resolver = Mock(return_value={"id": 29})
+            create = Mock(return_value={})
+
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=cleanup, resolve_cvat_task=resolver, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create, get_cvat_schema=lambda _: [{"name": "wrong"}])
+
+            self.assertTrue(record["candidate_task_identity"])
+            self.assertTrue(record["candidate_request_key"])
+            self.assertEqual(create.call_args.kwargs["task_identity"], record["candidate_task_identity"])
+            self.assertEqual(create.call_args.kwargs["request_key"], record["candidate_request_key"])
+            resolver.assert_called_once_with(record["candidate_task_identity"], record["candidate_request_key"])
+            cleanup.assert_called_once_with(29)
+            self.assertEqual(result.cleanup_task_id, 29)
+
+    def test_create_exception_with_unresolved_identity_persists_resolution_needed_without_cleanup_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self._candidate(root)
+            record = {}
+            cleanup = Mock()
+
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=root / "provenance.json", branch_record=record, cleanup_cvat_task=cleanup, resolve_cvat_task=lambda *_: None, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=Mock(side_effect=RuntimeError("connection reset")), get_cvat_schema=lambda _: [])
+
+            self.assertTrue(result.block_import)
+            self.assertEqual(record["candidate_preflight_status"], "cleanup_resolution_needed")
+            self.assertEqual(record["candidate_cleanup_lookup_key"], record["candidate_request_key"])
+            cleanup.assert_not_called()

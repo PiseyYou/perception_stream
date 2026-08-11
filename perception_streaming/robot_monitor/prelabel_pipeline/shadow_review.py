@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import random
+import secrets
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -38,6 +40,7 @@ def create_review(common_manifest: Mapping[str, Any], *, seed: str) -> dict[str,
         "seed_sha256": hashlib.sha256(seed.encode("utf-8")).hexdigest(),
         "samples": samples,
         "private_samples": private_samples,
+        "capabilities": {},
         "submissions": {},
         "decision": {"status": "pending", "valid_votes": 0, "candidate_wins": 0, "baseline_wins": 0},
     }
@@ -73,11 +76,41 @@ def _decision(review: dict[str, Any]) -> dict[str, Any]:
     return {"status": status, "valid_votes": valid, "candidate_wins": candidate_wins, "baseline_wins": baseline_wins}
 
 
-def submit_review(review: dict[str, Any], reviewer_id: str, answers: Mapping[str, str]) -> dict[str, Any]:
-    if not isinstance(reviewer_id, str) or not reviewer_id or len(reviewer_id) > 128:
-        raise ValueError("valid reviewer id is required")
-    if reviewer_id in review.get("submissions", {}):
+def issue_reviewer_capability(review: dict[str, Any]) -> str:
+    """Mint one owner-issued, single-use reviewer capability; persist only its hash."""
+    token = secrets.token_urlsafe(32)
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    review.setdefault("capabilities", {})[digest] = {"used": False}
+    return token
+
+
+def validate_reviewer_capability(review: Mapping[str, Any], capability: str, *, allow_used: bool = False) -> str:
+    if not isinstance(capability, str) or len(capability) < 32:
+        raise ValueError("valid reviewer capability is required")
+    digest = hashlib.sha256(capability.encode("utf-8")).hexdigest()
+    state = review.get("capabilities", {}).get(digest)
+    if not isinstance(state, dict):
+        raise ValueError("invalid reviewer capability")
+    if state.get("used") and not allow_used:
         raise ValueError("reviewer already submitted")
+    return digest
+
+
+def consume_asset_quota(review: dict[str, Any], capability_digest: str, *, now: float | None = None) -> None:
+    """Bound costly overlay renders per capability without keeping a global identity."""
+    timestamp = time.time() if now is None else now
+    capability = review.get("capabilities", {}).get(capability_digest)
+    if not isinstance(capability, dict):
+        raise ValueError("invalid reviewer capability")
+    recent = [value for value in capability.get("asset_requests", []) if isinstance(value, (int, float)) and timestamp - value < 60]
+    if len(recent) >= 120:
+        raise ValueError("review asset rate limit exceeded")
+    recent.append(timestamp)
+    capability["asset_requests"] = recent
+
+
+def submit_review(review: dict[str, Any], capability: str, answers: Mapping[str, str]) -> dict[str, Any]:
+    capability_digest = validate_reviewer_capability(review, capability)
     private_samples = review.get("private_samples")
     if not isinstance(private_samples, dict) or not isinstance(answers, Mapping):
         raise ValueError("invalid review submission")
@@ -88,7 +121,8 @@ def submit_review(review: dict[str, Any], reviewer_id: str, answers: Mapping[str
         normalized[str(sample_id)] = str(choice)
     if set(normalized) != set(private_samples):
         raise ValueError("every review sample requires one answer")
-    review.setdefault("submissions", {})[reviewer_id] = {"answers": normalized}
+    review["capabilities"][capability_digest]["used"] = True
+    review.setdefault("submissions", {})[capability_digest] = {"answers": normalized}
     review["decision"] = _decision(review)
     return dict(review["decision"])
 

@@ -13,7 +13,7 @@ ROBOT_MONITOR_DIR = TEST_DIR.parent
 if str(ROBOT_MONITOR_DIR) not in sys.path:
     sys.path.insert(0, str(ROBOT_MONITOR_DIR))
 
-from prelabel_pipeline import run_state, routes
+from prelabel_pipeline import run_state, routes, shadow_review
 
 
 class FakeHandler:
@@ -50,12 +50,26 @@ class PrelabelRoutesTest(unittest.TestCase):
             run_state.runs.clear()
             shadow = {"review_ready": True, "batch_id": "batch", "snapshot_hash": "hash", "snapshot_path": str(root), "common_success_manifest": {"images": [{"path": "private.png", "branches": {"A": {}, "B": {}}}]}, "branches": {"A": {"annotation_path": str(xml_a)}, "B": {"annotation_path": str(xml_b)}}}
             run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow=shadow)
+            review = shadow_review.create_review(shadow["common_success_manifest"], seed="batch:hash")
+            run_state.runs["abcdef123456"]["shadow"]["review"] = review
+            token = shadow_review.issue_reviewer_capability(review)
             handler = FakeHandler()
-            routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/assets/s001/X"))
+            routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/assets/s001/X", f"review_token={token}"))
             self.assertEqual(handler.status, 200, handler.wfile.getvalue())
             self.assertIn(("Content-Type", "image/png"), handler.sent_headers)
             self.assertTrue(handler.wfile.getvalue().startswith(b"\x89PNG"))
             self.assertNotIn(b"private.png", handler.wfile.getvalue())
+
+    def test_review_annotation_rejects_excessive_or_nonfinite_points(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "annotations.xml"
+            points = ";".join("0,0" for _ in range(2001))
+            path.write_text(f'<annotations><image name="one.png"><polygon points="{points}"/></image></annotations>')
+            with self.assertRaisesRegex(ValueError, "point limit"):
+                routes._annotation_polygons(str(path), "one.png")
+            path.write_text('<annotations><image name="one.png"><polygon points="NaN,0;0,0;0,1"/></image></annotations>')
+            with self.assertRaisesRegex(ValueError, "non-finite"):
+                routes._annotation_polygons(str(path), "one.png")
 
     def test_shadow_review_public_payload_is_anonymous_and_submission_is_single_use(self):
         run_state.runs.clear()
@@ -63,15 +77,25 @@ class PrelabelRoutesTest(unittest.TestCase):
         run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"review_ready": True, "batch_id": "batch", "snapshot_hash": "hash", "common_success_manifest": manifest})
         handler = FakeHandler()
         routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))
+        self.assertEqual(handler.status, 403, self._json_payload(handler))
+        body = json.dumps({"owner_token": "owner"}).encode()
+        handler = FakeHandler(body, {"Content-Length": str(len(body))}); handler.command = "POST"
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review/invites"))
+        capability = self._json_payload(handler)["review_token"]
+        handler = FakeHandler()
+        routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review", f"review_token={capability}"))
         payload = self._json_payload(handler)
         self.assertEqual(handler.status, 200, payload)
         self.assertNotIn("private", json.dumps(payload))
         answers = {item["sample_id"]: "tie" for item in payload["samples"]}
-        body = json.dumps({"reviewer_id": "reviewer-1", "answers": answers}).encode()
+        body = json.dumps({"review_token": capability, "answers": answers}).encode()
         handler = FakeHandler(body, {"Content-Length": str(len(body))})
         handler.command = "POST"
         routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))
-        self.assertEqual(handler.status, 200, self._json_payload(handler))
+        submission = self._json_payload(handler)
+        self.assertEqual(handler.status, 200, submission)
+        self.assertNotIn("candidate_wins", json.dumps(submission))
+        self.assertNotIn("baseline_wins", json.dumps(submission))
         handler = FakeHandler(body, {"Content-Length": str(len(body))})
         handler.command = "POST"
         routes.handle(handler, parsed("/prelabel/runs/abcdef123456/review"))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import cgi
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -19,7 +20,13 @@ from .shadow_batch import freeze_batch
 from .path_utils import InvalidPathError, resolve_under, safe_filename, unique_path, validate_run_id, validate_upload_id
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+MAX_REVIEW_POLYGONS = 5_000
+MAX_REVIEW_POINTS_PER_POLYGON = 2_000
+MAX_REVIEW_POINTS_TOTAL = 20_000
+MAX_REVIEW_PIXELS = 16_000_000
+MAX_REVIEW_PNG_BYTES = 32 * 1024 * 1024
 OWNER_HEADER = "X-Prelabel-Owner-Token"
+REVIEW_HEADER = "X-Prelabel-Review-Token"
 UPLOAD_ID_PREFIX_RE = re.compile(r"[^A-Za-z0-9_-]+")
 
 gpu_semaphore = threading.Semaphore(1)
@@ -52,10 +59,13 @@ def handle(handler, parsed) -> None:
             return
         if method == "GET" and path.startswith("/prelabel/runs/") and "/review/assets/" in path:
             pieces = path.split("/")
-            _handle_shadow_review_asset(handler, pieces[-5], pieces[-2], pieces[-1])
+            _handle_shadow_review_asset(handler, pieces[-5], pieces[-2], pieces[-1], query)
+            return
+        if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/review/invites"):
+            _handle_shadow_review_invite(handler, path.split("/")[-3])
             return
         if method == "GET" and path.startswith("/prelabel/runs/") and path.endswith("/review"):
-            _handle_shadow_review(handler, path.split("/")[-2])
+            _handle_shadow_review(handler, path.split("/")[-2], query)
             return
         if method == "POST" and path.startswith("/prelabel/runs/") and path.endswith("/review"):
             _handle_shadow_review_submit(handler, path.split("/")[-2])
@@ -113,6 +123,8 @@ def _default_method_for_path(path: str) -> str:
         return "POST"
     if path.startswith("/prelabel/runs/") and (path.endswith("/review") or path.endswith("/review/reveal")):
         return "POST" if path.endswith("/review/reveal") else "GET"
+    if path.startswith("/prelabel/runs/") and path.endswith("/review/invites"):
+        return "POST"
     if path.startswith("/prelabel/settings/cvat-server/"):
         return "PATCH"
     return "GET"
@@ -140,6 +152,17 @@ def _send_json(handler, payload, status: int = 200) -> None:
     handler.wfile.write(body)
 
 
+def _send_review_json(handler, payload, status: int = 200) -> None:
+    """Capability-protected review responses must not be readable cross-origin."""
+    body = json.dumps(_redact(payload), ensure_ascii=False).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _read_json(handler) -> dict:
     length = int(handler.headers.get("Content-Length", 0) or 0)
     if length <= 0:
@@ -160,6 +183,13 @@ def _owner_token_from_header(handler) -> str:
 def _owner_token_from_body_or_header(handler, body: dict) -> str:
     token = body.get("owner_token") or body.get("token") or _owner_token_from_header(handler)
     return token if isinstance(token, str) else ""
+
+
+def _review_token(handler, body: dict | None = None, query: dict | None = None) -> str:
+    value = (body or {}).get("review_token") or handler.headers.get(REVIEW_HEADER, "")
+    if not value and query:
+        value = (query.get("review_token") or [""])[0]
+    return value if isinstance(value, str) else ""
 
 
 def _redact(value):
@@ -602,19 +632,21 @@ def _save_shadow_review(run_id: str) -> None:
     run_state.save_run(run_id, _runs_dir(_try_load_config()))
 
 
-def _handle_shadow_review(handler, run_id: str) -> None:
+def _handle_shadow_review(handler, run_id: str, query: dict) -> None:
+    token = _review_token(handler, query=query)
     try:
         with run_state.runs_lock:
             _run, review = _shadow_review_for_run(run_id)
+            shadow_review.validate_reviewer_capability(review, token)
             payload = shadow_review.public_payload(run_id, review)
     except ValueError as exc:
-        _send_json(handler, {"ok": False, "error": str(exc)}, status=404)
+        _send_review_json(handler, {"ok": False, "error": str(exc)}, status=403)
         return
     except LookupError as exc:
-        _send_json(handler, {"ok": False, "error": str(exc)}, status=409)
+        _send_review_json(handler, {"ok": False, "error": str(exc)}, status=409)
         return
     _save_shadow_review(run_id)
-    _send_json(handler, payload)
+    _send_review_json(handler, payload)
 
 
 def _handle_shadow_review_submit(handler, run_id: str) -> None:
@@ -622,16 +654,33 @@ def _handle_shadow_review_submit(handler, run_id: str) -> None:
     try:
         with run_state.runs_lock:
             _run, review = _shadow_review_for_run(run_id)
-            decision = shadow_review.submit_review(review, body.get("reviewer_id"), body.get("answers"))
+            shadow_review.submit_review(review, _review_token(handler, body=body), body.get("answers"))
     except ValueError as exc:
         status = 409 if "already submitted" in str(exc) else 400
-        _send_json(handler, {"ok": False, "error": str(exc)}, status=status)
+        _send_review_json(handler, {"ok": False, "error": str(exc)}, status=status)
         return
     except LookupError as exc:
+        _send_review_json(handler, {"ok": False, "error": str(exc)}, status=409)
+        return
+    _save_shadow_review(run_id)
+    _send_review_json(handler, {"ok": True})
+
+
+def _handle_shadow_review_invite(handler, run_id: str) -> None:
+    body = _read_json(handler)
+    token = _owner_token_from_body_or_header(handler, body)
+    try:
+        with run_state.runs_lock:
+            run, review = _shadow_review_for_run(run_id)
+            if not token or token != run.get("owner_token"):
+                _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)
+                return
+            capability = shadow_review.issue_reviewer_capability(review)
+    except (ValueError, LookupError) as exc:
         _send_json(handler, {"ok": False, "error": str(exc)}, status=409)
         return
     _save_shadow_review(run_id)
-    _send_json(handler, {"ok": True, "decision": decision})
+    _send_json(handler, {"ok": True, "review_token": capability})
 
 
 def _handle_shadow_review_reveal(handler, run_id: str) -> None:
@@ -670,7 +719,6 @@ def _send_png(handler, body: bytes) -> None:
     handler.send_header("Content-Type", "image/png")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "no-store")
-    _send_cors(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -700,12 +748,23 @@ def _annotation_polygons(xml_path: str, image_name: str) -> list[list[tuple[floa
     if image is None:
         raise ValueError("review annotation image is unavailable")
     polygons: list[list[tuple[float, float]]] = []
-    for polygon in image.findall("polygon"):
+    nodes = image.findall("polygon")
+    if len(nodes) > MAX_REVIEW_POLYGONS:
+        raise ValueError("review polygon limit exceeded")
+    point_total = 0
+    for polygon in nodes:
         points = polygon.get("points", "").split(";")
+        if len(points) > MAX_REVIEW_POINTS_PER_POLYGON:
+            raise ValueError("review polygon point limit exceeded")
         try:
             parsed = [tuple(float(value) for value in point.split(",")) for point in points]
         except ValueError as exc:
             raise ValueError("invalid review polygon") from exc
+        if not all(len(point) == 2 and all(math.isfinite(value) for value in point) for point in parsed):
+            raise ValueError("review polygon has non-finite coordinates")
+        point_total += len(parsed)
+        if point_total > MAX_REVIEW_POINTS_TOTAL:
+            raise ValueError("review polygon point limit exceeded")
         if len(parsed) >= 3 and all(len(point) == 2 for point in parsed):
             polygons.append(parsed)
     return polygons
@@ -716,7 +775,7 @@ def _render_review_asset(image_path: Path, xml_path: str, image_name: str) -> by
         from PIL import Image, ImageDraw
         with Image.open(image_path) as source:
             width, height = source.size
-            if width <= 0 or height <= 0 or width * height > 64_000_000:
+            if width <= 0 or height <= 0 or width * height > MAX_REVIEW_PIXELS:
                 raise ValueError("review image exceeds pixel limit")
             canvas = source.convert("RGB")
     except ValueError:
@@ -730,16 +789,21 @@ def _render_review_asset(image_path: Path, xml_path: str, image_name: str) -> by
         draw.line([*bounded, bounded[0]], fill=(32, 180, 255, 255), width=max(1, min(width, height) // 200))
     output = BytesIO()
     canvas.save(output, format="PNG", optimize=True)
-    return output.getvalue()
+    body = output.getvalue()
+    if len(body) > MAX_REVIEW_PNG_BYTES:
+        raise ValueError("review image exceeds output limit")
+    return body
 
 
-def _handle_shadow_review_asset(handler, run_id: str, sample_id: str, side: str) -> None:
+def _handle_shadow_review_asset(handler, run_id: str, sample_id: str, side: str, query: dict) -> None:
     if side not in {"X", "Y"}:
         _send_json(handler, {"ok": False, "error": "invalid review side"}, status=404)
         return
     try:
         with run_state.runs_lock:
             run, review = _shadow_review_for_run(run_id)
+            digest = shadow_review.validate_reviewer_capability(review, _review_token(handler, query=query))
+            shadow_review.consume_asset_quota(review, digest)
             private = review.get("private_samples", {}).get(sample_id)
             shadow = run.get("shadow", {})
             if not isinstance(private, dict) or not isinstance(shadow, dict):
@@ -750,7 +814,9 @@ def _handle_shadow_review_asset(handler, run_id: str, sample_id: str, side: str)
             if not isinstance(branch, dict) or not isinstance(snapshot_path, str) or not isinstance(branch.get("annotation_path"), str):
                 raise LookupError("review artifact is not available")
             image_path = _safe_review_snapshot_image(snapshot_path, private["path"])
-            body = _render_review_asset(image_path, branch["annotation_path"], private["path"])
+            annotation_path = branch["annotation_path"]
+            image_name = private["path"]
+        body = _render_review_asset(image_path, annotation_path, image_name)
     except (ValueError, LookupError, KeyError) as exc:
         _send_json(handler, {"ok": False, "error": str(exc)}, status=404)
         return

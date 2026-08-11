@@ -260,6 +260,7 @@
           </template>
           <div v-if="reviewDecision" class="review-decision">{{ reviewDecision }}</div>
           <div v-if="reviewReveal" class="review-decision">{{ reviewReveal }}</div>
+          <label v-if="reviewShareUrl" class="review-share"><span>评审链接</span><input readonly :value="reviewShareUrl" @focus="selectText" /></label>
           <div v-if="Object.keys(reviewTaskLinks).length" class="review-actions">
             <a v-for="(url, branch) in reviewTaskLinks" :key="branch" class="mini-btn" :href="url" target="_blank" rel="noopener">揭示后 CVAT {{ branch }}</a>
           </div>
@@ -395,6 +396,7 @@ const activeRunId = ref('')
 const selectedDetail = ref<RunRecord | null>(null)
 const reviewOpen = ref(false)
 const reviewRunId = ref('')
+const reviewToken = ref('')
 const reviewSamples = ref<ReviewSample[]>([])
 const reviewIndex = ref(0)
 const reviewAnswers = ref<Record<string, string>>({})
@@ -447,6 +449,7 @@ const resultLink = computed(() => findResultLink(selectedDetail.value?.result))
 const shadowReviewReady = computed(() => Boolean(selectedDetail.value?.result && typeof selectedDetail.value.result === 'object' && (selectedDetail.value.result as Record<string, unknown>).review_ready))
 const reviewCurrent = computed(() => reviewSamples.value[reviewIndex.value] || null)
 const reviewComplete = computed(() => reviewSamples.value.length > 0 && reviewSamples.value.every(item => Boolean(reviewAnswers.value[item.sample_id])))
+const reviewShareUrl = computed(() => reviewRunId.value && reviewToken.value ? `${window.location.origin}${window.location.pathname}?review_run=${encodeURIComponent(reviewRunId.value)}&review_token=${encodeURIComponent(reviewToken.value)}` : '')
 
 watch(selectedServerId, () => {
   assigneeId.value = ''
@@ -459,6 +462,10 @@ watch(sourceMode, () => {
 
 onMounted(async () => {
   await Promise.all([loadCvatServers(), loadContainerStatus(), loadRuns()])
+  const query = new URLSearchParams(window.location.search)
+  const linkedRun = query.get('review_run')
+  const linkedToken = query.get('review_token')
+  if (linkedRun && linkedToken) void loadShadowReview(linkedRun, linkedToken)
   statusTimer = window.setInterval(loadContainerStatus, 60000)
 })
 
@@ -827,10 +834,18 @@ async function loadRunDetail(runId: string): Promise<void> {
   }
 }
 
-async function loadShadowReview(runId: string): Promise<void> {
+async function loadShadowReview(runId: string, capability = ''): Promise<void> {
   try {
-    const review = await apiJson<ReviewPayload>(`/prelabel/runs/${encodeURIComponent(runId)}/review`)
+    let token = capability
+    if (!token) {
+      const invite = await apiJson<{ review_token: string }>(`/prelabel/runs/${encodeURIComponent(runId)}/review/invites`, {
+        method: 'POST', headers: ownerHeaders(), body: { owner_token: clientToken },
+      })
+      token = invite.review_token
+    }
+    const review = await apiJson<ReviewPayload>(`/prelabel/runs/${encodeURIComponent(runId)}/review?${new URLSearchParams({ review_token: token })}`)
     reviewRunId.value = runId
+    reviewToken.value = token
     reviewSamples.value = review.samples || []
     reviewIndex.value = 0
     reviewAnswers.value = {}
@@ -845,19 +860,18 @@ async function loadShadowReview(runId: string): Promise<void> {
 
 function reviewAssetUrl(side: 'X' | 'Y'): string {
   if (!reviewCurrent.value || !reviewRunId.value) return ''
-  return `/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review/assets/${encodeURIComponent(reviewCurrent.value.sample_id)}/${side}`
+  return `/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review/assets/${encodeURIComponent(reviewCurrent.value.sample_id)}/${side}?${new URLSearchParams({ review_token: reviewToken.value })}`
 }
 
 async function submitShadowReview(): Promise<void> {
   if (!reviewRunId.value || !reviewComplete.value) return
   reviewSubmitting.value = true
   try {
-    const reviewerId = getReviewerId()
-    const data = await apiJson<{ ok: boolean; decision: { status: string; valid_votes: number } }>(`/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review`, {
+    await apiJson<{ ok: boolean }>(`/prelabel/runs/${encodeURIComponent(reviewRunId.value)}/review`, {
       method: 'POST',
-      body: { reviewer_id: reviewerId, answers: reviewAnswers.value },
+      body: { review_token: reviewToken.value, answers: reviewAnswers.value },
     })
-    reviewDecision.value = reviewDecisionText(data.decision)
+    reviewDecision.value = '盲评已提交；结果将在所有者完成揭示后公布。'
   } catch (error) {
     pushLog({ type: 'log', level: 'error', msg: `提交盲评失败: ${messageOf(error)}` })
   } finally {
@@ -881,18 +895,13 @@ async function revealShadowReview(): Promise<void> {
   }
 }
 
-function getReviewerId(): string {
-  const key = 'PRELABEL_REVIEWER_ID'
-  const saved = localStorage.getItem(key)
-  if (saved) return saved
-  const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `review_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`
-  localStorage.setItem(key, generated)
-  return generated
-}
-
 function reviewDecisionText(decision: { status: string; valid_votes?: number }): string {
   const labels: Record<string, string> = { candidate_wins: '候选方案胜出', baseline_wins: '基线方案胜出', no_decision: '无结论', pending: '评审进行中' }
   return `${labels[decision.status] || decision.status}（有效判断 ${decision.valid_votes ?? 0}）`
+}
+
+function selectText(event: FocusEvent): void {
+  ;(event.target as HTMLInputElement | null)?.select()
 }
 
 async function cancelRun(run: RunRecord): Promise<void> {
@@ -1084,6 +1093,8 @@ function findResultLink(result: unknown): string {
 .review-actions { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 10px 10px; }
 .review-actions .selected { border-color: #38bdf8; color: #e0f2fe; background: #075985; }
 .review-decision { margin: 0 10px 10px; color: #bae6fd; }
+.review-share { display: flex; gap: 8px; align-items: center; margin: 0 10px 10px; color: #94a3b8; }
+.review-share input { flex: 1; min-width: 0; padding: 5px; color: #cbd5e1; background: #020617; border: 1px solid #334155; }
 
 .prelabel-config,
 .prelabel-runtime {

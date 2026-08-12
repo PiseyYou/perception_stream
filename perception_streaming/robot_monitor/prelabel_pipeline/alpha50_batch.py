@@ -273,6 +273,20 @@ def _expected_labels(candidate: Alpha50Candidate) -> list[dict[str, Any]]:
     return _immutable(candidate.expected_cvat_schema["labels"])
 
 
+def _json_safe(value: Any) -> Any:
+    """Detach CVAT SDK model objects into JSON-only diagnostic values."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if callable(getattr(value, "to_dict", None)):
+        rendered = value.to_dict()
+        return _json_safe(rendered)
+    raise CandidatePreflightError(f"CVAT schema contains unsupported value: {type(value).__name__}")
+
+
 def _normalized_schema(schema: Any, expected: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if isinstance(schema, dict):
         schema = schema.get("labels", [])
@@ -285,12 +299,9 @@ def _normalized_schema(schema: Any, expected: list[dict[str, Any]]) -> list[dict
             attributes = []
         safe_attributes = []
         for attribute in attributes:
-            if isinstance(attribute, dict):
-                safe_attributes.append(_immutable(attribute))
-            elif callable(getattr(attribute, "to_dict", None)):
-                rendered = attribute.to_dict()
-                if isinstance(rendered, dict):
-                    safe_attributes.append(_immutable(rendered))
+            rendered = _json_safe(attribute)
+            if isinstance(rendered, dict):
+                safe_attributes.append(rendered)
         normalized.append({"name": item["name"], "type": item.get("type"), "attributes": safe_attributes})
     return sorted(normalized, key=lambda item: item["name"])
 

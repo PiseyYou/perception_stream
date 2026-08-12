@@ -11,6 +11,14 @@ for (const forbidden of ['candidate_task_identity', 'alpha50-']) {
   assert.ok(!source.includes(forbidden), `anonymous review surface leaks identity: ${forbidden}`)
 }
 
+for (const required of [
+  'class="file-input"\n              :disabled="uploading"',
+  ':disabled="!selectedFiles.length || uploading" @click="clearUploadSelection"',
+  ':disabled="!selectedFiles.length || uploading" @click="uploadSelectedFiles(true)"',
+]) {
+  assert.ok(source.includes(required), `background A/B run must not block staging another upload: ${required}`)
+}
+
 console.log('Prelabel shadow mode UI static contract passed')
 
 assert.ok(viteSource.includes("process.env.ENABLE_ROBOT_BRIDGE !== '0'"),

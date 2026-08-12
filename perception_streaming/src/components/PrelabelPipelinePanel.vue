@@ -115,7 +115,7 @@
               multiple
               accept="image/*"
               class="file-input"
-              :disabled="running"
+              :disabled="uploading"
               @change="onFileChange"
             />
             <input
@@ -125,13 +125,13 @@
               multiple
               webkitdirectory
               class="file-input"
-              :disabled="running"
+              :disabled="uploading"
               @change="onFolderChange"
             />
             <div class="upload-line">
               <span class="upload-summary">{{ fileSummary }}</span>
-              <button class="prelabel-btn ghost" :disabled="!selectedFiles.length || uploading || running" @click="clearUploadSelection">清空</button>
-              <button class="prelabel-btn" :disabled="!selectedFiles.length || uploading || running" @click="uploadSelectedFiles(true)">
+              <button class="prelabel-btn ghost" :disabled="!selectedFiles.length || uploading" @click="clearUploadSelection">清空</button>
+              <button class="prelabel-btn" :disabled="!selectedFiles.length || uploading" @click="uploadSelectedFiles(true)">
                 {{ uploading ? '上传中' : '上传' }}
               </button>
             </div>

@@ -193,6 +193,16 @@ class Alpha50CandidateTest(unittest.TestCase):
             self.assertEqual(result.cleanup_outcome, {"status": "deleted"})
             cleanup.assert_called_once_with(44)
 
+    def test_schema_mismatch_persists_normalized_actual_and_expected_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = self._candidate(Path(tmp))
+            record = {}
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record=record, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=lambda _, **__: {"id": 44}, get_cvat_schema=lambda _: [{"name": "lawn草地", "type": "tag", "attributes": []}], cleanup_cvat_task=lambda _: {"status": "deleted"})
+
+            self.assertFalse(result.ok)
+            self.assertEqual(record["candidate_schema_expected"], [{"name": "lawn草地", "type": "polygon", "attributes": []}])
+            self.assertEqual(record["candidate_schema_actual"], [{"name": "lawn草地", "type": "tag", "attributes": []}])
+
     def test_preflight_persists_manifest_digest_to_branch_record_before_create(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

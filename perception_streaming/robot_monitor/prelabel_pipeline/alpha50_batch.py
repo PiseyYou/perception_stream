@@ -422,6 +422,8 @@ def preflight_candidate(
     expected_schema = sorted(expected_labels, key=lambda item: item["name"])
     if actual_schema != expected_schema:
         branch_record["candidate_preflight_status"] = "schema_failed"
+        branch_record["candidate_schema_expected"] = _immutable(expected_schema)
+        branch_record["candidate_schema_actual"] = _immutable(actual_schema)
         cleanup_outcome = _cleanup_result(cleanup_cvat_task, task_id)
         branch_record["candidate_cleanup_outcome"] = cleanup_outcome
         return CandidatePreflightResult(False, ("CVAT schema mismatch after task creation",), task_id, task_id, cleanup_outcome, True, manifest, digest)

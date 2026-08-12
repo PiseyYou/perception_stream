@@ -203,6 +203,16 @@ class Alpha50CandidateTest(unittest.TestCase):
             self.assertEqual(record["candidate_schema_expected"], [{"name": "lawn草地", "type": "polygon", "attributes": []}])
             self.assertEqual(record["candidate_schema_actual"], [{"name": "lawn草地", "type": "tag", "attributes": []}])
 
+    def test_normalized_schema_serializes_sdk_like_attribute_models(self):
+        class Attr:
+            def to_dict(self):
+                return {"name": "is_crowd", "mutable": False, "input_type": "checkbox", "values": ["false"], "default_value": "false"}
+        actual = __import__("prelabel_pipeline.alpha50_batch", fromlist=["_normalized_schema"])._normalized_schema([
+            {"name": "lawn草地", "type": "polygon", "attributes": [Attr()]}
+        ], [])
+        self.assertEqual(actual[0]["attributes"][0]["name"], "is_crowd")
+        self.assertEqual(actual[0]["attributes"][0]["input_type"], "checkbox")
+
     def test_preflight_persists_manifest_digest_to_branch_record_before_create(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

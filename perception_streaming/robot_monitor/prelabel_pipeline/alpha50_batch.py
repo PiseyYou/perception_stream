@@ -280,7 +280,18 @@ def _normalized_schema(schema: Any, expected: list[dict[str, Any]]) -> list[dict
     for item in schema:
         if not isinstance(item, dict) or not isinstance(item.get("name"), str):
             continue
-        normalized.append({"name": item["name"], "type": item.get("type"), "attributes": item.get("attributes")})
+        attributes = item.get("attributes")
+        if not isinstance(attributes, list):
+            attributes = []
+        safe_attributes = []
+        for attribute in attributes:
+            if isinstance(attribute, dict):
+                safe_attributes.append(_immutable(attribute))
+            elif callable(getattr(attribute, "to_dict", None)):
+                rendered = attribute.to_dict()
+                if isinstance(rendered, dict):
+                    safe_attributes.append(_immutable(rendered))
+        normalized.append({"name": item["name"], "type": item.get("type"), "attributes": safe_attributes})
     return sorted(normalized, key=lambda item: item["name"])
 
 

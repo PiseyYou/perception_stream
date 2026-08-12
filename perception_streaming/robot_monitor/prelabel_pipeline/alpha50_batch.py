@@ -389,13 +389,17 @@ def preflight_candidate(
     persisted = persist_candidate_provenance(provenance_path, manifest, digest)
     branch_record["candidate_provenance_digest"] = digest
     branch_record["candidate_provenance_path"] = str(persisted)
+    # SDK task creation may normalize/mutate the list it receives.  Keep an
+    # immutable comparison copy so post-create diagnostics never depend on
+    # third-party proxy object identity.
     expected_labels = _expected_labels(candidate)
+    expected_schema = _immutable(expected_labels)
     task_identity = f"alpha50-{digest[:24]}"
     request_key = hashlib.sha256(f"{task_identity}:{digest}".encode("ascii")).hexdigest()
     branch_record["candidate_task_identity"] = task_identity
     branch_record["candidate_request_key"] = request_key
     try:
-        task = _create_task(create_cvat_task, expected_labels, task_identity, request_key)
+        task = _create_task(create_cvat_task, _immutable(expected_labels), task_identity, request_key)
     except CandidatePreflightError:
         raise
     except Exception as exc:
@@ -435,13 +439,13 @@ def preflight_candidate(
     branch_record["candidate_cleanup_needed_task_id"] = task_id
     branch_record["candidate_preflight_status"] = "schema_pending"
     try:
-        actual_schema = _normalized_schema(get_cvat_schema(task), expected_labels)
+        actual_schema = _normalized_schema(get_cvat_schema(task), expected_schema)
     except Exception as exc:
         branch_record["candidate_preflight_status"] = "schema_failed"
         cleanup_outcome = _cleanup_result(cleanup_cvat_task, task_id)
         branch_record["candidate_cleanup_outcome"] = cleanup_outcome
         return CandidatePreflightResult(False, (f"CVAT schema read failed: {exc}",), task_id, task_id, cleanup_outcome, True, manifest, digest)
-    expected_schema = sorted(expected_labels, key=lambda item: item["name"])
+    expected_schema = sorted(expected_schema, key=lambda item: item["name"])
     if actual_schema != expected_schema:
         branch_record["candidate_preflight_status"] = "schema_failed"
         branch_record["candidate_schema_expected"] = _immutable(expected_schema)

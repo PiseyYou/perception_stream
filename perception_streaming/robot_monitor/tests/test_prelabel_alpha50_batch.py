@@ -217,6 +217,20 @@ class Alpha50CandidateTest(unittest.TestCase):
         self.assertEqual(actual[0]["attributes"][0]["input_type"], "checkbox")
         self.assertEqual(actual[0]["attributes"][0]["values"], [{"value": "false"}])
 
+    def test_preflight_uses_frozen_expected_schema_when_create_mutates_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = self._candidate(Path(tmp))
+            record = {}
+            class Patched:
+                def to_dict(self):
+                    return {"name": "is_crowd", "input_type": "checkbox", "values": ["false"]}
+            def create(labels, **_kwargs):
+                labels[0]["attributes"] = [Patched()]
+                return {"id": 44}
+            result = preflight_candidate(candidate, input_snapshot_hash="input", provenance_path=Path(tmp) / "provenance.json", branch_record=record, import_checker=lambda _: ["torch", "detectron2"], gpu_checker=lambda: {"cuda": True, "vram_gb": 8}, disk_checker=lambda _: 8, create_cvat_task=create, get_cvat_schema=lambda _: [], cleanup_cvat_task=lambda _: {"status": "deleted"})
+            self.assertFalse(result.ok)
+            self.assertEqual(record["candidate_schema_expected"], candidate["expected_cvat_schema"]["labels"])
+
     def test_preflight_persists_manifest_digest_to_branch_record_before_create(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

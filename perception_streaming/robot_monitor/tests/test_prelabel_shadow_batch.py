@@ -76,6 +76,21 @@ class PrelabelShadowBatchTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 freeze_batch(source, root / "snapshots")
 
+    def test_freeze_batch_ignores_upload_metadata_but_rejects_other_unsupported_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "upload"
+            self._image(source / "image.png")
+            (source / ".upload_meta.json").write_text('{"owner_token":"opaque"}', encoding="utf-8")
+
+            snapshot = freeze_batch(source, root / "snapshots")
+
+            manifest = json.loads((Path(snapshot["snapshot_path"]) / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual([item["path"] for item in manifest["files"]], ["image.png"])
+            (source / "unexpected.txt").write_text("not allowed", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                freeze_batch(source, root / "other-snapshots")
+
     def test_freeze_batch_rejects_source_image_symlink(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -16,6 +16,7 @@ from PIL import Image, UnidentifiedImageError
 
 SUPPORTED_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 MANIFEST_NAME = "manifest.json"
+UPLOAD_METADATA_NAME = ".upload_meta.json"
 
 
 def _sha256(path: Path) -> str:
@@ -83,6 +84,11 @@ def freeze_batch(source: str | Path, snapshot_root: str | Path) -> dict[str, str
     seen_hashes: set[str] = set()
     for image_path in sorted((path for path in source_path.rglob("*") if path.is_file()), key=lambda p: p.relative_to(source_path).as_posix()):
         relative = image_path.relative_to(source_path).as_posix()
+        # Upload ownership metadata lives beside user images.  It is internal
+        # control-plane state, not input data, and must never enter the frozen
+        # image manifest.  All other unsupported files remain fail-closed.
+        if relative == UPLOAD_METADATA_NAME:
+            continue
         if image_path.is_symlink():
             raise ValueError(f"source image symlink is not allowed: {relative}")
         try:

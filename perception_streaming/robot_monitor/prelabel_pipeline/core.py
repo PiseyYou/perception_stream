@@ -881,18 +881,19 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         labels = build_cvat_labels(config["labels_csv"])
         identity = kwargs.get("idempotency_key") or f"{task_prefix}_{branch}"
         return client().tasks.create({"name": f"shadow-{identity}", "labels": labels, "segment_size": config.get("segment_size", 1000)})
-    def resolve_task(identity: str) -> Any:
-        expected = f"shadow-{identity}"
-        matches = client().tasks.list(search=expected)
-        for task in matches:
+    def matching_task(identity: str, *, prefix: str = "") -> Any:
+        expected = f"{prefix}{identity}"
+        # CVAT SDK 2.2's proxy has no ``search`` argument.  List locally and
+        # match the deterministic full name; it avoids SDK-version-dependent
+        # server filtering while preserving the idempotency invariant.
+        for task in client().tasks.list():
             if getattr(task, "name", None) == expected:
                 return task
         return None
+    def resolve_task(identity: str) -> Any:
+        return matching_task(identity, prefix="shadow-")
     def resolve_candidate_task(identity: str) -> Any:
-        for task in client().tasks.list(search=identity):
-            if getattr(task, "name", None) == identity:
-                return task
-        return None
+        return matching_task(identity)
     def upload(task: Any, input_dir: str | Path) -> None:
         paths = sorted(str(path) for path in Path(input_dir).rglob("*") if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
         if not paths:
@@ -968,7 +969,8 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         task.import_annotations("CVAT 1.1", str(path))
         return _cvat_task_url(config, task.id)
     def cleanup(task_id: int) -> Any:
-        return client().tasks.delete(task_id)
+        task = client().tasks.retrieve(task_id)
+        return task.remove()
     def baseline(input_dir: str | Path, task: Any, _snapshot: dict) -> Path:
         jobs = task.get_jobs()
         if not jobs:
@@ -1048,12 +1050,23 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             return client().tasks.create({"name": task_identity, "labels": labels, "segment_size": config.get("segment_size", 1000)})
         def schema(task: Any) -> Any:
             task.fetch()
-            return getattr(task, "labels", None) or getattr(task, "_model", {}).get("labels", [])
+            labels_api = getattr(getattr(client(), "api_client", None), "labels_api", None)
+            if labels_api is not None:
+                page, _response = labels_api.list(task_id=task.id)
+                labels = list(getattr(page, "results", []) or [])
+                # CVAT paginates labels.  Task contracts are typically small,
+                # but retrieve every page when the API exposes a next cursor.
+                while getattr(page, "next", None):
+                    page, _response = labels_api.list(task_id=task.id, page=int(str(page.next).split("page=")[-1].split("&")[0]))
+                    labels.extend(getattr(page, "results", []) or [])
+                return [item.to_dict() if callable(getattr(item, "to_dict", None)) else item for item in labels]
+            labels = getattr(task, "labels", None)
+            if isinstance(labels, list):
+                return labels
+            model = getattr(task, "_model", None)
+            return model.get("labels", []) if isinstance(model, dict) else []
         def resolve_candidate(identity: str, _request_key: str) -> Any:
-            for existing in client().tasks.list(search=identity):
-                if getattr(existing, "name", None) == identity:
-                    return existing
-            return None
+            return resolve_candidate_task(identity)
         result = preflight_candidate(candidate, input_snapshot_hash=snapshot["snapshot_hash"], create_cvat_task=create_candidate, get_cvat_schema=schema, cleanup_cvat_task=cleanup, resolve_cvat_task=resolve_candidate, provenance_path=provenance_dir / f"{snapshot['batch_id']}-B.json", branch_record=record)
         if not result.ok or not result.task_id:
             raise CandidatePreflightError("; ".join(result.errors) or "candidate preflight failed")

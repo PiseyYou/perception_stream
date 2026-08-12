@@ -39,6 +39,23 @@ class PrelabelCoreTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "body exceeds"):
                 adapters["frame_bytes"](Mock(id=1), 0)
 
+    def test_production_shadow_adapter_supports_current_sdk_task_list_remove_and_label_api(self):
+        label = Mock(); label.to_dict.return_value = {"name": "background", "type": "polygon", "attributes": []}
+        response = Mock(); response.results = [label]
+        api = Mock(); api.labels_api.list.return_value = (response, None)
+        task = Mock(id=7); task.name = "shadow-batch:A:hash"
+        repo = Mock(); repo.list.return_value = [task]
+        client = Mock(tasks=repo, api_client=api)
+        cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+
+        adapters = core.build_shadow_adapters(cfg, client_factory=lambda: client)
+
+        self.assertIs(adapters["resolve_task"]("batch:A:hash"), task)
+        adapters["cleanup"](7)
+        repo.retrieve.assert_called_once_with(7)
+        repo.retrieve.return_value.remove.assert_called_once_with()
+        self.assertEqual(adapters["candidate_preflight"].__name__, "candidate_preflight")
+
     def test_production_shadow_adapter_stops_metadata_stream_at_byte_limit(self):
         def chunks():
             yield b"12345"

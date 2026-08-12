@@ -116,6 +116,13 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(result["branches"]["A"]["provenance"]["snapshot_hash"], result["branches"]["B"]["provenance"]["snapshot_hash"])
             self.assertEqual(created.call_count, 2)
 
+    def test_shadow_result_retains_snapshot_path_for_authorized_branch_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            snapshot["snapshot_path"] = str(Path(tmp) / "immutable-snapshot")
+            result = core.run_shadow_pipeline("rid", "task", [tmp], {"shadow_adapters": adapters, "shadow_snapshot": snapshot}, {"shadow_root": tmp}, None)
+            self.assertEqual(result["snapshot_path"], snapshot["snapshot_path"])
+
     def test_shadow_keeps_a_success_when_b_inference_fails_and_disables_review(self):
         with tempfile.TemporaryDirectory() as tmp:
             snapshot, adapters, _created = self._shadow_fakes(tmp, alpha=Mock(side_effect=RuntimeError("B failed")))

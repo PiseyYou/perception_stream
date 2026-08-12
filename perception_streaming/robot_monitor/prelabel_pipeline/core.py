@@ -1159,7 +1159,7 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     batch_id = snapshot.get("batch_id")
     if not isinstance(batch_id, str) or not isinstance(snapshot_hash, str):
         raise ValueError("shadow snapshot identity is required")
-    state = {"run_id": run_id, "batch_id": batch_id, "snapshot_hash": snapshot_hash, "branches": {}, "common_success": []}
+    state = {"run_id": run_id, "batch_id": batch_id, "snapshot_hash": snapshot_hash, "snapshot_path": snapshot.get("snapshot_path"), "branches": {}, "common_success": []}
     retry_branch = params.get("retry_branch")
     if retry_branch not in (None, "A", "B"):
         raise ValueError("retry_branch must be A or B")

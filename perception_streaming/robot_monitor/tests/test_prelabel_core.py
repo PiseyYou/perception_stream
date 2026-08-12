@@ -256,6 +256,48 @@ class PrelabelCoreTest(unittest.TestCase):
         self.assertIn("'/output dir'", inner)
         self.assertIn("cd '/demo dir' &&", docker_cmd[-1])
 
+    def test_stage_baseline_input_copies_branch_into_container_mount(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "branch"
+            source.mkdir()
+            (source / "one.jpg").write_bytes(b"input-bytes")
+            mount = Path(tmp) / "mounted"
+            mount.mkdir()
+            config = {"docker": {"container": "MPformer"}, "shadow_container_input_root": str(mount)}
+
+            with patch.object(core.subprocess, "run", return_value=Mock(returncode=0, stdout="", stderr="")) as docker:
+                staged = core.stage_baseline_input(source, 147, config)
+
+            self.assertEqual(staged, mount / "shadow-147-A")
+            self.assertEqual((staged / "one.jpg").read_bytes(), b"input-bytes")
+            docker.assert_called_once_with(
+                ["docker", "exec", "MPformer", "test", "-d", str(staged)],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+
+    def test_stage_baseline_input_rejects_container_invisible_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "branch"
+            source.mkdir()
+            (source / "one.jpg").write_bytes(b"input-bytes")
+            mount = Path(tmp) / "mounted"
+            mount.mkdir()
+            config = {"docker": {"container": "MPformer"}, "shadow_container_input_root": str(mount)}
+
+            with patch.object(core.subprocess, "run", return_value=Mock(returncode=1, stdout="", stderr="not mounted")):
+                with self.assertRaisesRegex(RuntimeError, "not visible"):
+                    core.stage_baseline_input(source, 147, config)
+
+    def test_step2_reports_container_output_when_success_exits_without_xml(self):
+        cfg = {"model": {"demo_dir": "/demo", "config": "/cfg.yaml", "weights": "/w.pth"}, "docker": {"container": "MPformer"}}
+        proc = Mock(returncode=0)
+        proc.stdout = iter(["skipped inaccessible input\\n"])
+        with patch.object(core.subprocess, "Popen", return_value=proc):
+            with self.assertRaisesRegex(FileNotFoundError, "skipped inaccessible input"):
+                core.step2_predict("/input", "/missing-output", 1, cfg, lambda _item: None)
+
     def test_cuda_error_detection(self):
         self.assertTrue(core.is_cuda_error(["RuntimeError: CUDA error"]))
         self.assertTrue(core.is_cuda_error("No CUDA GPUs are available"))

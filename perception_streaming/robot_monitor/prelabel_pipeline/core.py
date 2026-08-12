@@ -9,6 +9,7 @@ import ipaddress
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import threading
 import time as _time_module
@@ -481,7 +482,8 @@ def step2_predict(
 
         xml_path = Path(output_dir) / "annotations.xml"
         if not xml_path.exists():
-            raise FileNotFoundError(f"预标注结果不存在: {xml_path}")
+            detail = "\n".join(output_lines[-50:]) or "(容器未输出诊断信息)"
+            raise FileNotFoundError(f"预标注结果不存在: {xml_path}\n容器输出:\n{detail}")
         log_fn(f"[Step2] 预标注完成: {xml_path}")
         log_fn({"type": "step_done", "step": 2, "status": "success", "msg": f"预标注完成: {xml_path}"})
         return xml_path
@@ -489,6 +491,41 @@ def step2_predict(
         if gpu_acquired:
             gpu_sem.release()
             log_fn("[Step2] GPU 资源已释放")
+
+
+def stage_baseline_input(input_dir: str | Path, task_id: int, config: dict) -> Path:
+    """Copy one attested A-branch input into the MPFormer container's mount.
+
+    The isolated worktree is intentionally not assumed to be mounted in the
+    inference container.  A unique, container-visible copy prevents the model
+    from silently seeing an empty input directory while preserving the frozen
+    snapshot and branch-private original for the CVAT attestation record.
+    """
+    root = config.get("shadow_container_input_root")
+    if not isinstance(root, str) or not root:
+        raise RuntimeError("shadow_container_input_root is required for baseline inference")
+    if not isinstance(task_id, int) or task_id <= 0:
+        raise ValueError("baseline CVAT task id is invalid")
+    source = Path(input_dir).resolve()
+    if not source.is_dir():
+        raise ValueError("baseline input directory is invalid")
+    destination = Path(root).resolve() / f"shadow-{task_id}-A"
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(source, destination)
+    container = config.get("docker", {}).get("container")
+    if not isinstance(container, str) or not container:
+        raise ValueError("baseline Docker container is required")
+    visible = subprocess.run(
+        ["docker", "exec", container, "test", "-d", str(destination)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if visible.returncode != 0:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise RuntimeError(f"baseline staging destination is not visible in container: {destination}")
+    return destination
 
 
 def step3_rename(xml_path: str | Path, config: dict, log_fn: LogFn) -> Path:
@@ -977,10 +1014,14 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             raise RuntimeError("baseline CVAT task has no job")
         output = Path(config["output_base"]) / f"shadow-{task.id}-A"
         output.mkdir(parents=True, exist_ok=True)
-        xml = step2_predict(str(input_dir), str(output), jobs[0].id, config, lambda _item: None)
-        if xml is None:
-            raise RuntimeError("baseline inference cancelled")
-        return step3_rename(xml, config, lambda _item: None)
+        staged_input = stage_baseline_input(input_dir, task.id, config)
+        try:
+            xml = step2_predict(str(staged_input), str(output), jobs[0].id, config, lambda _item: None)
+            if xml is None:
+                raise RuntimeError("baseline inference cancelled")
+            return step3_rename(xml, config, lambda _item: None)
+        finally:
+            shutil.rmtree(staged_input, ignore_errors=True)
     candidate_config = config.get("alpha50_candidate")
     def resolve_runtime() -> Any:
         """Resolve the pinned Alpha50 loader/predictor from declarative config."""

@@ -29,6 +29,9 @@ model:
 
 labels_csv: "${MPFORMER_ROOT}/MP-Former/demo/lhx/labels.csv"
 output_base: "${MPFORMER_ROOT}/MP-Former/demo/output"
+# MPFormer's Docker container mounts MPFORMER_ROOT but not the isolated
+# worktree.  A branch-private copy is staged here immediately before A runs.
+shadow_container_input_root: "${MPFORMER_ROOT}/MP-Former/demo/shadow_inputs"
 upload_dir: "${STREAMING_DIR}/data/prelabel_uploads"
 runs_dir: "${STREAMING_DIR}/data/prelabel_runs"
 browse_roots:

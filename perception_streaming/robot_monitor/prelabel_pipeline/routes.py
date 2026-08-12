@@ -585,6 +585,8 @@ def _handle_shadow_reconcile(handler, run_id: str) -> None:
         _send_json(handler, {"ok": False, "error": str(exc)}, status=400)
         return
     with run_state.runs_lock:
+        if run_id not in run_state.runs:
+            run_state.restore_run_from_disk(run_id, _runs_dir(cfg))
         run = run_state.runs.get(run_id)
         if not run or not token or token != run.get("owner_token"):
             _send_json(handler, {"ok": False, "error": "owner token mismatch"}, status=403)

@@ -1003,7 +1003,22 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
                 close()
     def importer(task: Any, xml: Any) -> Any:
         path = Path(xml)
-        task.import_annotations("CVAT 1.1", str(path))
+        try:
+            task.import_annotations("CVAT 1.1", str(path))
+        except json.JSONDecodeError as exc:
+            # The deployed CVAT accepts the TUS upload but returns 202 with an
+            # empty response body instead of the SDK's expected {rq_id}.  Do
+            # not mask arbitrary importer failures: only this exact response
+            # shape is accepted, and only after the task annotations endpoint
+            # confirms the server has a readable annotation document.
+            if exc.doc or exc.pos != 0:
+                raise
+            session, base = cvat_session(server)
+            response = session.get(f"{base}/api/tasks/{task.id}/annotations", timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("version"), int):
+                raise RuntimeError("CVAT annotation import readback is invalid") from exc
         return _cvat_task_url(config, task.id)
     def cleanup(task_id: int) -> Any:
         task = client().tasks.retrieve(task_id)

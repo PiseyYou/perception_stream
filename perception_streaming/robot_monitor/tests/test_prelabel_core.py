@@ -75,6 +75,33 @@ class PrelabelCoreTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "metadata exceeds"):
                 adapters["frames"](Mock(id=1))
         response.close.assert_called_once()
+
+    def test_shadow_import_accepts_deployed_cvat_empty_tus_response_only_after_readback(self):
+        client = Mock()
+        task = Mock(id=12)
+        task.import_annotations.side_effect = __import__("json").JSONDecodeError("Expecting value", "", 0)
+        client.tasks.retrieve.return_value = task
+        session = Mock()
+        response = Mock(); response.json.return_value = {"version": 0, "shapes": []}; response.raise_for_status.return_value = None
+        session.get.return_value = response
+        cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+        with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
+            adapters = core.build_shadow_adapters(cfg, client_factory=lambda: client)
+            self.assertEqual(adapters["import"](task, "/tmp/annotations.xml"), "http://localhost:8080/tasks/12")
+        session.get.assert_called_once_with("http://cvat/api/tasks/12/annotations", timeout=30)
+
+    def test_shadow_import_reraises_empty_tus_response_when_readback_fails(self):
+        client = Mock()
+        task = Mock(id=12)
+        task.import_annotations.side_effect = __import__("json").JSONDecodeError("Expecting value", "", 0)
+        session = Mock()
+        response = Mock(); response.raise_for_status.side_effect = RuntimeError("readback unavailable")
+        session.get.return_value = response
+        cfg = {"labels_csv": "labels.csv", "segment_size": 1, "cvat_servers": [{"id": "local", "host": "localhost", "port": 8080, "user": "u", "password": "p"}]}
+        with patch.object(core, "cvat_session", return_value=(session, "http://cvat")):
+            adapters = core.build_shadow_adapters(cfg, client_factory=lambda: client)
+            with self.assertRaisesRegex(RuntimeError, "readback unavailable"):
+                adapters["import"](task, "/tmp/annotations.xml")
     def _shadow_fakes(self, tmp, raw=b"image", *, alpha=None):
         snapshot = {"batch_id": "batch", "snapshot_hash": "snapshot", "files": [{"path": "one.jpg", "sha256": hashlib.sha256(raw).hexdigest(), "original_dimensions": {"width": 1, "height": 1}}]}
         created = Mock(side_effect=lambda branch, *_args, **_kwargs: {"id": 10 if branch == "A" else 20})

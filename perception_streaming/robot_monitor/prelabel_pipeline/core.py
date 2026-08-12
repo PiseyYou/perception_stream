@@ -940,7 +940,7 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
         return result
     def frame_bytes(task: Any, frame_id: int, **_kwargs: Any) -> bytes:
         session, base = cvat_session(server)
-        response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original"}, timeout=60, stream=True)
+        response = session.get(f"{base}/api/tasks/{task.id}/data", params={"number": frame_id, "quality": "original", "type": "frame"}, timeout=60, stream=True)
         try:
             response.raise_for_status()
             maximum = int(config.get("shadow_max_frame_bytes", 64 * 1024 * 1024))

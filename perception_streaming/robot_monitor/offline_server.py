@@ -34,7 +34,12 @@ except ImportError:
     PIL_AVAILABLE = False
     print("WARNING: PIL not available, stereo image concatenation will be disabled")
 
-OFFLINE_SERVER_PORT = 8769
+def _get_offline_server_port() -> int:
+    """Return the API port, preserving 8769 for legacy standalone use."""
+    return int(os.environ.get("OFFLINE_SERVER_PORT", "8769"))
+
+
+OFFLINE_SERVER_PORT = _get_offline_server_port()
 # Get the project root directory (parent of robot_monitor)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

@@ -15,6 +15,14 @@ import config_loader  # noqa: E402
 
 
 class OfflineServerResultDiscoveryTest(unittest.TestCase):
+    def test_offline_server_port_reads_dedicated_environment_override(self):
+        with patch.dict("os.environ", {"OFFLINE_SERVER_PORT": "8770"}, clear=False):
+            self.assertEqual(offline_server._get_offline_server_port(), 8770)
+
+    def test_offline_server_port_defaults_to_legacy_port(self):
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(offline_server._get_offline_server_port(), 8769)
+
     def test_build_output_dir_uses_stereo_debug_conventions(self):
         folder = "data/stereo_debug/0016/20260420"
 

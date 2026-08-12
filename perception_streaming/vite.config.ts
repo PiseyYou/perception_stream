@@ -9,6 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Use environment variable or fallback to system python3
 const PYTHON = process.env.PYTHON || 'python3'
+const FRONTEND_PORT = Number(process.env.PERCEPTION_STREAMING_PORT || '5173')
+const OFFLINE_SERVER_PORT = Number(process.env.OFFLINE_SERVER_PORT || '8769')
+const ENABLE_ROBOT_BRIDGE = process.env.ENABLE_ROBOT_BRIDGE !== '0'
 // Use SSH key from project data/conf directory
 const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202604')
 const REMOTE_HOST = '120.25.121.3'
@@ -23,7 +26,7 @@ function offlineServerPlugin() {
   return {
     name: 'offline-server',
     configureServer() {
-      try { execSync('lsof -ti:8769 | xargs kill -9', { stdio: 'ignore' }) } catch { /* ignore */ }
+      try { execSync(`lsof -ti:${OFFLINE_SERVER_PORT} | xargs kill -9`, { stdio: 'ignore' }) } catch { /* ignore */ }
       const script = path.resolve(__dirname, 'robot_monitor/offline_server.py')
       proc = spawn(PYTHON, [script], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BAG_DATA_DIR } })
       proc.stdout?.on('data', (d) => process.stdout.write(`[offline] ${d}`))
@@ -261,10 +264,10 @@ function bagDataPlugin() {
 }
 
 export default defineConfig({
-  plugins: [vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
+  plugins: [vue(), offlineServerPlugin(), ...(ENABLE_ROBOT_BRIDGE ? [sshBridgePlugin()] : []), bagFilePlugin(), bagDataPlugin()],
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: FRONTEND_PORT,
     open: true,
     watch: {
       ignored: ['**/data/**', '**/node_modules/**', '**/.git/**'],
@@ -275,7 +278,7 @@ export default defineConfig({
     },
     proxy: {
       '/offline': {
-        target: 'http://localhost:8769',
+        target: `http://localhost:${OFFLINE_SERVER_PORT}`,
         changeOrigin: true,
         timeout: 300000, // 5 minutes timeout for long operations
         proxyTimeout: 300000,
@@ -296,17 +299,17 @@ export default defineConfig({
         },
       },
       '/prelabel': {
-        target: 'http://localhost:8769',
+        target: `http://localhost:${OFFLINE_SERVER_PORT}`,
         changeOrigin: true,
         timeout: 300000,
         proxyTimeout: 300000,
       },
       '/ros2deploy': {
-        target: 'http://localhost:8769',
+        target: `http://localhost:${OFFLINE_SERVER_PORT}`,
         changeOrigin: true,
       },
       '/api/extract': {
-        target: 'http://localhost:8769',
+        target: `http://localhost:${OFFLINE_SERVER_PORT}`,
         changeOrigin: true,
       },
     },

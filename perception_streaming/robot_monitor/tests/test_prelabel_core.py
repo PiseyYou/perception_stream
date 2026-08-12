@@ -116,6 +116,22 @@ class PrelabelCoreTest(unittest.TestCase):
             self.assertEqual(result["branches"]["A"]["provenance"]["snapshot_hash"], result["branches"]["B"]["provenance"]["snapshot_hash"])
             self.assertEqual(created.call_count, 2)
 
+    def test_shadow_emits_branch_stage_progress_to_live_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, adapters, _created = self._shadow_fakes(tmp)
+            messages = []
+
+            core.run_shadow_pipeline(
+                "rid", "task", [tmp],
+                {"shadow_adapters": adapters, "shadow_snapshot": snapshot},
+                {"shadow_root": tmp}, messages.append,
+            )
+
+            self.assertTrue(any("A 分支：创建 CVAT 任务" in str(message) for message in messages))
+            self.assertTrue(any("A 分支：开始模型推理" in str(message) for message in messages))
+            self.assertTrue(any("B 分支：标注导入完成" in str(message) for message in messages))
+            self.assertTrue(any("A/B 影子验证完成" in str(message) for message in messages))
+
     def test_shadow_result_retains_snapshot_path_for_authorized_branch_retry(self):
         with tempfile.TemporaryDirectory() as tmp:
             snapshot, adapters, _created = self._shadow_fakes(tmp)

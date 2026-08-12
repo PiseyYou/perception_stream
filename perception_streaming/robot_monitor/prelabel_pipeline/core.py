@@ -1145,6 +1145,10 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     from .shadow_batch import freeze_batch, materialize_branch_input
     from .run_state import shadow_idempotency_key
 
+    def emit(message: str, *, level: str = "info") -> None:
+        if log_fn:
+            log_fn({"type": "log", "level": level, "msg": message})
+
     adapters = params.get("shadow_adapters") or {}
     if not isinstance(adapters, dict):
         raise ValueError("shadow_adapters are required")
@@ -1159,6 +1163,7 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     batch_id = snapshot.get("batch_id")
     if not isinstance(batch_id, str) or not isinstance(snapshot_hash, str):
         raise ValueError("shadow snapshot identity is required")
+    emit(f"A/B 影子验证已启动：批次 {batch_id}，共 {len(files)} 张图片")
     state = {"run_id": run_id, "batch_id": batch_id, "snapshot_hash": snapshot_hash, "snapshot_path": snapshot.get("snapshot_path"), "branches": {}, "common_success": []}
     retry_branch = params.get("retry_branch")
     if retry_branch not in (None, "A", "B"):
@@ -1199,13 +1204,16 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
         record = {"branch_id": branch, "idempotency_key": key, "attempt": len(history) + 1, "attempt_history": history, "status": "running", "provenance": provenance}
         state["branches"][branch] = record
         persist()
+        emit(f"{branch} 分支：开始处理（第 {record['attempt']} 次）")
         task = None
         try:
+            emit(f"{branch} 分支：准备独立输入数据")
             branch_input = _shadow_call(materializer, snapshot, branch, config.get("shadow_work_root") or Path(config.get("shadow_root", ".")) / "work")
             record["input_path"] = str(branch_input)
             persist()
             candidate_result = None
             if branch == "B" and callable(adapters.get("candidate_preflight")):
+                emit("B 分支：执行 Alpha50 运行环境与 CVAT schema 预检")
                 candidate_cfg = params.get("candidate_config") or config.get("alpha50_candidate")
                 if isinstance(candidate_cfg, dict):
                     from .alpha50_batch import build_candidate_provenance
@@ -1227,11 +1235,13 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                 resolver = adapters.get("resolve_task")
                 task = _shadow_call(resolver, key) if callable(resolver) else None
                 if task is None:
+                    emit(f"{branch} 分支：创建 CVAT 任务")
                     task = _shadow_call(create, branch, task_prefix, branch_input, idempotency_key=key, snapshot_hash=snapshot_hash)
             record["task_id"] = _shadow_task_id(task)
             if record["task_id"] is None:
                 raise ValueError("shadow CVAT task id is invalid")
             persist()
+            emit(f"{branch} 分支：CVAT 任务已就绪，开始上传图片")
             upload = adapters.get("upload")
             frames_fn, bytes_fn = adapters.get("frames"), adapters.get("frame_bytes")
             if not all(callable(fn) for fn in (upload, frames_fn, bytes_fn)):
@@ -1241,12 +1251,14 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             _shadow_call(upload, task, branch_input)
             record["upload_status"] = "success"
             persist()
+            emit(f"{branch} 分支：图片上传完成，校验 CVAT 帧与原始数据")
             frames = _shadow_call(frames_fn, task)
             record["images"], valid = _shadow_frame_outcomes(files, list(frames), bytes_fn, task)
             record["attestation_status"] = "success" if valid else "failed"
             persist()
             if not valid:
                 raise ValueError("frame verification failed; import blocked")
+            emit(f"{branch} 分支：开始模型推理（CVAT 帧校验已通过）")
             if cancel_fn():
                 raise RuntimeError("shadow run cancelled")
             runner = adapters.get("baseline" if branch == "A" else "alpha50")
@@ -1269,6 +1281,7 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                 xml = _shadow_call(runner, branch_input, task, snapshot)
             record["annotation_path"] = str(xml)
             persist()
+            emit(f"{branch} 分支：模型推理完成，准备导入标注")
             if branch == "B" and callable(adapters.get("validate_candidate_xml")):
                 _shadow_call(adapters["validate_candidate_xml"], xml, files, task)
             if cancel_fn():
@@ -1280,6 +1293,7 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
             record["import_status"] = "success"
             record["status"] = "success"
             persist()
+            emit(f"{branch} 分支：标注导入完成")
         except Exception as exc:
             record["status"] = "cancelled" if cancel_fn() else "failed"
             record["error"] = str(exc)
@@ -1290,6 +1304,7 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
                 except Exception as cleanup_exc:
                     record["cleanup"] = {"status": "failed", "error": str(cleanup_exc), "task_id": record.get("task_id")}
             persist()
+            emit(f"{branch} 分支：处理失败：{exc}", level="error")
     successful = [set(item["path"] for item in state["branches"][name].get("images", []) if item.get("status") == "success") for name in ("A", "B") if state["branches"].get(name, {}).get("status") == "success"]
     state["common_success"] = sorted(set.intersection(*successful)) if len(successful) == 2 else []
     state["status"] = "success" if len(successful) == 2 else ("cancelled" if cancel_fn() else "failed")
@@ -1311,4 +1326,5 @@ def run_shadow_pipeline(run_id: str, task_prefix: str, input_dirs: list[str], pa
     else:
         state["review_ready"] = False
     persist()
+    emit("A/B 影子验证完成" if state["status"] == "success" else f"A/B 影子验证结束：{state['status']}", level="info" if state["status"] == "success" else "error")
     return state

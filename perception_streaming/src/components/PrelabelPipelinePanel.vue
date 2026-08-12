@@ -627,11 +627,15 @@ function parentPath(path: string): string {
 
 function onFileChange(event: Event): void {
   const input = event.target as HTMLInputElement
+  const previousUploadId = uploadId.value
   selectedFiles.value = Array.from(input.files || [])
   uploadId.value = ''
   uploadProgress.value = 0
   uploadSaved.value = 0
   uploadTotal.value = selectedFiles.value.length
+  if (selectedFiles.value.length) {
+    pushLog({ type: 'log', level: 'info', msg: `已选择新的上传批次（${selectedFiles.value.length} 个文件），不会累加到${previousUploadId || '上一批'}。` })
+  }
 }
 
 function onFolderChange(event: Event): void {

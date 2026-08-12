@@ -19,6 +19,9 @@ for (const required of [
   assert.ok(source.includes(required), `background A/B run must not block staging another upload: ${required}`)
 }
 
+assert.ok(source.includes("pushLog({ type: 'log', level: 'info', msg: `已选择新的上传批次"),
+  'choosing another folder must explicitly start a new upload batch')
+
 console.log('Prelabel shadow mode UI static contract passed')
 
 assert.ok(viteSource.includes("process.env.ENABLE_ROBOT_BRIDGE !== '0'"),

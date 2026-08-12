@@ -142,6 +142,25 @@ class PrelabelRoutesTest(unittest.TestCase):
         self.assertEqual(handler.status, 403)
         factory.assert_not_called()
 
+    def test_shadow_retry_restores_owner_run_from_disk_before_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class ImmediateThread:
+                def __init__(self, target, daemon): self.target = target
+                def start(self): self.target()
+            body = json.dumps({"token": "owner", "branch_id": "B"}).encode()
+            handler = FakeHandler(body, {"Content-Length": str(len(body))})
+            restored = run_state.make_runtime_run("shadow", [tmp], owner_token="owner", shadow={"batch_id": "batch", "snapshot_hash": "hash", "snapshot_path": tmp, "branches": {"B": {"status": "failed", "cleanup": {"status": "reconciled"}}}})
+            restored["status"] = "failed"; restored["done"] = True
+            run_state.runs["abcdef123456"] = restored
+            run_state.save_run("abcdef123456", Path(tmp) / "runs")
+            run_state.runs.clear()
+            with patch.object(routes.config_manager, "load_config", return_value={"runs_dir": str(Path(tmp) / "runs")}), \
+                 patch.object(routes.core, "build_shadow_adapters", return_value={"cleanup": Mock()}), \
+                 patch.object(routes.core, "run_shadow_pipeline", return_value={"status": "success", "branches": {"B": {"status": "success"}}}), \
+                 patch.object(routes.threading, "Thread", ImmediateThread):
+                routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-retry"))
+            self.assertEqual(handler.status, 200, self._json_payload(handler))
+
     def test_shadow_reconcile_cleans_recorded_orphan_for_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"branches": {"B": {"task_id": 42, "cleanup": {"status": "needed"}}}})

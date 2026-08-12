@@ -260,6 +260,27 @@ def init_runs_from_history(runs_dir: str | Path = RUNS_DIR) -> None:
         runs.update(restored)
 
 
+def restore_run_from_disk(run_id: str, runs_dir: str | Path = RUNS_DIR) -> bool:
+    """Restore one durable terminal run on demand for an authorized retry.
+
+    Process restarts intentionally do not preload all history.  Retry/reconcile
+    routes may, however, recover a single owner-protected record without
+    recreating any external side effects.
+    """
+    path = run_json_path(runs_dir, run_id)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(record, dict):
+        return False
+    restored = _restore_history_record(record)
+    with runs_lock:
+        if run_id not in runs:
+            runs[run_id] = restored
+    return True
+
+
 def cleanup_old_runs(
     runs_dir: str | Path = RUNS_DIR,
     max_days: int = 30,

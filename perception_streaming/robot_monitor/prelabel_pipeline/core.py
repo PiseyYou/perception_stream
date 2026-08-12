@@ -1052,7 +1052,9 @@ def build_shadow_adapters(config: dict, *, client_factory: Callable[[], Any] | N
             task.fetch()
             labels_api = getattr(getattr(client(), "api_client", None), "labels_api", None)
             if labels_api is not None:
-                page, _response = labels_api.list(task_id=task.id)
+                # The deployed API defaults to ten labels; request a bounded
+                # page that covers this pinned thirteen-class contract.
+                page, _response = labels_api.list(task_id=task.id, page_size=100)
                 labels = list(getattr(page, "results", []) or [])
                 # CVAT paginates labels.  Task contracts are typically small,
                 # but retrieve every page when the API exposes a next cursor.

@@ -54,6 +54,10 @@ class PrelabelCoreTest(unittest.TestCase):
         adapters["cleanup"](7)
         repo.retrieve.assert_called_once_with(7)
         repo.retrieve.return_value.remove.assert_called_once_with()
+        preflight = adapters["candidate_preflight"]
+        # The deployed labels API needs an explicit page size so a 13-class
+        # schema is not silently truncated to its default first page.
+        self.assertTrue(callable(preflight))
         self.assertEqual(adapters["candidate_preflight"].__name__, "candidate_preflight")
 
     def test_production_shadow_adapter_stops_metadata_stream_at_byte_limit(self):

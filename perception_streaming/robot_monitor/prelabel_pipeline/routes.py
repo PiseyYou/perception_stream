@@ -534,7 +534,15 @@ def _handle_shadow_retry(handler, run_id: str) -> None:
         run["status"] = "running"
         run["done"] = False
         run["event"].clear()
-    params = {"shadow_snapshot": {key: shadow[key] for key in ("batch_id", "snapshot_hash", "snapshot_path")}, "shadow_state": shadow, "retry_branch": branch, "shadow_adapters": core.build_shadow_adapters(cfg), "gpu_semaphore": gpu_semaphore, "cancel_fn": lambda: _is_cancelled(run_id)}
+    snapshot_path = shadow.get("snapshot_path")
+    if not isinstance(snapshot_path, str) or not snapshot_path:
+        batch_id = shadow.get("batch_id")
+        if not isinstance(batch_id, str) or not batch_id:
+            _send_json(handler, {"ok": False, "error": "shadow snapshot identity is invalid"}, status=409)
+            return
+        snapshot_path = str((Path(cfg.get("shadow_snapshot_root") or _runs_dir(cfg).parent / "shadow_snapshots") / batch_id).resolve())
+        shadow["snapshot_path"] = snapshot_path
+    params = {"shadow_snapshot": {"batch_id": shadow["batch_id"], "snapshot_hash": shadow["snapshot_hash"], "snapshot_path": snapshot_path}, "shadow_state": shadow, "retry_branch": branch, "shadow_adapters": core.build_shadow_adapters(cfg), "gpu_semaphore": gpu_semaphore, "cancel_fn": lambda: _is_cancelled(run_id)}
     def checkpoint(state: dict) -> None:
         with run_state.runs_lock:
             current = run_state.runs.get(run_id)

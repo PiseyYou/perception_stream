@@ -161,6 +161,28 @@ class PrelabelRoutesTest(unittest.TestCase):
                 routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-retry"))
             self.assertEqual(handler.status, 200, self._json_payload(handler))
 
+    def test_shadow_retry_backfills_legacy_snapshot_path_from_controlled_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            class ImmediateThread:
+                def __init__(self, target, daemon): self.target = target
+                def start(self): self.target()
+            root = Path(tmp)
+            body = json.dumps({"token": "owner", "branch_id": "B"}).encode()
+            handler = FakeHandler(body, {"Content-Length": str(len(body))})
+            shadow = {"batch_id": "batch", "snapshot_hash": "hash", "branches": {"B": {"status": "failed", "cleanup": {"status": "reconciled"}}}}
+            run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [str(root)], owner_token="owner", shadow=shadow)
+            captured = {}
+            def pipeline(*args):
+                captured.update(args[3]["shadow_snapshot"])
+                return {"status": "success", "branches": {"B": {"status": "success"}}}
+            with patch.object(routes.config_manager, "load_config", return_value={"runs_dir": str(root / "runs")}), \
+                 patch.object(routes.core, "build_shadow_adapters", return_value={"cleanup": Mock()}), \
+                 patch.object(routes.core, "run_shadow_pipeline", side_effect=pipeline), \
+                 patch.object(routes.threading, "Thread", ImmediateThread):
+                routes.handle(handler, parsed("/prelabel/runs/abcdef123456/shadow-retry"))
+            self.assertEqual(handler.status, 200, self._json_payload(handler))
+            self.assertEqual(captured["snapshot_path"], str(root / "shadow_snapshots" / "batch"))
+
     def test_shadow_reconcile_cleans_recorded_orphan_for_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_state.runs["abcdef123456"] = run_state.make_runtime_run("shadow", [], owner_token="owner", shadow={"branches": {"B": {"task_id": 42, "cleanup": {"status": "needed"}}}})

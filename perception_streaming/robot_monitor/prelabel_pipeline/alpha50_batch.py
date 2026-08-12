@@ -27,6 +27,7 @@ MAX_ALPHA50_INPUT_PIXELS = 64_000_000
 # Bounds apply after shortest-edge TTA scaling, before OpenCV can allocate output.
 MAX_ALPHA50_RESIZED_DIMENSION = 16_384
 MAX_ALPHA50_RESIZED_PIXELS = 128_000_000
+ALPHA50_YOLOV5_STRIDE = 32
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,11 @@ class Alpha50Runtime:
         height, width = prepared.shape[:2]
         scale = size / min(height, width)
         destination_width, destination_height = round(width * scale), round(height * scale)
+        # YOLOv5's multi-scale detection heads concatenate feature maps and
+        # require each spatial dimension to be stride-aligned.  Without this,
+        # odd post-scale widths (for example 2219) fail inside torch.cat.
+        destination_width = ((destination_width + ALPHA50_YOLOV5_STRIDE - 1) // ALPHA50_YOLOV5_STRIDE) * ALPHA50_YOLOV5_STRIDE
+        destination_height = ((destination_height + ALPHA50_YOLOV5_STRIDE - 1) // ALPHA50_YOLOV5_STRIDE) * ALPHA50_YOLOV5_STRIDE
         if destination_width <= 0 or destination_height <= 0 or max(destination_width, destination_height) > MAX_ALPHA50_RESIZED_DIMENSION or destination_width * destination_height > MAX_ALPHA50_RESIZED_PIXELS:
             raise CandidatePreflightError("Alpha50 resized geometry limit exceeded")
         resized = _cv2().resize(prepared, (destination_width, destination_height), interpolation=_cv2().INTER_LINEAR)

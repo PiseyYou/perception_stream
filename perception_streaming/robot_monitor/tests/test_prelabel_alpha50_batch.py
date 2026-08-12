@@ -431,6 +431,14 @@ class Alpha50InferenceTest(unittest.TestCase):
         self.assertEqual(observed[0].dtype, np.float32)
         np.testing.assert_allclose(observed[0][0, 0], [1.0, (127 / 255 - 0.5) / 0.5, -1.0], rtol=0, atol=1e-6)
 
+    def test_runtime_aligns_tta_dimensions_to_yolov5_stride(self):
+        observed = []
+        runtime = Alpha50Runtime(lambda: "model", lambda _, image: observed.append(image.shape) or np.zeros((2, 1, 1), dtype=np.float32))
+
+        runtime.predict(np.zeros((480, 1280, 3), dtype=np.uint8), size=832, flip=False, input_normalization=self._candidate()["export"]["input_normalization"])
+
+        self.assertEqual(observed, [(832, 2240, 3)])
+
     def test_runtime_rejects_non_bgr_snapshot_geometry(self):
         runtime = Alpha50Runtime(lambda: "model", lambda *_: np.zeros((2, 1, 1), dtype=np.float32))
         normalization = self._candidate()["export"]["input_normalization"]

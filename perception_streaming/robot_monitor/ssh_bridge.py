@@ -11,11 +11,13 @@ import json
 import os
 import re
 import stat as stat_mod
+import sys
 import time
 import websockets
 import paramiko
-from datetime import datetime
+from datetime import datetime, timedelta
 from config_loader import get_ssh_key_path, get_ssh_host, get_ssh_user, get_default_port
+from animal_bag import parse_animal_bag_timestamp
 
 # ─── 配置 ─────────────────────────────────────────────
 SSH_KEY = get_ssh_key_path()
@@ -55,8 +57,11 @@ RECORD_MAX_SECONDS = 30    # 录包最长时间看门狗（秒）
 CONSECUTIVE_THRESHOLD = 3.0  # 连续避障触发阈值（秒）
 RECOVERY_THRESHOLD = 5.0     # 连续正常恢复阈值（秒）
 MANUAL_RECORD_SECONDS = 30   # 手动录包固定时长（秒）
-# 本地上传目标目录：使用项目内 data/uploads
-BULK_UPLOAD_DEST = os.path.join(PROJECT_ROOT, "data/uploads")
+GRASS_GROWTH_OPERATION_TIMEOUT = 90
+GRASS_GROWTH_UPLOAD_PORT = 12088
+GRASS_GROWTH_IMAGE_SOURCE = "/userdata/bestmow_data/image_save_path"
+GRASS_GROWTH_UPLOAD_DEST = os.path.join(PROJECT_ROOT, "data", "stereo_debug", "2088")
+ANIMAL_PHOTO_OPERATION_TIMEOUT = 75
 
 
 # ─── 避障行为分析 ──────────────────────────────────────
@@ -149,7 +154,10 @@ class SSHConnection:
                 self.client = None
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            pkey = paramiko.RSAKey.from_private_key_file(SSH_KEY)
+            # Read the configured key when the user clicks “连接机器”, rather
+            # than retaining the key that was configured when this bridge started.
+            ssh_key = get_ssh_key_path()
+            pkey = paramiko.RSAKey.from_private_key_file(ssh_key)
             self.client.connect(
                 SSH_HOST, port=self.port,
                 username=SSH_USER, pkey=pkey,
@@ -237,6 +245,28 @@ class SSHConnection:
             self.connected = False
             return ""
 
+    def exec_result_raw(self, cmd: str, timeout: float = 20.0) -> tuple[int, str, str]:
+        """执行未加载 ROS 环境的命令，并返回退出码、stdout 和 stderr。"""
+        if not self.connected:
+            return 255, "", "SSH 未连接"
+        try:
+            transport = self.client.get_transport()
+            channel = transport.open_session()
+            channel.exec_command(cmd)
+            deadline = time.time() + timeout
+            while not channel.exit_status_ready() and time.time() < deadline:
+                time.sleep(0.1)
+            if not channel.exit_status_ready():
+                channel.close()
+                return 124, "", "命令超时"
+            stdout = channel.recv(65536).decode('utf-8', errors='replace') if channel.recv_ready() else ""
+            stderr = channel.recv_stderr(65536).decode('utf-8', errors='replace') if channel.recv_stderr_ready() else ""
+            code = channel.recv_exit_status()
+            channel.close()
+            return code, stdout, stderr
+        except Exception as e:
+            return 255, "", str(e)
+
     def sftp_download(self, remote_path: str, local_path: str, resumable: bool = False) -> tuple[bool, str]:
         """SFTP 下载文件或目录到本地，支持断点续传
         返回: (成功标志, 错误信息)
@@ -309,6 +339,31 @@ class SSHConnection:
                 return False, f"连接错误: {error_msg}"
             else:
                 return False, f"下载失败: {error_msg}"
+
+    def sftp_upload(self, local_path: str, remote_path: str) -> tuple[bool, str]:
+        """Upload one file through the existing Paramiko connection."""
+        if not self.connected:
+            return False, "SSH连接已断开"
+        try:
+            transport = self.client.get_transport()
+            if not transport or not transport.is_active():
+                self.connected = False
+                return False, "SSH连接已失效"
+            sftp = self.client.open_sftp()
+            sftp.get_channel().settimeout(30.0)
+            try:
+                sftp.put(local_path, remote_path)
+            finally:
+                sftp.close()
+            return True, ""
+        except TimeoutError:
+            self.connected = False
+            return False, "文件上传超时，连接已断开"
+        except EOFError:
+            self.connected = False
+            return False, "连接意外关闭"
+        except Exception as error:
+            return False, f"上传失败: {error}"
 
     def _sftp_get_file(self, sftp, remote_path: str, local_path: str, resumable: bool) -> tuple[bool, str]:
         """下载单个文件，支持断点续传
@@ -394,6 +449,13 @@ class BridgeServer:
 
         # 避障监控任务
         self.obs_monitor_task = None
+        self.grass_growth_task = None
+        self.grass_growth_upload_task: asyncio.Task | None = None
+        self.service_operation_tasks: dict[str, asyncio.Task] = {}
+        self.scenario_video_task: asyncio.Task | None = None
+        self.pc_scenario_video_task: asyncio.Task | None = None
+        self.pc_animal_video_task: asyncio.Task | None = None
+        self.animal_video_upload_task: asyncio.Task | None = None
 
         # 录包状态
         self.recording = False
@@ -413,6 +475,23 @@ class BridgeServer:
             *[ws.send(data) for ws in self.clients],
             return_exceptions=True
         )
+
+    async def _replace_service_operation(self, name: str, operation):
+        """Keep one lifecycle operation per service; stop cancels an in-flight start."""
+        previous = self.service_operation_tasks.get(name)
+        if previous and not previous.done():
+            previous.cancel()
+            try:
+                await previous
+            except asyncio.CancelledError:
+                pass
+        task = asyncio.create_task(operation())
+        self.service_operation_tasks[name] = task
+        try:
+            await task
+        finally:
+            if self.service_operation_tasks.get(name) is task:
+                self.service_operation_tasks.pop(name, None)
 
     async def handle_client(self, websocket):
         self.clients.add(websocket)
@@ -456,6 +535,46 @@ class BridgeServer:
             asyncio.create_task(self._stop_monitor_service())
         elif action == "upload_monitor_images":
             asyncio.create_task(self._upload_monitor_images(msg.get("date", "")))
+        elif action == "start_grass_growth_recording":
+            asyncio.create_task(self._replace_service_operation('grassGrowth', self._start_grass_growth_recording))
+        elif action == "stop_grass_growth_recording":
+            asyncio.create_task(self._replace_service_operation('grassGrowth', self._stop_grass_growth_recording))
+        elif action == "query_grass_growth_recording":
+            asyncio.create_task(self._query_grass_growth_recording())
+        elif action == "start_animal_scene_recording":
+            asyncio.create_task(self._replace_service_operation('animalScene', self._start_animal_scene_recording))
+        elif action == "stop_animal_scene_recording":
+            asyncio.create_task(self._replace_service_operation('animalScene', self._stop_animal_scene_recording))
+        elif action == "query_animal_scene_recording":
+            asyncio.create_task(self._query_animal_scene_recording())
+        elif action == "start_animal_video_recording":
+            asyncio.create_task(self._replace_service_operation('animalVideo', self._start_animal_video_recording))
+        elif action == "stop_animal_video_recording":
+            asyncio.create_task(self._replace_service_operation('animalVideo', self._stop_animal_video_recording))
+        elif action == "query_animal_video_recording":
+            asyncio.create_task(self._query_animal_video_recording())
+        elif action == "start_animal_photo_recording":
+            asyncio.create_task(self._replace_service_operation('animalPhoto', self._start_animal_photo_recording))
+        elif action == "stop_animal_photo_recording":
+            asyncio.create_task(self._replace_service_operation('animalPhoto', self._stop_animal_photo_recording))
+        elif action == "query_animal_photo_recording":
+            asyncio.create_task(self._query_animal_photo_recording())
+        elif action == "start_scenario_bag_recording":
+            asyncio.create_task(self._replace_service_operation('scenarioBag', self._start_scenario_bag_recording))
+        elif action == "query_scenario_bag_recording":
+            asyncio.create_task(self._query_scenario_bag_recording())
+        elif action == "start_scenario_video_recording":
+            asyncio.create_task(self._replace_service_operation('scenarioVideo', self._start_scenario_video_recording))
+        elif action == "query_scenario_video_recording":
+            asyncio.create_task(self._query_scenario_video_recording())
+        elif action == "start_pc_scenario_video_recording":
+            asyncio.create_task(self._replace_service_operation('pcScenarioVideo', self._start_pc_scenario_video_recording))
+        elif action == "query_pc_scenario_video_recording":
+            asyncio.create_task(self._query_pc_scenario_video_recording())
+        elif action == "start_pc_animal_video_recording":
+            asyncio.create_task(self._replace_service_operation('pcAnimalVideo', self._start_pc_animal_video_recording))
+        elif action == "query_pc_animal_video_recording":
+            asyncio.create_task(self._query_pc_animal_video_recording())
 
     # ─── SSH 连接 / 断开 ───────────────────────────────
 
@@ -474,6 +593,12 @@ class BridgeServer:
             "port": port,
             "error": error_msg if not success else None
         })
+        if success:
+            asyncio.create_task(self._query_grass_growth_recording())
+            asyncio.create_task(self._query_animal_scene_recording())
+            asyncio.create_task(self._query_animal_video_recording())
+            asyncio.create_task(self._query_animal_photo_recording())
+            asyncio.create_task(self._query_animal_scene_recording())
 
         if success:
             await self._start_stream_tasks()
@@ -498,6 +623,9 @@ class BridgeServer:
         if self.obs_monitor_task and not self.obs_monitor_task.done():
             self.obs_monitor_task.cancel()
             self.obs_monitor_task = None
+        if self.animal_video_upload_task and not self.animal_video_upload_task.done():
+            self.animal_video_upload_task.cancel()
+            self.animal_video_upload_task = None
         self.recording = False
         self.consecutive_avoidance_start = None
         self.consecutive_normal_start = None
@@ -985,7 +1113,7 @@ class BridgeServer:
     # ─── 批量上传：从机器 /userdata/rosbag_record 下载到 PC ─────────────────────────────────
 
     async def _bulk_upload_bags(self):
-        """通过 SFTP 将机器端 /userdata/rosbag_record 下所有录包下载到 PC，根据端口号确定上传路径"""
+        """通过 SFTP 将机器端录包下载到 data/bag_debug/<SN末四位>/<上传日期>。"""
         if not self.ssh or not self.ssh.connected:
             await self.broadcast({
                 "type": "bulk_upload_status",
@@ -994,13 +1122,22 @@ class BridgeServer:
             })
             return
 
-        # 根据端口号确定上传路径：取末四位作为子目录，使用项目内 data/uploads
-        port = self.ssh.port
-        port_suffix = str(port)[-4:]  # 取末四位，如 10123 -> 0123, 10113 -> 0113
-        upload_dest = os.path.join(PROJECT_ROOT, f"data/uploads/{port_suffix}/rosbag")
+        try:
+            sn = await self._get_remote_device_sn()
+        except RuntimeError as error:
+            await self.broadcast({
+                "type": "bulk_upload_status",
+                "status": "error",
+                "reason": str(error),
+            })
+            return
+
+        sn_suffix = sn[-4:]
+        upload_date = datetime.now().strftime("%Y%m%d")
+        upload_dest = os.path.join(PROJECT_ROOT, "data", "bag_debug", sn_suffix, upload_date)
 
         loop = asyncio.get_event_loop()
-        await self.broadcast({"type": "bulk_upload_status", "status": "progress", "current": "扫描机器录包目录..."})
+        await self.broadcast({"type": "bulk_upload_status", "status": "progress", "current": "读取机器 SN，扫描录包目录...", "completed": 0, "total": 0})
 
         # 列出机器端录包目录（不加载 ROS2 环境，避免 source 输出污染结果）
         ls_out = await loop.run_in_executor(
@@ -1032,6 +1169,7 @@ class BridgeServer:
             })
             return
         entries = today_entries
+        total = len(entries)
 
         for name in entries:
             remote_path = f"{REMOTE_BAG_DIR}/{name}"
@@ -1081,7 +1219,9 @@ class BridgeServer:
                             await self.broadcast({
                                 "type": "bulk_upload_status",
                                 "status": "progress",
-                                "current": f"✓ 已完整: {name} ({copied + resumed + skipped}/{len(entries)})"
+                                "current": f"✓ 已完整: {name} ({copied + resumed + skipped}/{total})",
+                                "completed": copied + resumed + skipped,
+                                "total": total,
                             })
                             continue
                         else:
@@ -1100,7 +1240,9 @@ class BridgeServer:
             await self.broadcast({
                 "type": "bulk_upload_status",
                 "status": "progress",
-                "current": f"{'续传' if is_resume else '下载'}: {name} ({copied + resumed + 1}/{len(entries)})"
+                "current": f"{'续传' if is_resume else '下载'}: {name} ({copied + resumed + skipped}/{total})",
+                "completed": copied + resumed + skipped,
+                "total": total,
             })
 
             # 检查SSH连接状态
@@ -1122,6 +1264,13 @@ class BridgeServer:
                 else:
                     copied += 1
                 print(f"bulk_upload {'resumed' if is_resume else 'downloaded'}: {remote_path} -> {local_path}")
+                await self.broadcast({
+                    "type": "bulk_upload_status",
+                    "status": "progress",
+                    "current": f"已完成: {name} ({copied + resumed + skipped}/{total})",
+                    "completed": copied + resumed + skipped,
+                    "total": total,
+                })
             else:
                 print(f"bulk_upload failed: {remote_path}, error: {error_msg}")
                 await self.broadcast({
@@ -1149,6 +1298,8 @@ class BridgeServer:
             "copied": copied,
             "resumed": resumed,
             "skipped": skipped,
+            "completed": copied + resumed + skipped,
+            "total": total,
             "dest": upload_dest,
             "summary": summary
         })
@@ -1221,6 +1372,839 @@ class BridgeServer:
         except Exception as e:
             await self.broadcast({"type": "obstacle_monitor_status", "status": "error", "reason": str(e)})
 
+    # ─── 草生长记录服务管理 ─────────────────────────────────
+
+    async def _request_service_stop(self, service: str, status_type: str):
+        """Disable boot startup and submit a non-blocking systemd stop request."""
+        loop = asyncio.get_event_loop()
+        command = f"systemctl disable {service} && systemctl stop --no-block {service}"
+        code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if code:
+            await self.broadcast({"type": status_type, "status": "error", "reason": stderr or f"命令失败: {command}"})
+            return
+        await self.broadcast({"type": status_type, "status": "stopped", "message": "已请求关闭并取消开机自启动"})
+
+    async def _query_grass_growth_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_grass_growth.service"
+        _, active, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-active {service}")
+        _, enabled, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-enabled {service}")
+        if active.strip() == "active" and enabled.strip() == "enabled":
+            if not self.grass_growth_upload_task or self.grass_growth_upload_task.done():
+                self.grass_growth_upload_task = asyncio.create_task(self._schedule_grass_growth_upload())
+            await self.broadcast({"type": "grass_growth_status", "status": "running", "message": "服务运行中并已启用开机自启动"})
+        else:
+            self._cancel_grass_growth_upload()
+            await self.broadcast({"type": "grass_growth_status", "status": "stopped", "message": "服务未运行"})
+
+    def _cancel_grass_growth_upload(self):
+        if self.grass_growth_upload_task and not self.grass_growth_upload_task.done():
+            self.grass_growth_upload_task.cancel()
+        self.grass_growth_upload_task = None
+
+    async def _schedule_grass_growth_upload(self):
+        """At 20:00 every day, mirror 2088 grass-growth date folders locally."""
+        try:
+            while True:
+                now = datetime.now()
+                next_run = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                if now >= next_run:
+                    next_run += timedelta(days=1)
+                await asyncio.sleep((next_run - now).total_seconds())
+                await self._upload_grass_growth_folders()
+        except asyncio.CancelledError:
+            raise
+
+    async def _upload_grass_growth_folders(self):
+        """Copy date subfolders without flattening the stereo_debug/2088 layout."""
+        import subprocess
+
+        loop = asyncio.get_event_loop()
+        os.makedirs(GRASS_GROWTH_UPLOAD_DEST, exist_ok=True)
+        port = GRASS_GROWTH_UPLOAD_PORT
+        ssh_opts = (
+            f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no -o ConnectTimeout=15 "
+            f"-o ServerAliveInterval=10 -o ServerAliveCountMax=3 -p {port}"
+        )
+        command = [
+            "rsync", "-avz", "--partial", "--append-verify", "--timeout=60",
+            "-e", ssh_opts,
+            f"{SSH_USER}@{SSH_HOST}:{GRASS_GROWTH_IMAGE_SOURCE}/",
+            GRASS_GROWTH_UPLOAD_DEST + "/",
+        ]
+
+        def upload():
+            return subprocess.run(command, capture_output=True, text=True, timeout=1800)
+
+        try:
+            result = await loop.run_in_executor(None, upload)
+        except subprocess.TimeoutExpired:
+            print("[grass-growth] daily upload timed out")
+            return
+        except Exception as exc:
+            print(f"[grass-growth] daily upload failed: {exc}")
+            return
+
+        if result.returncode:
+            details = result.stderr.strip() or result.stdout.strip() or "rsync failed"
+            print(f"[grass-growth] daily upload failed: {details}")
+            return
+        print(f"[grass-growth] daily upload completed: {GRASS_GROWTH_UPLOAD_DEST}")
+
+    async def _start_grass_growth_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "grass_growth_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        service = "record_grass_growth.service"
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        remote_script = f"{remote_dir}/record_grass_growth.sh"
+        remote_service = f"/etc/systemd/system/{service}"
+        local_script = os.path.join(PROJECT_ROOT, "script/record_grass_growth.sh")
+        local_service = os.path.join(PROJECT_ROOT, "script/record_grass_growth.service")
+        port = self.ssh.port
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [
+                ["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_script, f"{target}:{remote_script}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_service, f"{target}:{remote_service}"],
+                ["ssh", *ssh_base, target, f"chmod 755 {remote_script}"],
+            ]
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        try:
+            uploaded, error = await asyncio.wait_for(
+                loop.run_in_executor(None, upload), timeout=GRASS_GROWTH_OPERATION_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            await self.broadcast({"type": "grass_growth_status", "status": "error", "reason": "部署超时，请检查机器连接"})
+            return
+        if not uploaded:
+            await self.broadcast({"type": "grass_growth_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        for command in (f"systemctl daemon-reload", f"systemctl enable {service}", f"systemctl restart {service}"):
+            code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+            if code:
+                await self.broadcast({"type": "grass_growth_status", "status": "error", "reason": stderr or f"命令失败: {command}"})
+                return
+        await self._query_grass_growth_recording()
+
+    async def _stop_grass_growth_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "grass_growth_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_grass_growth.service"
+        self._cancel_grass_growth_upload()
+        await self._request_service_stop(service, "grass_growth_status")
+
+    # ─── 动物场景记录服务管理 ─────────────────────────────────
+
+    async def _query_animal_scene_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_scene_animal.service"
+        _, active, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-active {service}")
+        _, enabled, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-enabled {service}")
+        if active.strip() == "active" and enabled.strip() == "enabled":
+            await self.broadcast({"type": "animal_scene_status", "status": "running", "message": "服务运行中并已启用开机自启动"})
+        else:
+            await self.broadcast({"type": "animal_scene_status", "status": "stopped", "message": "服务未运行"})
+
+    async def _start_animal_scene_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_scene_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        service = "record_animal_scene_animal.service"
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        remote_script = f"{remote_dir}/record_animal_scene_animal.sh"
+        remote_service = f"/etc/systemd/system/{service}"
+        local_script = os.path.join(PROJECT_ROOT, "script/record_animal_scene_animal.sh")
+        local_service = os.path.join(PROJECT_ROOT, "script/record_animal_scene_animal.service")
+        port = self.ssh.port
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [
+                ["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_script, f"{target}:{remote_script}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_service, f"{target}:{remote_service}"],
+                ["ssh", *ssh_base, target, f"chmod 755 {remote_script}"],
+            ]
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        uploaded, error = await loop.run_in_executor(None, upload)
+        if not uploaded:
+            await self.broadcast({"type": "animal_scene_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        for command in ("systemctl daemon-reload", f"systemctl enable {service}", f"systemctl restart {service}"):
+            code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+            if code:
+                await self.broadcast({"type": "animal_scene_status", "status": "error", "reason": stderr or f"命令失败: {command}"})
+                return
+        await self._query_animal_scene_recording()
+
+    async def _stop_animal_scene_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_scene_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_scene_animal.service"
+        await self._request_service_stop(service, "animal_scene_status")
+
+    # ─── 动物视频记录服务管理 ─────────────────────────────────
+
+    # ─── 场景 rosbag / 视频单次录制 ────────────────────────────
+
+    async def _query_scenario_bag_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        loop = asyncio.get_event_loop()
+        pid_file = "/tmp/scenario_bag_recording.pid"
+        command = (
+            f"if test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null; then "
+            "echo running; else rm -f /tmp/scenario_bag_recording.pid; echo stopped; fi"
+        )
+        _, output, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if output.strip() == "running":
+            await self.broadcast({"type": "scenario_bag_status", "status": "running", "message": "正在录制场景 rosbag，最长 30 秒"})
+        else:
+            await self.broadcast({"type": "scenario_bag_status", "status": "stopped", "message": "场景 rosbag 未在录制"})
+
+    async def _start_scenario_bag_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "scenario_bag_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        remote_script = f"{remote_dir}/record_scenario_bag.sh"
+        local_file = os.path.join(PROJECT_ROOT, "script", "record_scenario_bag.sh")
+        port = self.ssh.port
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [
+                ["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_file, f"{target}:{remote_script}"],
+                ["ssh", *ssh_base, target, f"chmod 755 {remote_script}"],
+            ]
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        uploaded, error = await loop.run_in_executor(None, upload)
+        if not uploaded:
+            await self.broadcast({"type": "scenario_bag_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        pid_file = "/tmp/scenario_bag_recording.pid"
+        command = (
+            f"if test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null; then "
+            "echo 场景录包已在进行中 >&2; exit 1; fi; "
+            f"rm -f {pid_file}; setsid bash {remote_script} >/tmp/scenario_bag_recording.log 2>&1 < /dev/null &"
+        )
+        code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if code:
+            await self.broadcast({"type": "scenario_bag_status", "status": "error", "reason": stderr or "场景录包启动失败"})
+            return
+        await self.broadcast({"type": "scenario_bag_status", "status": "running", "message": "正在录制场景 rosbag，最长 30 秒"})
+
+    async def _query_scenario_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        if self.scenario_video_task and not self.scenario_video_task.done():
+            await self.broadcast({"type": "scenario_video_status", "status": "running", "message": "场景视频正在转换或下载到 PC"})
+            return
+        loop = asyncio.get_event_loop()
+        pid_file = "/tmp/scenario_video_recording.pid"
+        command = (
+            f"if test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null; then "
+            "echo running; else rm -f /tmp/scenario_video_recording.pid; echo stopped; fi"
+        )
+        _, output, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if output.strip() == "running":
+            await self.broadcast({"type": "scenario_video_status", "status": "running", "message": "正在录制或转换场景视频，录包最长 30 秒"})
+        else:
+            await self.broadcast({"type": "scenario_video_status", "status": "stopped", "message": "场景视频未在录制"})
+
+    async def _get_remote_device_sn(self):
+        """Read the connected device serial number used for local video archiving."""
+        assert self.ssh is not None
+        loop = asyncio.get_event_loop()
+        _, output, _ = await loop.run_in_executor(
+            None,
+            self.ssh.exec_result_raw,
+            "test -f /userdata/bestmow_data/system_data/system_info.json && "
+            "sed -nE 's/.*\"sn\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p' "
+            "/userdata/bestmow_data/system_data/system_info.json | head -n 1",
+        )
+        sn = output.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", sn):
+            raise RuntimeError("未能读取机器 SN，无法归档场景视频")
+        return sn
+
+    async def _start_scenario_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        if self.scenario_video_task and not self.scenario_video_task.done():
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": "场景视频任务已在进行中"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        remote_script = f"{remote_dir}/record_scenario.sh"
+        local_file = os.path.join(PROJECT_ROOT, "script", "record_scenario.sh")
+        port = self.ssh.port
+        try:
+            sn = await self._get_remote_device_sn()
+        except Exception as error:
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": str(error)})
+            return
+        recording_time = datetime.now()
+        date_dir = recording_time.strftime("%Y%m%d")
+        time_dir = recording_time.strftime("%H%M%S")
+        bag_name = f"rosbag_{sn}_scenario_camera_{date_dir}{time_dir}"
+        remote_mp4 = f"{REMOTE_BAG_DIR}/{bag_name}.mp4"
+        archive_dir = os.path.join(PROJECT_ROOT, "data", "video_debug", sn[-4:], date_dir)
+        local_filename = f"rosbag_{sn}_scenario_mow_camera_{date_dir}_{time_dir}.mp4"
+        local_mp4 = os.path.join(archive_dir, local_filename)
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [
+                ["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_file, f"{target}:{remote_script}"],
+                ["ssh", *ssh_base, target, f"chmod 755 {remote_script}"],
+            ]
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        uploaded, error = await loop.run_in_executor(None, upload)
+        if not uploaded:
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        pid_file = "/tmp/scenario_video_recording.pid"
+        command = (
+            f"if test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null; then "
+            "echo 场景视频录制已在进行中 >&2; exit 1; fi; "
+            f"rm -f {pid_file}; setsid env SCENARIO_BAG_NAME={bag_name} bash {remote_script} >/tmp/scenario_video_recording.log 2>&1 < /dev/null &"
+        )
+        code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if code:
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": stderr or "场景视频启动失败"})
+            return
+        self.scenario_video_task = asyncio.create_task(
+            self._download_scenario_video_mp4(remote_mp4, local_mp4, port)
+        )
+        await self.broadcast({"type": "scenario_video_status", "status": "running", "message": "正在录制场景视频，录包最长 30 秒"})
+
+    async def _download_scenario_video_mp4(self, remote_mp4: str, local_mp4: str, port: int):
+        """Wait for embedded conversion, then archive its MP4 on this PC."""
+        assert self.ssh is not None
+        loop = asyncio.get_event_loop()
+        pid_file = "/tmp/scenario_video_recording.pid"
+        try:
+            seen_running = False
+            for _ in range(120):
+                await asyncio.sleep(1)
+                _, status, _ = await loop.run_in_executor(
+                    None,
+                    self.ssh.exec_result_raw,
+                    f"test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null && echo running || echo stopped",
+                )
+                if status.strip() == "running":
+                    seen_running = True
+                elif seen_running:
+                    break
+            else:
+                raise RuntimeError("场景视频录制或 MP4 转换超时")
+
+            await self.broadcast({"type": "scenario_video_status", "status": "running", "message": "场景视频录制完成，正在确认 MP4"})
+            code, _, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"test -s {remote_mp4}")
+            if code:
+                raise RuntimeError("远端场景 MP4 未生成或文件为空")
+
+            await self.broadcast({"type": "scenario_video_status", "status": "running", "message": "正在下载场景 MP4 到 PC"})
+
+            def download():
+                import subprocess
+
+                os.makedirs(os.path.dirname(local_mp4), exist_ok=True)
+                result = subprocess.run([
+                    "scp", "-i", SSH_KEY,
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "ConnectTimeout=15",
+                    "-P", str(port),
+                    f"{SSH_USER}@{SSH_HOST}:{remote_mp4}", local_mp4,
+                ], capture_output=True, text=True, timeout=300)
+                if result.returncode:
+                    raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "场景 MP4 下载失败")
+                if not os.path.isfile(local_mp4) or os.path.getsize(local_mp4) == 0:
+                    raise RuntimeError("下载的场景 MP4 文件为空")
+
+            await loop.run_in_executor(None, download)
+            await self.broadcast({"type": "scenario_video_status", "status": "success", "message": f"场景 MP4 上传完成: {local_mp4}"})
+        except Exception as error:
+            await self.broadcast({"type": "scenario_video_status", "status": "error", "reason": str(error)})
+
+    async def _query_pc_scenario_video_recording(self):
+        if self.pc_scenario_video_task and not self.pc_scenario_video_task.done():
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "running", "message": "正在录制、传输或由 PC 生成场景视频"})
+            return
+        await self.broadcast({"type": "pc_scenario_video_status", "status": "stopped", "message": "PC 场景视频未在处理"})
+
+    async def _ensure_remote_rsync(self):
+        """Install rsync on the connected robot only when it is missing."""
+        assert self.ssh is not None
+        loop = asyncio.get_event_loop()
+        command = (
+            "if command -v rsync >/dev/null 2>&1; then exit 0; fi; "
+            "export DEBIAN_FRONTEND=noninteractive; "
+            "apt-get update -qq || true; apt-get install -y -qq rsync && "
+            "command -v rsync >/dev/null"
+        )
+        code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command, 120)
+        if code == 0:
+            return None
+        details = stderr.strip() or "未知错误"
+        return f"远端缺少 rsync，自动安装失败: {details}"
+
+    async def _start_pc_scenario_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        rsync_error = await self._ensure_remote_rsync()
+        if rsync_error:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": rsync_error})
+            return
+        try:
+            sn = await self._get_remote_device_sn()
+        except Exception as error:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": str(error)})
+            return
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        remote_script = f"{remote_dir}/record_scenario_pc_bag.sh"
+        local_file = os.path.join(PROJECT_ROOT, "script", "record_scenario_pc_bag.sh")
+        port = self.ssh.port
+        now = datetime.now()
+        date_dir = now.strftime("%Y%m%d")
+        time_dir = now.strftime("%H%M%S")
+        bag_name = f"rosbag_scenario_camera_{date_dir}{time_dir}"
+        remote_bag_dir = f"{REMOTE_BAG_DIR}/{bag_name}"
+        archive_dir = os.path.join(PROJECT_ROOT, "data", "video_debug", f"{port % 10000:04d}", date_dir)
+        local_bag_dir = os.path.join(archive_dir, bag_name)
+        output_filename = f"rosbag_{sn}_scenario_camera_{date_dir}_{time_dir}.mp4"
+        output_path = os.path.join(archive_dir, output_filename)
+        converter = os.path.join(PROJECT_ROOT, "script", "rosbag_camera_to_mp4.py")
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [
+                ["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"],
+                ["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_file, f"{target}:{remote_script}"],
+                ["ssh", *ssh_base, target, f"chmod 755 {remote_script}"],
+            ]
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        uploaded, error = await loop.run_in_executor(None, upload)
+        if not uploaded:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": f"上传录包脚本失败: {error}"})
+            return
+        pid_file = "/tmp/scenario_pc_video_recording.pid"
+        command = (
+            f"if test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null; then "
+            "echo PC 场景视频录制已在进行中 >&2; exit 1; fi; "
+            f"rm -f {pid_file}; setsid env SCENARIO_BAG_NAME={bag_name} bash {remote_script} >/tmp/scenario_pc_video_recording.log 2>&1 < /dev/null &"
+        )
+        code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+        if code:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": stderr or "PC 场景视频录包启动失败"})
+            return
+        self.pc_scenario_video_task = asyncio.create_task(
+            self._download_and_convert_pc_scenario_video(remote_bag_dir, local_bag_dir, output_path, converter, port)
+        )
+        await self.broadcast({"type": "pc_scenario_video_status", "status": "running", "message": "正在录制场景视频，完成后将传输到 PC 生成视频"})
+
+    async def _download_and_convert_pc_scenario_video(self, remote_bag_dir: str, local_bag_dir: str, output_path: str, converter: str, port: int):
+        """Wait for the embedded recorder, then archive and convert its bag on this PC."""
+        assert self.ssh is not None
+        loop = asyncio.get_event_loop()
+        pid_file = "/tmp/scenario_pc_video_recording.pid"
+        try:
+            seen_recorder_running = False
+            for _ in range(45):
+                await asyncio.sleep(1)
+                _, status, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"test -s {pid_file} && kill -0 \"$(cat {pid_file})\" 2>/dev/null && echo running || echo stopped")
+                if status.strip() == "running":
+                    seen_recorder_running = True
+                elif seen_recorder_running:
+                    break
+            else:
+                raise RuntimeError("场景 rosbag 录制超时")
+
+            for _ in range(15):
+                code, _, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"test -s {remote_bag_dir}/metadata.yaml")
+                if code == 0:
+                    break
+                await asyncio.sleep(1)
+            else:
+                raise RuntimeError("场景 rosbag 未生成或尚未完成")
+
+            def download_and_convert():
+                import subprocess
+                os.makedirs(local_bag_dir, exist_ok=True)
+                ssh_transport = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no -p {port}"
+                download = subprocess.run([
+                    "rsync", "-a", "--partial", "--append-verify", "--timeout=60",
+                    "-e", ssh_transport,
+                    f"{SSH_USER}@{SSH_HOST}:{remote_bag_dir}/", f"{local_bag_dir}/",
+                ], capture_output=True, text=True, timeout=180)
+                if download.returncode:
+                    raise RuntimeError(download.stderr.strip() or download.stdout.strip() or "rosbag 下载失败")
+                if not os.path.isdir(local_bag_dir):
+                    raise RuntimeError(f"下载的 rosbag 目录不存在: {local_bag_dir}")
+                convert = subprocess.run([sys.executable, converter, local_bag_dir, output_path], capture_output=True, text=True, timeout=180)
+                if convert.returncode:
+                    raise RuntimeError(convert.stderr.strip() or convert.stdout.strip() or "MP4 生成失败")
+                if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+                    raise RuntimeError("MP4 文件校验失败")
+
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "running", "message": "正在将 rosbag 传输到 PC 并生成视频"})
+            await loop.run_in_executor(None, download_and_convert)
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "success", "message": f"PC 场景视频已生成: {output_path}"})
+        except Exception as error:
+            await self.broadcast({"type": "pc_scenario_video_status", "status": "error", "reason": str(error)})
+
+    async def _query_pc_animal_video_recording(self):
+        if self.pc_animal_video_task and not self.pc_animal_video_task.done():
+            await self.broadcast({"type": "pc_animal_video_status", "status": "running", "message": "正在下载并在 PC 端生成动物视频"})
+            return
+        await self.broadcast({"type": "pc_animal_video_status", "status": "stopped", "message": "PC 动物视频未在处理"})
+
+    async def _start_pc_animal_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        if self.pc_animal_video_task and not self.pc_animal_video_task.done():
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": "PC 动物视频任务已在进行中"})
+            return
+
+        loop = asyncio.get_event_loop()
+        rsync_error = await self._ensure_remote_rsync()
+        if rsync_error:
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": rsync_error})
+            return
+        try:
+            sn = await self._get_remote_device_sn()
+        except Exception as error:
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": str(error)})
+            return
+        _, output, error = await loop.run_in_executor(
+            None,
+            self.ssh.exec_result_raw,
+            "{ find /userdata/rosbag_record -mindepth 1 -maxdepth 1 -type d -iname '*animal*' -print; "
+            "find /userdata/rosbag_record -mindepth 2 -maxdepth 2 -type f -iname '*animal*' -printf '%h\\n'; } | sort -u",
+        )
+        if error.strip():
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": error.strip()})
+            return
+        remote_bag_dirs = [path for path in output.splitlines() if path.strip()]
+        if not remote_bag_dirs:
+            await self.broadcast({"type": "pc_animal_video_status", "status": "success", "message": "未识别到动物，未找到可生成的动物视频"})
+            return
+
+        port = self.ssh.port
+        date_dir = datetime.now().strftime("%Y%m%d")
+        archive_dir = os.path.join(PROJECT_ROOT, "data", "video_debug", f"{port % 10000:04d}", date_dir)
+        converter = os.path.join(PROJECT_ROOT, "script", "rosbag_camera_to_mp4.py")
+        self.pc_animal_video_task = asyncio.create_task(
+            self._download_and_convert_pc_animal_videos(remote_bag_dirs, archive_dir, converter, port, sn)
+        )
+        await self.broadcast({"type": "pc_animal_video_status", "status": "running", "message": f"发现 {len(remote_bag_dirs)} 个动物 rosbag，正在传输并生成视频"})
+
+    async def _download_and_convert_pc_animal_videos(self, remote_bag_dirs: list[str], archive_dir: str, converter: str, port: int, sn: str):
+        """Archive each finalized animal bag and convert it locally."""
+        assert self.ssh is not None
+        loop = asyncio.get_event_loop()
+        try:
+            for remote_bag_dir in remote_bag_dirs:
+                for _ in range(15):
+                    code, _, _ = await loop.run_in_executor(
+                        None,
+                        self.ssh.exec_result_raw,
+                        f"test -s {remote_bag_dir}/metadata.yaml",
+                    )
+                    if code == 0:
+                        break
+                    await asyncio.sleep(1)
+                else:
+                    raise RuntimeError(f"动物 rosbag 未生成或尚未完成: {remote_bag_dir}")
+
+            def download_and_convert():
+                import subprocess
+
+                os.makedirs(archive_dir, exist_ok=True)
+                completed = []
+                for remote_bag_dir in remote_bag_dirs:
+                    bag_name = os.path.basename(remote_bag_dir.rstrip("/"))
+                    date_dir, time_dir = parse_animal_bag_timestamp(bag_name)
+                    local_bag_dir = os.path.join(archive_dir, bag_name)
+                    output_filename = f"rosbag_{sn}_animal_camera_{date_dir}_{time_dir}.mp4"
+                    output_path = os.path.join(archive_dir, output_filename)
+                    os.makedirs(local_bag_dir, exist_ok=True)
+                    ssh_transport = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no -p {port}"
+                    download = subprocess.run([
+                        "rsync", "-a", "--partial", "--append-verify", "--timeout=60",
+                        "-e", ssh_transport,
+                        f"{SSH_USER}@{SSH_HOST}:{remote_bag_dir}/", f"{local_bag_dir}/",
+                    ], capture_output=True, text=True, timeout=180)
+                    if download.returncode:
+                        raise RuntimeError(download.stderr.strip() or download.stdout.strip() or f"rosbag 下载失败: {bag_name}")
+                    if not os.path.isdir(local_bag_dir):
+                        raise RuntimeError(f"下载的 rosbag 目录不存在: {local_bag_dir}")
+                    convert = subprocess.run([sys.executable, converter, local_bag_dir, output_path], capture_output=True, text=True, timeout=180)
+                    if convert.returncode:
+                        raise RuntimeError(convert.stderr.strip() or convert.stdout.strip() or f"MP4 生成失败: {bag_name}")
+                    if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+                        raise RuntimeError(f"MP4 文件校验失败: {output_path}")
+                    completed.append(output_path)
+                return completed
+
+            completed = await loop.run_in_executor(None, download_and_convert)
+            await self.broadcast({"type": "pc_animal_video_status", "status": "success", "message": f"PC 动物视频已生成 {len(completed)} 个: {archive_dir}"})
+        except Exception as error:
+            await self.broadcast({"type": "pc_animal_video_status", "status": "error", "reason": str(error)})
+
+    async def _query_animal_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_video_animal.service"
+        _, active, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-active {service}")
+        if active.strip() == "active":
+            self._start_animal_video_upload()
+            await self.broadcast({"type": "animal_video_status", "status": "running", "message": "一次性动物视频记录运行中，最长 30 秒"})
+        else:
+            self._cancel_animal_video_upload()
+            message = "一次性动物视频记录已结束" if active.strip() == "inactive" else "服务未运行"
+            await self.broadcast({"type": "animal_video_status", "status": "stopped", "message": message})
+
+    def _start_animal_video_upload(self):
+        if not self.animal_video_upload_task or self.animal_video_upload_task.done():
+            self.animal_video_upload_task = asyncio.create_task(self._upload_animal_videos_to_pc())
+
+    def _cancel_animal_video_upload(self):
+        if self.animal_video_upload_task and not self.animal_video_upload_task.done():
+            self.animal_video_upload_task.cancel()
+        self.animal_video_upload_task = None
+
+    async def _upload_animal_videos_to_pc(self):
+        """Mirror completed animal MP4 recordings to this PC while the service runs."""
+        assert self.ssh is not None
+        import subprocess
+
+        loop = asyncio.get_event_loop()
+        uploaded: set[str] = set()
+        try:
+            while self.ssh and self.ssh.connected:
+                code, output, error = await loop.run_in_executor(
+                    None,
+                    self.ssh.exec_result_raw,
+                    "find /userdata/rosbag_record -type f -iname '*animal*.mp4' -printf '%T@ %p\\n' | sort -n",
+                )
+                if code:
+                    raise RuntimeError(error.strip() or "查询动物 MP4 失败")
+
+                for line in output.splitlines():
+                    _, _, remote_mp4 = line.partition(" ")
+                    remote_mp4 = remote_mp4.strip()
+                    if not remote_mp4 or remote_mp4 in uploaded:
+                        continue
+
+                    match = re.match(r"rosbag_(?P<sn>[A-Za-z0-9_-]+)_animal_camera_(?P<stamp>\d{14})\.mp4$", os.path.basename(remote_mp4))
+                    if not match:
+                        await self.broadcast({"type": "animal_video_status", "status": "error", "reason": f"无法解析动物 MP4 文件名: {remote_mp4}"})
+                        continue
+                    sn = match.group("sn")
+                    stamp = match.group("stamp")
+                    date_dir = stamp[:8]
+                    time_dir = stamp[8:]
+                    archive_dir = os.path.join(PROJECT_ROOT, "data", "video_debug", sn[-4:], date_dir)
+                    local_filename = f"rosbag_{sn}_animal_mow_camera_{date_dir}_{time_dir}.mp4"
+                    local_mp4 = os.path.join(archive_dir, local_filename)
+
+                    def download():
+                        os.makedirs(archive_dir, exist_ok=True)
+                        result = subprocess.run([
+                            "scp", "-i", SSH_KEY,
+                            "-o", "StrictHostKeyChecking=no",
+                            "-o", "ConnectTimeout=15",
+                            "-P", str(port),
+                            f"{SSH_USER}@{SSH_HOST}:{remote_mp4}", local_mp4,
+                        ], capture_output=True, text=True, timeout=300)
+                        if result.returncode:
+                            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"动物 MP4 下载失败: {remote_mp4}")
+                        if not os.path.isfile(local_mp4) or os.path.getsize(local_mp4) == 0:
+                            raise RuntimeError(f"下载的动物 MP4 文件为空: {local_mp4}")
+
+                    await self.broadcast({"type": "animal_video_status", "status": "running", "message": f"正在上传动物 MP4 到 PC: {os.path.basename(remote_mp4)}"})
+                    await loop.run_in_executor(None, download)
+                    uploaded.add(remote_mp4)
+                    await self.broadcast({"type": "animal_video_status", "status": "running", "message": f"动物 MP4 上传完成: {local_mp4}"})
+
+                await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            await self.broadcast({"type": "animal_video_status", "status": "error", "reason": str(error)})
+
+    async def _start_animal_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_video_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        import subprocess
+        loop = asyncio.get_event_loop()
+        service = "record_animal_video_animal.service"
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        files = ("record_animal_video_animal.sh", "record_animal_video_animal.service", "rosbag_camera_to_mp4.py")
+        local_files = [os.path.join(PROJECT_ROOT, "script", name) for name in files]
+        port = self.ssh.port
+
+        def upload():
+            ssh_base = ["-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-p", str(port)]
+            target = f"{SSH_USER}@{SSH_HOST}"
+            commands = [["ssh", *ssh_base, target, f"mkdir -p {remote_dir}"]]
+            for local_file, name in zip(local_files, files):
+                remote_file = f"/etc/systemd/system/{name}" if name.endswith(".service") else f"{remote_dir}/{name}"
+                commands.append(["scp", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", "-P", str(port), local_file, f"{target}:{remote_file}"])
+            commands.append(["ssh", *ssh_base, target, f"chmod 755 {remote_dir}/record_animal_video_animal.sh {remote_dir}/rosbag_camera_to_mp4.py"])
+            for command in commands:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+                if result.returncode:
+                    return False, result.stderr.strip() or result.stdout.strip()
+            return True, ""
+
+        uploaded, error = await loop.run_in_executor(None, upload)
+        if not uploaded:
+            await self.broadcast({"type": "animal_video_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        for command in (
+            "systemctl daemon-reload",
+            f"systemctl disable {service} 2>/dev/null || true",
+            f"systemctl restart {service}",
+        ):
+            code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command)
+            if code:
+                await self.broadcast({"type": "animal_video_status", "status": "error", "reason": stderr or f"命令失败: {command}"})
+                return
+        self._start_animal_video_upload()
+        await self._query_animal_video_recording()
+
+    async def _stop_animal_video_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_video_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_video_animal.service"
+        self._cancel_animal_video_upload()
+        await self._request_service_stop(service, "animal_video_status")
+
+    # ─── 动物识别拍照服务管理 ─────────────────────────────────
+
+    async def _query_animal_photo_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_photo.service"
+        _, active, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-active {service}")
+        _, enabled, _ = await loop.run_in_executor(None, self.ssh.exec_result_raw, f"systemctl is-enabled {service}")
+        if active.strip() == "active" and enabled.strip() == "enabled":
+            await self.broadcast({"type": "animal_photo_status", "status": "running", "message": "服务运行中并已启用开机自启动"})
+        else:
+            await self.broadcast({"type": "animal_photo_status", "status": "stopped", "message": "服务未运行"})
+
+    async def _start_animal_photo_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_photo_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_photo.service"
+        remote_dir = "/userdata/bestmow_data/image_perception_debug"
+        files = ("record_animal_photo.sh", "record_animal_photo.service")
+        local_files = [os.path.join(PROJECT_ROOT, "script", name) for name in files]
+
+        def upload():
+            code, _, stderr = self.ssh.exec_result_raw(f"mkdir -p {remote_dir}", 10)
+            if code:
+                return False, stderr or "无法创建远程部署目录"
+            for local_file, name in zip(local_files, files):
+                remote_file = f"/etc/systemd/system/{name}" if name.endswith(".service") else f"{remote_dir}/{name}"
+                uploaded, error = self.ssh.sftp_upload(local_file, remote_file)
+                if not uploaded:
+                    return False, error
+            code, _, stderr = self.ssh.exec_result_raw(f"chmod 755 {remote_dir}/record_animal_photo.sh", 10)
+            if code:
+                return False, stderr or "无法设置脚本执行权限"
+            return True, ""
+
+        try:
+            uploaded, error = await asyncio.wait_for(
+                loop.run_in_executor(None, upload), timeout=ANIMAL_PHOTO_OPERATION_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            await self.broadcast({"type": "animal_photo_status", "status": "error", "reason": "部署超时，请检查机器连接"})
+            return
+        if not uploaded:
+            await self.broadcast({"type": "animal_photo_status", "status": "error", "reason": f"上传失败: {error}"})
+            return
+        for command in ("systemctl daemon-reload", f"systemctl enable {service}", f"systemctl restart {service}"):
+            code, _, stderr = await loop.run_in_executor(None, self.ssh.exec_result_raw, command, 5)
+            if code:
+                await self.broadcast({"type": "animal_photo_status", "status": "error", "reason": stderr or f"命令失败: {command}"})
+                return
+        await self._query_animal_photo_recording()
+
+    async def _stop_animal_photo_recording(self):
+        if not self.ssh or not self.ssh.connected:
+            await self.broadcast({"type": "animal_photo_status", "status": "error", "reason": "SSH 未连接"})
+            return
+        loop = asyncio.get_event_loop()
+        service = "record_animal_photo.service"
+        await self._request_service_stop(service, "animal_photo_status")
+
     # ─── 监控拍照服务管理 ──────────────────────────────────
 
     async def _check_and_start_monitor_service(self):
@@ -1264,6 +2248,7 @@ class BridgeServer:
         # 上传脚本和服务文件（独立连接，避免复用 transport 导致 EOF）
         upload_error = [None]
         port = self.ssh.port
+        ssh_key = get_ssh_key_path()
 
         def _upload_files():
             """使用 SCP 上传文件，因为远程 SFTP 子系统不可用"""
@@ -1282,7 +2267,7 @@ class BridgeServer:
 
                     # 确保远端目录存在
                     mkdir_cmd = [
-                        "ssh", "-i", SSH_KEY,
+                        "ssh", "-i", ssh_key,
                         "-o", "StrictHostKeyChecking=no",
                         "-o", "ConnectTimeout=30",
                         "-o", "ServerAliveInterval=10",
@@ -1295,7 +2280,7 @@ class BridgeServer:
 
                     # 上传脚本文件
                     scp_script_cmd = [
-                        "scp", "-i", SSH_KEY,
+                        "scp", "-i", ssh_key,
                         "-o", "StrictHostKeyChecking=no",
                         "-o", "ConnectTimeout=30",
                         "-o", "ServerAliveInterval=10",
@@ -1310,7 +2295,7 @@ class BridgeServer:
 
                     # 设置脚本可执行权限
                     chmod_cmd = [
-                        "ssh", "-i", SSH_KEY,
+                        "ssh", "-i", ssh_key,
                         "-o", "StrictHostKeyChecking=no",
                         "-o", "ConnectTimeout=30",
                         "-p", str(port),
@@ -1321,7 +2306,7 @@ class BridgeServer:
 
                     # 上传服务文件
                     scp_service_cmd = [
-                        "scp", "-i", SSH_KEY,
+                        "scp", "-i", ssh_key,
                         "-o", "StrictHostKeyChecking=no",
                         "-o", "ConnectTimeout=30",
                         "-o", "ServerAliveInterval=10",

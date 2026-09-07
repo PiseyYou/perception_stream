@@ -3,8 +3,8 @@
     "test_machine_1": {
       "name": "测试机1",
       "host": "120.25.121.3",
-      "port": 10286,
-      "ssh_key": "../data/conf/bestmow_rsa_202605",
+      "port": 12088,
+      "ssh_key": "../data/conf/bestmow_rsa_202609",
       "user": "root",
       "log_base_path": "/userdata/log_dir/ros2_log",
       "image_base_path": "/userdata/bestmow_data/image_save_path"

@@ -1,74 +1,22 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { spawn, execSync, execFileSync, type ChildProcess } from 'child_process'
+import { spawn, execSync, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
-import os from 'os'
-import { isIP } from 'net'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const VENV_PYTHON = path.resolve(__dirname, '.venv/bin/python')
 const PYTHON = process.env.PYTHON || (fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3')
-const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202607')
+const SSH_KEY = path.resolve(__dirname, 'data/conf/bestmow_rsa_202609')
 const REMOTE_HOST = '120.25.121.3'
-const REMOTE_PORT = '10015'
+const REMOTE_PORT = '10080'
 const LOCAL_PCL_PORT = 8768   // SSH tunnel local end (pcl_proxy.mjs connects here)
 const REMOTE_PCL_PORT = 8767  // pcl_ws_bridge.py port
 
 const SSH_BASE = ['-i', SSH_KEY, `root@${REMOTE_HOST}`, '-p', REMOTE_PORT, '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=5']
 const DEV_SERVER_HOST = process.env.VITE_DEV_SERVER_HOST || '192.168.55.247'
-const DEV_CERT_DIR = path.resolve(__dirname, '.cert')
-const DEV_CERT_KEY = path.join(DEV_CERT_DIR, 'localhost-key.pem')
-const DEV_CERT_CERT = path.join(DEV_CERT_DIR, 'localhost-cert.pem')
-const DEV_CERT_SAN = path.join(DEV_CERT_DIR, 'subject-alt-name.txt')
-
-function getDevCertificateSubjectAltName() {
-  const hosts = new Set([DEV_SERVER_HOST, 'localhost', '127.0.0.1', '::1'])
-  for (const iface of Object.values(os.networkInterfaces())) {
-    for (const addr of iface ?? []) {
-      if (addr.family === 'IPv4' && !addr.internal) hosts.add(addr.address)
-    }
-  }
-  return [...hosts].map((host) => isIP(host) ? `IP:${host}` : `DNS:${host}`).join(',')
-}
-
-function ensureDevCertificate() {
-  const san = getDevCertificateSubjectAltName()
-  const shouldCreate = !fs.existsSync(DEV_CERT_KEY)
-    || !fs.existsSync(DEV_CERT_CERT)
-    || !fs.existsSync(DEV_CERT_SAN)
-    || fs.readFileSync(DEV_CERT_SAN, 'utf8') !== san
-
-  if (shouldCreate) {
-    fs.mkdirSync(DEV_CERT_DIR, { recursive: true })
-    execFileSync('openssl', [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-sha256',
-      '-nodes',
-      '-days',
-      '3650',
-      '-keyout',
-      DEV_CERT_KEY,
-      '-out',
-      DEV_CERT_CERT,
-      '-subj',
-      '/CN=localhost',
-      '-addext',
-      `subjectAltName=${san}`,
-    ], { stdio: 'ignore' })
-    fs.writeFileSync(DEV_CERT_SAN, san)
-  }
-
-  return {
-    key: fs.readFileSync(DEV_CERT_KEY),
-    cert: fs.readFileSync(DEV_CERT_CERT),
-  }
-}
 
 function killPort(port: number) {
   try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }) } catch { /* ignore */ }
@@ -164,6 +112,7 @@ function sshBridgePlugin() {
   let bridge: ChildProcess | null = null
   let bridgeRestartTimer: ReturnType<typeof setTimeout> | null = null
   let bridgeRestartDelayMs = 1000
+  let restartBridge: (() => void) | null = null
   let pclTunnel: ChildProcess | null = null
   let pclProxy: ChildProcess | null = null
   let cleanupRegistered = false
@@ -203,6 +152,11 @@ function sshBridgePlugin() {
           if (Date.now() - startedAt > 10000) bridgeRestartDelayMs = 1000
           scheduleBridgeRestart(startBridge)
         })
+      }
+      restartBridge = () => {
+        bridgeRestartDelayMs = 0
+        if (bridge) bridge.kill()
+        else startBridge()
       }
       startBridge()
 
@@ -277,6 +231,12 @@ function sshBridgePlugin() {
         cleanupRegistered = true
         process.on('exit', stop)
         process.on('SIGINT', () => { stop(); process.exit() })
+      }
+    },
+    handleHotUpdate({ file }: { file: string }) {
+      if (file === path.resolve(__dirname, 'robot_monitor/ssh_bridge.py')) {
+        console.log('[bridge] source changed, restarting')
+        restartBridge?.()
       }
     },
   }
@@ -422,13 +382,12 @@ function bagDataPlugin() {
   }
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(() => ({
   plugins: [disableViteLiveReloadPlugin(), vue(), offlineServerPlugin(), sshBridgePlugin(), bagFilePlugin(), bagDataPlugin()],
   server: {
     host: '0.0.0.0',
     port: 5173,
-    https: command === 'serve' ? ensureDevCertificate() : undefined,
-    open: `https://${DEV_SERVER_HOST}:5173/`,
+    open: `http://${DEV_SERVER_HOST}:5173/`,
     strictPort: true,
     watch: {
       ignored: [

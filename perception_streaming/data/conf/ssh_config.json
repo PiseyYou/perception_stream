@@ -1,9 +1,9 @@
 {
-  "ssh_key_path": "bestmow_rsa_202607",
+  "ssh_key_path": "bestmow_rsa_202609",
   "ssh_host": "120.25.121.3",
   "ssh_user": "root",
   "default_ports": {
-    "realtime_monitor": 10015,
+    "realtime_monitor": 10080,
     "log_fetch": 10016,
     "stereo_analysis": 10115
   }

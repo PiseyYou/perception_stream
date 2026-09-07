@@ -17,7 +17,7 @@ class ConfigLoaderPathTest(unittest.TestCase):
             check=True,
         )
 
-        expected = PROJECT_ROOT / "data" / "conf" / "bestmow_rsa_202607"
+        expected = PROJECT_ROOT / "data" / "conf" / "bestmow_rsa_202609"
         self.assertIn(f"SSH Key Path: {expected}", result.stdout)
         self.assertNotIn("data/conf/data/conf", result.stdout)
 
